@@ -23,6 +23,18 @@ Expiry notation in the source notes is `YY/M` (e.g. `27/6` = June 2027). Dates b
 | Ticker | Action | Strategy | Expiry | Strike | Qty | Credit | Opened | Notes |
 |--------|--------|----------|--------|--------|-----|--------|--------|-------|
 | TSLA | STO | Covered call | 2026-11-20 | $420 C | | $10.60 | 2026-10-09 | |
+| LITE | STO | Covered call | 2026-11-20 | $1200 C | | $82.00 | 2026-10-09 | |
+| AMZN | STO | Covered call | 2026-11-20 | $285 C | | $5.40 | 2026-10-09 | |
+| CRCL | STO | Covered call | 2026-11-20 | $100 C | | $4.30 | 2026-10-09 | |
+| CEG | STO | Covered call | 2026-11-20 | $330 C | | $8.80 | 2026-10-09 | |
+
+## Stock / ETF trades
+
+| Ticker | Action | Qty | Price | Date | Notes |
+|--------|--------|-----|-------|------|-------|
+| LITX | Sell | | | 2026-10-09 | 槓桿 ETF（LITE 相關） |
+| CEGX | Sell | | | 2026-10-09 | 槓桿 ETF（CEG 相關） |
+| GGLL | Sell | | | 2026-10-09 | 2 倍做多 GOOGL ETF |
 
 ## Closed
 
@@ -32,3 +44,4 @@ Expiry notation in the source notes is `YY/M` (e.g. `27/6` = June 2027). Dates b
 | QCOM | Covered call (short) | 2027-06-18 | $200 C | | | | | 2026-10-09 | |
 | COHR | Covered call (short) | 2028-01-21 | $400 C | | | | | 2026-10-09 | |
 | NVDA | Covered call (short) | 2026-11-20 | $250 C | | | | | 2026-10-09 | |
+| GOOGL | Long call (STC 1/2) | 2027-01-15 | $340 C | 1/2 | | | | 2026-10-09 | 賣出一半部位，剩一半仍持有 |
