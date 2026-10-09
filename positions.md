@@ -1,5 +1,7 @@
 # Options Positions
 
+> 來源：某位交易高手的公開操作紀錄（非本人持倉）。偏好分析見 [analysis.md](analysis.md)。
+
 Expiry notation in the source notes is `YY/M` (e.g. `27/6` = June 2027). Dates below assume standard monthly expiration (third Friday).
 
 ## Open
