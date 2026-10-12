@@ -4,37 +4,58 @@
 
 Expiry notation in the source notes is `YY/M` (e.g. `27/6` = June 2027). Dates below assume standard monthly expiration (third Friday).
 
-## Open
+批次：B1 = 2026-10-09；B2 = 日期未提供（暫記 2026-10-09）；B3 = 2026-10-12。
+
+## Open — 買方（long calls / call spreads）
 
 | Ticker | Action | Strategy | Expiry | Strike(s) | Qty | Entry Price | Opened | Notes |
 |--------|--------|----------|--------|-----------|-----|-------------|--------|-------|
-| INIO | BTO | Long call | 2027-06-18 | $20 C | | | 2026-10-09 | |
-| INTC | BTO | Bull call spread | 2028-01-21 | Long $90 C / Short $125 C | | | 2026-10-09 | Width $35 |
-| MXL | BTO | Bull call spread | 2027-06-18 | Long $80 C / Short $130 C | | | 2026-10-09 | Width $50 |
-| MXL | BTO | Bull call spread | 2028-01-21 | Long $60 C / Short $150 C | | | 2026-10-09 | Width $90 |
-| QCOM | BTO | Bull call spread | 2027-06-18 | Long $170 C / Short $250 C | | | 2026-10-09 | Width $80 |
-| VICR | BTO | Bull call spread | 2027-04-16 | Long $260 C / Short $380 C | | | 2026-10-09 | Width $120 |
-| VST | BTO | Bull call spread | 2027-06-18 | Long $145 C / Short $220 C | | | 2026-10-09 | Width $75 |
-| SPCX | BTO | Bull call spread | 2027-06-18 | Long $150 C / Short $225 C | | | 2026-10-09 | Width $75 |
-| PENG | BTO | Bull call spread | 2028-01-21 | Long $60 C / Short $100 C | | | 2026-10-09 | Width $40 |
+| INIO | BTO | Long call | 2027-06-18 | $20 C | | | 2026-10-09 | B1 |
+| INTC | BTO | Bull call spread | 2028-01-21 | Long $90 C / Short $125 C | | | 2026-10-09 | B1，Width $35 |
+| MXL | BTO | Bull call spread | 2027-06-18 | Long $80 C / Short $130 C | | | 2026-10-09 | B1，Width $50 |
+| MXL | BTO | Bull call spread | 2028-01-21 | Long $60 C / Short $150 C | | | 2026-10-09 | B1，Width $90 |
+| QCOM | BTO | Bull call spread | 2027-06-18 | Long $170 C / Short $250 C | | | 2026-10-09 | B1，Width $80 |
+| VICR | BTO | Bull call spread | 2027-04-16 | Long $260 C / Short $380 C | | | 2026-10-09 | B1，Width $120 |
+| VST | BTO | Bull call spread | 2027-06-18 | Long $145 C / Short $220 C | | | 2026-10-09 | B1，Width $75 |
+| SPCX | BTO | Bull call spread | 2027-06-18 | Long $150 C / Short $225 C | | | 2026-10-09 | B1，Width $75 |
+| PENG | BTO | Bull call spread | 2028-01-21 | Long $60 C / Short $100 C | | | 2026-10-09 | B1，Width $40 |
+| GOOGL | (持有) | Long call | 2027-01-15 | $340 C | 剩 1/2 | | | B2 平掉一半 |
+| MU | BTO | Bull call spread | 2027-06-18 | Long $950 C / Short $1150 C | | | 2026-10-12 | B3，Width $200 |
+| BE | BTO | Bull call spread | 2027-06-18 | Long $250 C / Short $350 C | | | 2026-10-12 | B3，Width $100 |
+| NBIS | BTO | Bull call spread | 2027-06-18 | Long $200 C / Short $300 C | | | 2026-10-12 | B3，Width $100 |
+| VICR | BTO | Bull call spread | 2027-04-16 | Long $260 C / Short $380 C | | | 2026-10-12 | B3 加碼，同 B1 |
+| AAOI | BTO | Bull call spread | 2027-06-18 | Long $90 C / Short $150 C | | | 2026-10-12 | B3，Width $60 |
+| NVDA | BTO | Bull call spread | 2027-06-18 | Long $200 C / Short $250 C | | | 2026-10-12 | B3，Width $50 |
 
-## Hedges (short calls)
+## Open — 賣方：Covered calls（Hedge）
 
 | Ticker | Action | Strategy | Expiry | Strike | Qty | Credit | Opened | Notes |
 |--------|--------|----------|--------|--------|-----|--------|--------|-------|
-| TSLA | STO | Covered call | 2026-11-20 | $420 C | | $10.60 | 2026-10-09 | |
-| LITE | STO | Covered call | 2026-11-20 | $1200 C | | $82.00 | 2026-10-09 | |
-| AMZN | STO | Covered call | 2026-11-20 | $285 C | | $5.40 | 2026-10-09 | |
-| CRCL | STO | Covered call | 2026-11-20 | $100 C | | $4.30 | 2026-10-09 | |
-| CEG | STO | Covered call | 2026-11-20 | $330 C | | $8.80 | 2026-10-09 | |
+| TSLA | STO | Covered call | 2026-11-20 | $420 C | | $10.60 | 2026-10-09 | B1 |
+| AMZN | STO | Covered call | 2026-11-20 | $285 C | | $5.40 | 2026-10-09 | B2 |
+| CEG | STO | Covered call | 2026-11-20 | $330 C | | $8.80 | 2026-10-09 | B2 |
+
+## Open — 賣方：Short puts
+
+| Ticker | Action | Strategy | Expiry | Strike | Qty | Credit | Credit ÷ Strike | Opened | Notes |
+|--------|--------|----------|--------|--------|-----|--------|-----------------|--------|-------|
+| SOXL | STO | Short put | 2026-11-20 | $120 P | | $13.50 | 11.3% | 2026-10-12 | B3，3 倍半導體 ETF |
+| LITX | STO | Short put | 2026-11-20 | $35 P | | $5.00 | 14.3% | 2026-10-12 | B3 |
+| LITX | STO | Short put | 2026-12-18 | $30 P | | $4.87 | 16.2% | 2026-10-12 | B3 |
+| NEBX | STO | Short put | 2026-12-18 | $20 P | | $4.45 | 22.3% | 2026-10-12 | B3，推測為 NBIS 槓桿 ETF |
+| BEX | STO | Short put | 2026-12-18 | $30 P | | $5.70 | 19.0% | 2026-10-12 | B3，推測為 BE 槓桿 ETF |
 
 ## Stock / ETF trades
 
 | Ticker | Action | Qty | Price | Date | Notes |
 |--------|--------|-----|-------|------|-------|
-| LITX | Sell | | | 2026-10-09 | 槓桿 ETF（LITE 相關） |
-| CEGX | Sell | | | 2026-10-09 | 槓桿 ETF（CEG 相關） |
-| GGLL | Sell | | | 2026-10-09 | 2 倍做多 GOOGL ETF |
+| LITX | Sell | | | 2026-10-09 | B2，槓桿 ETF（LITE 相關） |
+| CEGX | Sell | | | 2026-10-09 | B2，槓桿 ETF（CEG 相關） |
+| GGLL | Sell | | | 2026-10-09 | B2，2 倍做多 GOOGL ETF |
+| USD | Buy | | | 2026-10-12 | B3，2 倍半導體 ETF |
+| SNXX | Buy | | | 2026-10-12 | B3，推測為 SNDK 槓桿 ETF |
+| MUU | Buy | | | 2026-10-12 | B3，2 倍 MU ETF |
+| MXL | Buy | | | 2026-10-12 | B3，正股 |
 
 ## Closed
 
@@ -44,4 +65,15 @@ Expiry notation in the source notes is `YY/M` (e.g. `27/6` = June 2027). Dates b
 | QCOM | Covered call (short) | 2027-06-18 | $200 C | | | | | 2026-10-09 | |
 | COHR | Covered call (short) | 2028-01-21 | $400 C | | | | | 2026-10-09 | |
 | NVDA | Covered call (short) | 2026-11-20 | $250 C | | | | | 2026-10-09 | |
-| GOOGL | Long call (STC 1/2) | 2027-01-15 | $340 C | 1/2 | | | | 2026-10-09 | 賣出一半部位，剩一半仍持有 |
+| GOOGL | Long call (STC 1/2) | 2027-01-15 | $340 C | 1/2 | | | | 2026-10-09 | |
+| PENG | Long call (STC) | 2027-01-15 | $90 C | | | | | 2026-10-12 | |
+| LITE | Covered call (short) | 2026-11-20 | $1200 C | | $82.00 | | 2026-10-09 | 2026-10-12 | 開倉 3 天就平 |
+| NBIS | Covered call (short) | 2027-06-18 | $300 C | | | | | 2026-10-12 | |
+| AAOI | Covered call (short) | 2027-01-15 | $160 C | | | | | 2026-10-12 | |
+| AAOI | Covered call (short) | 2027-06-18 | $220 C | | | | | 2026-10-12 | |
+| CRCL | Covered call (short) | 2026-11-20 | $100 C | | $4.30 | | 2026-10-09 | 2026-10-12 | 開倉 3 天就平 |
+| CRCL | Covered call (short) | 2027-06-18 | $150 C | | | | | 2026-10-12 | |
+| MU | Covered call (short) | 2027-06-18 | $1150 C | | | | | 2026-10-12 | |
+| SKHY | Covered call (short) | 2027-06-18 | $200 C | | | | | 2026-10-12 | 推測為 SK hynix 相關 |
+| VICR | Covered call (short) | 2028-01-21 | $380 C | | | | | 2026-10-12 | |
+| MXL | Covered call (short) | 2028-01-21 | $150 C | | | | | 2026-10-12 | |
