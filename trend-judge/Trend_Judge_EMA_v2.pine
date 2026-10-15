@@ -1,0 +1,378 @@
+//@version=5
+indicator("Trend Judge — 5s/15s EMA Spread + Opening Range", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
+
+// =====================================================================
+//  Part 1 — Trend Judge (5s/15s EMA Spread)
+// =====================================================================
+
+// ========= 計算參數 =========
+emaLen   = input.int(1130, "EMA 長度", group="計算")
+fastSec  = input.int(5,  "快線秒數", group="計算")
+slowSec  = input.int(15, "慢線秒數", group="計算")
+autoMode = input.bool(true, "自動偵測標的門檻", group="計算")
+
+// ---- 趨勢門檻 ----
+thNQ  = input.float(20.0, "NQ 門檻 (點)",  group="趨勢門檻")
+thES  = input.float(4.0,  "ES 門檻 (點)",  group="趨勢門檻")
+thTXF = input.float(40.0, "TXF 門檻 (點)", group="趨勢門檻")
+thMan = input.float(20.0, "手動門檻 (關閉自動時使用)", group="趨勢門檻")
+
+// ---- 強勢門檻 (手動輸入) ----
+stNQ  = input.float(40.0, "NQ 強勢門檻 (點)",  group="強勢門檻")
+stES  = input.float(8.0,  "ES 強勢門檻 (點)",  group="強勢門檻")
+stTXF = input.float(80.0, "TXF 強勢門檻 (點)", group="強勢門檻")
+stMan = input.float(40.0, "手動強勢門檻 (關閉自動時使用)", group="強勢門檻")
+
+// ---- 顯示 ----
+tablePos  = input.string("左上", "Table 位置", options=["右上","右下","左上","左下"], group="顯示")
+fontSize  = input.string("極小", "字型大小", options=["極小","小","普通","大","極大","自動"], group="顯示")
+showStr   = input.bool(false, "顯示強勢門檻欄位", group="顯示")
+showTime  = input.bool(false, "顯示更新時間", group="顯示")
+showAdv   = input.bool(true,  "顯示操作建議", group="顯示")
+topPad    = input.int(2, "頂部留白列 (避開指標名稱,左上時用)", minval=0, maxval=5, group="顯示")
+plotLines = input.bool(false, "在圖上畫出兩條均線", group="顯示")
+
+// ========= 標的自動偵測 =========
+root  = syminfo.root != "" ? syminfo.root : syminfo.ticker
+isNQ  = str.contains(root, "NQ")
+isES  = str.contains(root, "ES")
+isTXF = str.contains(root, "TXF") or str.contains(root, "MXF")
+supported = isNQ or isES or isTXF
+
+autoTh    = isNQ ? thNQ : isES ? thES : isTXF ? thTXF : na
+threshold = autoMode ? autoTh : thMan
+
+autoSt    = isNQ ? stNQ : isES ? stES : isTXF ? stTXF : na
+strongTh  = autoMode ? autoSt : stMan
+
+// ========= 秒級 EMA =========
+// 圖表可掛在 2 分鐘以上,以 security_lower_tf 取得秒級 intrabar 的 EMA
+fArr = request.security_lower_tf(syminfo.tickerid, str.tostring(fastSec) + "S", ta.ema(close, emaLen))
+sArr = request.security_lower_tf(syminfo.tickerid, str.tostring(slowSec) + "S", ta.ema(close, emaLen))
+
+var float maFast = na
+var float maSlow = na
+if array.size(fArr) > 0
+    maFast := array.last(fArr)
+if array.size(sArr) > 0
+    maSlow := array.last(sArr)
+
+// ========= 每 2 分鐘更新一次差值 =========
+var float lockedDiff   = na
+var int   lastCalcTime = na
+
+newWindow = ta.change(time("2")) != 0
+if newWindow and supported and not na(maFast) and not na(maSlow)
+    lockedDiff   := maFast - maSlow      // 快 − 慢 = 5s EMA − 15s EMA
+    lastCalcTime := time
+
+// ========= 判斷狀態 =========
+// 分級: 強勢 > 一般 > MIX
+//   diff >  強勢門檻   -> 強UP
+//   diff >  趨勢門檻   -> UP
+//   |diff| <= 趨勢門檻 -> MIX
+//   diff < -趨勢門檻   -> DOWN
+//   diff < -強勢門檻   -> 強Down
+string state = na
+color  bgCol = color.gray
+if not na(lockedDiff) and not na(threshold)
+    hasStrong = not na(strongTh)
+    if hasStrong and lockedDiff > strongTh
+        state := "強UP"
+        bgCol := color.new(color.lime, 0)
+    else if lockedDiff > threshold
+        state := "UP"
+        bgCol := color.new(color.green, 0)
+    else if hasStrong and lockedDiff < -strongTh
+        state := "強Down"
+        bgCol := color.new(color.maroon, 0)
+    else if lockedDiff < -threshold
+        state := "DOWN"
+        bgCol := color.new(color.red, 0)
+    else
+        state := "MIX"
+        bgCol := color.new(color.orange, 0)
+
+// ========= 畫線 (可選) =========
+plot(plotLines ? maFast : na, "快線", color=color.aqua, linewidth=1)
+plot(plotLines ? maSlow : na, "慢線", color=color.orange, linewidth=1)
+
+// (表格顯示已移至檔案結尾,以便同時取用 OR 的 orh/orl/or_token)
+
+
+// =====================================================================
+//  Part 2 — Opening Range
+//  改作自 "Opening Range with Breakouts & Targets [LuxAlgo]"
+//  © LuxAlgo — CC BY-NC-SA 4.0
+//  https://creativecommons.org/licenses/by-nc-sa/4.0/
+//  僅保留 OR 本體(ORH/ORL/ORM + 區間框),已移植為 v5 相容。
+// =====================================================================
+
+// ========= OR 參數 =========
+showOR   = input.bool(true, "顯示開盤區間", group="開盤區間")
+showHist = input.bool(true, "顯示歷史區間", group="開盤區間", tooltip="顯示過去每個 session 的開盤區間")
+orTF     = input.timeframe("5", "區間長度", group="開盤區間", tooltip="決定開盤區間的時間長度,預設 5 分")
+biasTog  = input.bool(true, "區間方向填色", group="開盤區間", tooltip="依當前 OR 中線是否高於/低於前一 session 中線,填綠/紅")
+
+// 自訂區間
+crTog  = input.bool(false, "", inline="Custom", group="自訂區間")
+crSesh = input.session("0930-0945", "", inline="Custom", group="自訂區間")
+orTz   = input.string("UTC-5", "", inline="Custom", group="自訂區間", options=["UTC-10","UTC-8","UTC-7","UTC-6","UTC-5","UTC-4","UTC-3","UTC+0","UTC+1","UTC+2","UTC+3","UTC+3:30","UTC+4","UTC+5","UTC+5:30","UTC+5:45","UTC+6","UTC+6:30","UTC+7","UTC+8","UTC+9","UTC+9:30","UTC+10","UTC+11","UTC+12","UTC+12:45","UTC+13"])
+
+// OR 樣式
+orColor     = input.color(#787b86, "   區間線顏色", group="開盤區間樣式", inline="Range")
+orFillColor = input.color(color.new(color.gray,60), "區間框顏色", group="開盤區間樣式", inline="Range")
+orGreenFill = input.color(color.new(#089981,80), " 多方填色", group="開盤區間樣式", inline="Bull")
+orRedFill   = input.color(color.new(#f23645,80), "空方填色", group="開盤區間樣式", inline="Bear")
+orTxtSizeIn = str.lower(input.string("Small", "區間文字大小", options=["Tiny","Small","Normal","Large","Huge"], group="開盤區間樣式"))
+
+orInvis = color.rgb(0,0,0,100)
+
+// ========= OR 型別 =========
+type orLevel
+    line ln
+    label lab
+
+// ========= OR 變數 =========
+var bool  or_sesh  = false
+var bool  or_token = false
+var float orh      = na
+var float orl      = na
+var float prev_orm = na
+var box   or_bx    = na
+var int   day_dir  = 0
+
+var orLevel h_ln = orLevel.new(na, na)
+var orLevel l_ln = orLevel.new(na, na)
+var line    m_ln = na
+
+// ========= OR 計算 =========
+orm = math.avg(orh, orl)
+
+// 註:區間判定「永遠」執行,不受 showOR 影響,
+//     showOR 只控制是否繪製;否則關閉繪圖會導致建議欄永遠停在「區間形成中」。
+new_or_tf = ta.change(time(orTF)) != 0
+if crTog
+    or_sesh := not na(time(timeframe.period, crSesh, orTz))
+else
+    if session.isfirstbar
+        or_sesh := true
+    else if not session.isfirstbar and new_or_tf
+        or_sesh := false
+
+or_start = or_sesh and not or_sesh[1]
+or_end   = or_sesh[1] and not or_sesh
+
+// session 開始
+if or_start
+    if not showHist
+        box.delete(or_bx)
+        line.delete(h_ln.ln)
+        line.delete(l_ln.ln)
+        line.delete(m_ln)
+    label.delete(h_ln.lab)
+    label.delete(l_ln.lab)
+
+    orh := high
+    orl := low
+    prev_orm := orm[1]
+    or_token := false
+
+    if showOR
+        or_bx := box.new(bar_index, high, bar_index, low, bgcolor=orFillColor, border_width=0)
+
+// session 進行中
+if or_sesh
+    if high > orh
+        orh := high
+    if low < orl
+        orl := low
+    if showOR and not na(or_bx)
+        box.set_top(or_bx, orh)
+        box.set_bottom(or_bx, orl)
+        box.set_right(or_bx, bar_index)
+    if orh != orl
+        or_token := true
+
+// session 結束 — 畫出 ORH/ORL/ORM
+if or_end and or_token and showOR
+    h_ln := orLevel.new(line.new(bar_index, orh, bar_index, orh, color=orColor), label.new(bar_index, orh, text="ORH", tooltip=str.tostring(orh, format.mintick), style=label.style_label_left, color=orInvis, textcolor=color.new(orColor,0), size=orTxtSizeIn))
+    l_ln := orLevel.new(line.new(bar_index, orl, bar_index, orl, color=orColor), label.new(bar_index, orl, text="ORL", tooltip=str.tostring(orl, format.mintick), style=label.style_label_left, color=orInvis, textcolor=color.new(orColor,0), size=orTxtSizeIn))
+    m_ln := line.new(bar_index, orm, bar_index, orm, style=line.style_dashed, color=orColor)
+
+    day_dir := orm > prev_orm ? 1 : orm < prev_orm ? -1 : 0
+    linefill.new(h_ln.ln, l_ln.ln, biasTog ? (day_dir == 1 ? orGreenFill : day_dir == -1 ? orRedFill : orInvis) : orInvis)
+
+// session 外 — 往右延伸
+if not or_sesh and or_token and showOR and not na(h_ln.ln)
+    line.set_x2(h_ln.ln, bar_index)
+    line.set_x2(l_ln.ln, bar_index)
+    label.set_x(h_ln.lab, bar_index)
+    label.set_x(l_ln.lab, bar_index)
+    line.set_x2(m_ln, bar_index)
+
+
+// =====================================================================
+//  Part 3 — 綜合判斷表格 (Trend × OpenRange 位置 → 操作建議)
+// =====================================================================
+
+// ---- 價格相對 OR 位置 ----
+// OR 必須「區間時段已結束」才算成形 (not or_sesh),
+// 否則在 5 分鐘形成期間內價格必然落在區間內,會給出誤導性的位置判斷。
+orReady = or_token and not or_sesh and not na(orh) and not na(orl)
+string orPos = na
+if orReady
+    if close > orh
+        orPos := "站上ORH"
+    else if close < orl
+        orPos := "跌破ORL"
+    else
+        orPos := "區間內"
+
+// ---- 趨勢方向 (5級併為3向) ----
+// 強UP/UP → 多方 ; 強Down/DOWN → 空方 ; MIX → 中性
+// 註:以 "" 代表未定,避免 ternary 混用 na 造成型別推斷失敗
+string trendDir = ""
+if not na(state)
+    trendDir := (state == "強UP" or state == "UP") ? "UP" : (state == "強Down" or state == "DOWN") ? "DOWN" : "MIX"
+
+// ---- 供「快訊 → 新增條件」過濾用的狀態值 ----
+// 搭配其他買賣指標的快訊:主條件為買賣訊號,新增條件選本指標的下列數值
+// 數值是「持續」的狀態,不是一次性事件,只要當下狀態符合就成立
+//
+//   趨勢強度 : 0=MIX  1=一般趨勢  2=強趨勢 (不分多空)
+//       有趨勢   → 趨勢強度 大於 0.5
+//       有強趨勢 → 趨勢強度 大於 1.5
+//   趨勢方向 : 2=強UP  1=UP  0=MIX  -1=DOWN  -2=強Down
+//       多方趨勢 → 趨勢方向 大於 0.5     強多 → 大於 1.5
+//       空方趨勢 → 趨勢方向 小於 -0.5    強空 → 小於 -1.5
+string stateStr = na(state) ? "" : state
+dirCode  = not supported ? 0 : stateStr == "強UP" ? 2 : stateStr == "UP" ? 1 : stateStr == "DOWN" ? -1 : stateStr == "強Down" ? -2 : 0
+strength = math.abs(dirCode)
+
+plot(strength,   "趨勢強度", display=display.data_window)
+plot(dirCode,    "趨勢方向", display=display.data_window)
+plot(lockedDiff, "趨勢差值", display=display.data_window)
+
+// 同樣邏輯的 alertcondition,在條件清單中也可直接選用
+alertcondition(strength >= 1, "有趨勢",   '{{ticker}} 有趨勢｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
+alertcondition(strength >= 2, "有強趨勢", '{{ticker}} 有強趨勢｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
+
+// 分多空:BUY 快訊搭配多方條件,SELL 快訊搭配空方條件
+alertcondition(dirCode >= 1,  "多方趨勢 (UP+強UP)",     '{{ticker}} 多方趨勢｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
+alertcondition(dirCode >= 2,  "強多 (強UP)",            '{{ticker}} 強多｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
+alertcondition(dirCode <= -1, "空方趨勢 (DOWN+強Down)", '{{ticker}} 空方趨勢｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
+alertcondition(dirCode <= -2, "強空 (強Down)",          '{{ticker}} 強空｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
+
+// ---- 建議矩陣 (3×3) ----
+// UP   : 站上ORH=只做多 | 區間內=偏多待突破 | 跌破ORL=觀望
+// MIX  : 站上ORH=突破待確認 | 區間內=觀望 | 跌破ORL=跌破待確認
+// DOWN : 站上ORH=觀望 | 區間內=偏空待跌破 | 跌破ORL=只做空
+string advice = na
+color  advBg  = color.new(color.gray, 30)
+if trendDir == ""
+    advice := "計算中..."
+    advBg  := color.new(color.gray, 50)
+else if not orReady
+    advice := "區間形成中"
+    advBg  := color.new(color.gray, 50)
+else
+    if trendDir == "UP"
+        if orPos == "站上ORH"
+            advice := "只做多"
+            advBg  := color.new(color.green, 0)
+        else if orPos == "區間內"
+            advice := "偏多待突破"
+            advBg  := color.new(color.green, 45)
+        else
+            advice := "觀望"
+            advBg  := color.new(#F9A825, 10)
+    else if trendDir == "DOWN"
+        if orPos == "跌破ORL"
+            advice := "只做空"
+            advBg  := color.new(color.red, 0)
+        else if orPos == "區間內"
+            advice := "偏空待跌破"
+            advBg  := color.new(color.red, 45)
+        else
+            advice := "觀望"
+            advBg  := color.new(#F9A825, 10)
+    else  // MIX
+        if orPos == "站上ORH"
+            advice := "突破待確認"
+            advBg  := color.new(color.orange, 20)
+        else if orPos == "跌破ORL"
+            advice := "跌破待確認"
+            advBg  := color.new(color.orange, 20)
+        else
+            advice := "觀望"
+            advBg  := color.new(#F9A825, 10)
+
+// ---- 顯示對應 ----
+getPos(p) => p == "右上" ? position.top_right : p == "右下" ? position.bottom_right : p == "左上" ? position.top_left : position.bottom_left
+getSize(s) => s == "極小" ? size.tiny : s == "小" ? size.small : s == "普通" ? size.normal : s == "大" ? size.large : s == "極大" ? size.huge : size.auto
+
+txtSize = getSize(fontSize)
+hdrBg   = color.new(color.black, 20)
+blank   = color.new(color.black, 100)
+
+// 內容最多 6 列 + 頂部留白列
+totalRows = 6 + topPad
+var table t = table.new(getPos(tablePos), 2, totalRows, border_width=1)
+
+fillRow(int r, string lbl, string val, color valBg) =>
+    table.cell(t, 0, r, lbl, text_color=color.white, bgcolor=hdrBg, text_size=txtSize)
+    table.cell(t, 1, r, val, text_color=color.white, bgcolor=valBg, text_size=txtSize)
+
+clearRow(int r) =>
+    table.cell(t, 0, r, "", bgcolor=blank)
+    table.cell(t, 1, r, "", bgcolor=blank)
+
+// 頂部留白列:透明底、以空白字元撐出行高,把內容往下推離狀態列
+padRow(int r) =>
+    table.cell(t, 0, r, " ", text_color=blank, bgcolor=blank, text_size=txtSize)
+    table.cell(t, 1, r, " ", text_color=blank, bgcolor=blank, text_size=txtSize)
+
+if barstate.islast
+    if not supported
+        rr = 0
+        while rr < topPad
+            padRow(rr)
+            rr += 1
+        table.cell(t, 0, rr, "不支援此標的", text_color=color.white, bgcolor=color.new(color.red, 20), text_size=txtSize)
+        rr += 1
+        while rr < totalRows
+            clearRow(rr)
+            rr += 1
+    else
+        r = 0
+        // 頂部留白 (避開左上指標名稱)
+        while r < topPad
+            padRow(r)
+            r += 1
+        // 趨勢
+        fillRow(r, "趨勢", na(state) ? "計算中..." : state, bgCol)
+        r += 1
+        // 建議 (可選)
+        if showAdv
+            fillRow(r, "建議", na(advice) ? "—" : advice, advBg)
+            r += 1
+        // 位置 (OR 成形後顯示;可選,跟隨建議開關)
+        if showAdv
+            fillRow(r, "位置", orReady ? orPos : "—", hdrBg)
+            r += 1
+        // 差值
+        fillRow(r, "差值", na(lockedDiff) ? "—" : str.tostring(lockedDiff, "#.##") + " 點", hdrBg)
+        r += 1
+        // 強勢門檻 (可選)
+        if showStr
+            fillRow(r, "強勢", na(strongTh) ? "—" : "±" + str.tostring(strongTh, "#.##"), hdrBg)
+            r += 1
+        // 更新時間 (可選)
+        if showTime
+            fillRow(r, "更新於", na(lastCalcTime) ? "—" : str.format_time(lastCalcTime, "HH:mm:ss", syminfo.timezone), hdrBg)
+            r += 1
+        // 清空剩餘列,避免殘留框線
+        while r < totalRows
+            clearRow(r)
+            r += 1
