@@ -1,8 +1,9 @@
 //@version=6
 // 仿「Breakout alert (hugo)」：共識 K 棒 + Interm / Near T 支撐壓力
-// 仿「買賣訊號」：創「階段」根新低 / 新高後，收盤穿越 EMA 出買賣訊號
+// 仿「買賣訊號」：創「階段」根新低 / 新高後，第一根收盤突破那根 K 的高 / 低點，再用 EMA 確認
 // 設計說明見 indicators/breakout_signals.md
-indicator("Breakout Signals", shorttitle="BO Signals", overlay=true)
+// scale.right：跟 K 棒共用右側價格刻度，線和箭頭才會貼著 K 棒，不會飄
+indicator("Breakout Signals", shorttitle="BO Signals", overlay=true, scale=scale.right)
 
 // ───────── 輸入：共識 / K 棒顏色（對應原指標「輸入」頁）─────────
 grpC = "共識 / K 棒顏色"
@@ -36,13 +37,12 @@ nearLen   = input.int(25, "Near T 回看根數", minval=2, group=grpL, tooltip="
 // ───────── 輸入：買賣訊號（對應「買賣訊號」指標的 階段 / Ema number / Ema enable / Color background）─────────
 grpS = "買賣訊號"
 showSig    = input.bool(true, "顯示買賣訊號", group=grpS)
-stageLen   = input.int(20, "階段", minval=2, group=grpS, tooltip="創前 N 根新低 / 新高，才算一個波段低點 / 高點")
-confirmWin = input.int(4, "低高點後幾根內確認", minval=0, group=grpS, tooltip="波段低點 / 高點出現後，這幾根內收盤穿越 EMA 才出訊號")
-emaEnable  = input.bool(true, "Ema enable", group=grpS, tooltip="開：收盤穿越 EMA 當確認。關：收盤突破前一根高點 / 跌破前一根低點當確認")
+stageLen   = input.int(20, "階段", minval=2, group=grpS, tooltip="創前 N 根新低 / 新高的那根 K，就是波段低點 / 高點")
+emaEnable  = input.bool(true, "Ema enable", group=grpS, tooltip="開：收盤突破時還要站在 EMA 正確的一側，不然這次不算。關：只看收盤突破")
 sigEmaLen  = input.int(8, "Ema number", minval=1, group=grpS)
+sigEmaSrc  = input.source(hl2, "Ema source", group=grpS, tooltip="對照原版截圖，hl2 最吻合；也可以改成 close 比較看看")
 showEma    = input.bool(false, "顯示 EMA 線", group=grpS)
 colorBg    = input.bool(false, "Color background", group=grpS, tooltip="出訊號的 K 棒加背景色")
-cooldown   = input.int(3, "同向訊號間隔根數", minval=0, group=grpS)
 trendMode  = input.string("不過濾", "共識過濾", options=["不過濾", "只做順勢", "避開強勢反向"], group=grpS, tooltip="只做順勢：綠K才買、紅K才賣。避開強勢反向：紅K不買、綠K不賣")
 confirmBar = input.bool(true, "K 棒收盤才出訊號", group=grpS, tooltip="避免盤中出現又消失")
 showBO     = input.bool(false, "顯示突破 / 跌破 Interm 標記", group=grpS)
@@ -131,32 +131,42 @@ pFast = plot(showCloud ? fastMA : na, "Cloud Fast", color=color.new(C_NT, 100), 
 pSlow = plot(showCloud ? slowMA : na, "Cloud Slow", color=color.new(C_NT, 100), editable=false)
 fill(pFast, pSlow, color=fastMA > slowMA ? color.new(C_UP, 85) : color.new(C_DN, 85), title="Cloud")
 
-// ───────── 買賣訊號：創「階段」根新低 / 新高後，幾根內收盤穿越 EMA ─────────
-// 最近 confirmWin+1 根裡的最低點，不高於再往前 stageLen 根的最低點 = 剛做出波段低點
-bool swingLow  = ta.lowest(low, confirmWin + 1) <= ta.lowest(low, stageLen)[confirmWin + 1]
-bool swingHigh = ta.highest(high, confirmWin + 1) >= ta.highest(high, stageLen)[confirmWin + 1]
+// ───────── 買賣訊號 ─────────
+// 1. 創前「階段」根新低的那根 K = 波段低點，記下它的最高價（賣訊反過來：新高那根的最低價）
+// 2. 之後第一根收盤站上這個價格的 K = 觸發；同時收盤在 EMA 之上才出買訊
+// 3. 不管有沒有出訊號，觸發一次就用掉，要等下一個新低才會再等訊號
+bool newLow  = low < ta.lowest(low, stageLen)[1]
+bool newHigh = high > ta.highest(high, stageLen)[1]
 
-float sigEma = ta.ema(close, sigEmaLen)
-bool emaUp   = ta.crossover(close, sigEma)
-bool emaDn   = ta.crossunder(close, sigEma)
-bool turnUp  = emaEnable ? emaUp : close > high[1]
-bool turnDn  = emaEnable ? emaDn : close < low[1]
+var float refHigh = na
+var float refLow  = na
+var bool  armBuy  = false
+var bool  armSell = false
 
-bool buySetup  = swingLow and turnUp
-bool sellSetup = swingHigh and turnDn
+float sigEma  = ta.ema(sigEmaSrc, sigEmaLen)
+bool trigBuy  = not newLow and armBuy and close > refHigh
+bool trigSell = not newHigh and armSell and close < refLow
+
+if newLow
+    refHigh := high
+    armBuy  := true
+else if trigBuy
+    armBuy := false
+if newHigh
+    refLow  := low
+    armSell := true
+else if trigSell
+    armSell := false
+
+bool buySetup  = trigBuy and (not emaEnable or close > sigEma)
+bool sellSetup = trigSell and (not emaEnable or close < sigEma)
 
 bool okBuy  = trendMode == "不過濾" or (trendMode == "只做順勢" ? isBull : not isBear)
 bool okSell = trendMode == "不過濾" or (trendMode == "只做順勢" ? isBear : not isBull)
 bool barOk  = not confirmBar or barstate.isconfirmed
 
-var int lastBuy  = na
-var int lastSell = na
-bool buySig  = buySetup and okBuy and barOk and (na(lastBuy) or bar_index - lastBuy > cooldown)
-bool sellSig = sellSetup and okSell and barOk and (na(lastSell) or bar_index - lastSell > cooldown)
-if buySig
-    lastBuy := bar_index
-if sellSig
-    lastSell := bar_index
+bool buySig  = buySetup and okBuy and barOk
+bool sellSig = sellSetup and okSell and barOk
 
 plotshape(showSig and buySig, "Buy", shape.labelup, location.belowbar, color=C_UP, size=size.small)
 plotshape(showSig and sellSig, "Sell", shape.labeldown, location.abovebar, color=C_DN, size=size.small)
@@ -184,7 +194,7 @@ if showTable and barstate.islast
          text_color=textColor, text_size=tsize, bgcolor=color.new(stateCol, 70))
 
 // ───────── 警示 ─────────
-alertcondition(buySig, "買進訊號", "{{ticker}} 波段低點後站回 EMA，買進訊號 @ {{close}}")
-alertcondition(sellSig, "賣出訊號", "{{ticker}} 波段高點後跌破 EMA，賣出訊號 @ {{close}}")
+alertcondition(buySig, "買進訊號", "{{ticker}} 收盤站上波段低點那根 K 的高點，買進訊號 @ {{close}}")
+alertcondition(sellSig, "賣出訊號", "{{ticker}} 收盤跌破波段高點那根 K 的低點，賣出訊號 @ {{close}}")
 alertcondition(brkUp and not brkUp[1], "突破 Interm 壓力", "{{ticker}} 收盤突破中期壓力 @ {{close}}")
 alertcondition(brkDn and not brkDn[1], "跌破 Interm 支撐", "{{ticker}} 收盤跌破中期支撐 @ {{close}}")
