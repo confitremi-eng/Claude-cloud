@@ -6,12 +6,15 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(os.path.dirname(HERE), 'data')
-DATA = {'NQ': os.environ.get('NQ_DATA', os.path.join(DATA_DIR, 'NQ_1m.csv')),
-        'ES': os.environ.get('ES_DATA', os.path.join(DATA_DIR, 'ES_1m.csv'))}
+# clean files from build_data.py (2026-02-02 .. 2026-09-01, synthetic days removed)
+DATA = {'NQ': os.environ.get('NQ_DATA', os.path.join(DATA_DIR, 'NQ_1m_clean.csv')),
+        'ES': os.environ.get('ES_DATA', os.path.join(DATA_DIR, 'ES_1m_clean.csv'))}
 TICK = {'NQ': 0.25, 'ES': 0.25}
 COST = {'NQ': 1.0, 'ES': 0.5}            # round-trip points: ~2 ticks slippage + commission
 TH = {'NQ': (20.0, 40.0), 'ES': (4.0, 8.0)}
 SPLIT = pd.Timestamp('2026-07-01', tz='UTC')
+SEG_GAP = pd.Timedelta(days=4)          # longer holes than a long weekend restart the trend EMAs
+WARM_DAYS = 2                           # New York dates at the start of each stretch used only to warm up
 
 # EMA 1130 on 5-second / 15-second bars expressed as a per-minute smoothing factor
 A_FAST = 1 - (1 - 2 / 1131) ** 12
@@ -32,14 +35,25 @@ def trading_minutes(start, end):
     return idx[~closed]
 
 
+def segments(idx):
+    """Id of each stretch of data without a hole longer than SEG_GAP."""
+    return (pd.Series(idx).diff() > SEG_GAP).cumsum().values
+
+
 def trend_diff_minutes(df1):
     """5s-EMA1130 minus 15s-EMA1130, per minute. Missing CME trading minutes (overnight on the
-    session-only days) are filled by a straight line from the previous close to the next open."""
-    grid = trading_minutes(df1.index[0], df1.index[-1]).union(df1.index)
-    c = df1.close.reindex(grid).interpolate(method='linear', limit_area='inside')
-    ef = c.ewm(alpha=A_FAST, adjust=False).mean()
-    es = c.ewm(alpha=A_SLOW, adjust=False).mean()
-    return pd.DataFrame({'diff': ef - es, 'emaF': ef, 'emaS': es})
+    session-only days) are filled by a straight line from the previous close to the next open.
+    The EMAs restart after a hole longer than SEG_GAP."""
+    seg = segments(df1.index)
+    parts = []
+    for s in np.unique(seg):
+        g = df1[seg == s]
+        grid = trading_minutes(g.index[0], g.index[-1]).union(g.index)
+        c = g.close.reindex(grid).interpolate(method='linear', limit_area='inside')
+        ef = c.ewm(alpha=A_FAST, adjust=False).mean()
+        es = c.ewm(alpha=A_SLOW, adjust=False).mean()
+        parts.append(pd.DataFrame({'diff': ef - es, 'emaF': ef, 'emaS': es}))
+    return pd.concat(parts)
 
 
 def bars(df1, tf):
@@ -138,13 +152,14 @@ def simulate(df, sigs, sym, R=1.5, hold=60, warm=30, exit_mode='R', trend_exit=F
     h, l, c = df.high.values, df.low.values, df.close.values
     td = df.tj_dir.values
     n = len(df)
+    tradable = df.tradable.values if 'tradable' in df else np.ones(n, bool)
     blk = df.block.values
     bib = df.bar_in_block.values
     blk_end = pd.Series(np.arange(n)).groupby(blk).transform('max').values
     tick, cost = TICK[sym], COST[sym]
     rows = []
     for i, d, sw in sigs:
-        if bib[i] < warm:
+        if bib[i] < warm or not tradable[i]:
             continue
         entry = c[i]
         stop = sw - d * tick
@@ -190,5 +205,9 @@ def prepared(sym, tf):
         if ('tdm', sym) not in _cache:
             _cache[('tdm', sym)] = trend_diff_minutes(df1)
         df = trend_judge(bars(df1, tf), _cache[('tdm', sym)], tf, sym)
+        df['seg'] = segments(pd.DatetimeIndex(df.datetime))
+        day = df.datetime.dt.tz_convert('America/New_York').dt.date
+        warm = {d for _, g in day.groupby(df.seg) for d in sorted(g.unique())[:WARM_DAYS]}
+        df['tradable'] = ~day.isin(warm).values
         _cache[key] = df
     return _cache[key]

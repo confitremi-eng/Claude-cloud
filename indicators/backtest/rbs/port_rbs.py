@@ -6,7 +6,7 @@ from round3 import variant
 from round4 import er as er_research
 
 def pine_rbs(df, sym, dir_in=None, brkLen=30, stopLen=10, erLen=20, erMin=0.4, need=2, rthOnly=True,
-             exitClose=True, targetR=2.0, maxHold=60, emaLen=1130, fastSec=5, slowSec=15, tf=1):
+             exitClose=True, targetR=2.0, maxHold=60, emaLen=1130, fastSec=5, slowSec=15, tf=1, rthLook=False, start=None):
     h, l, c, o = df.high.values, df.low.values, df.close.values, df.open.values
     n = len(c); tick = TICK[sym]; cost = COST[sym]; th, st = TH[sym]
     et = df.datetime.dt.tz_convert('America/New_York'); m = (et.dt.hour * 60 + et.dt.minute).values
@@ -19,7 +19,15 @@ def pine_rbs(df, sym, dir_in=None, brkLen=30, stopLen=10, erLen=20, erMin=0.4, n
     # ER
     ch = np.abs(np.diff(c, prepend=np.nan))
     trades = []; S = np.zeros((3, 6)); sigs = []
+    sinceOpen = -1
     for i in range(n):
+        if inRth[i] and (i == 0 or not inRth[i - 1]):
+            sinceOpen = 0
+        elif inRth[i] and sinceOpen >= 0:
+            sinceOpen += 1
+        elif not inRth[i]:
+            sinceOpen = -1
+        lookOK = not (rthOnly and rthLook) or sinceOpen >= brkLen + 1
         eF = c[i] if np.isnan(eF) else aF * c[i] + (1 - aF) * eF
         eS = c[i] if np.isnan(eS) else aS * c[i] + (1 - aS) * eS
         if i > 0 and t2[i] != t2[i - 1]:
@@ -46,8 +54,8 @@ def pine_rbs(df, sym, dir_in=None, brkLen=30, stopLen=10, erLen=20, erMin=0.4, n
         else:
             brkUp = brkDn = False
         lstop = l[max(0, i - stopLen + 1):i + 1].min() - tick; sstop = h[max(0, i - stopLen + 1):i + 1].max() + tick
-        longSetup = brkUp and upOK and sessOK and chopOK
-        shortSetup = brkDn and dnOK and sessOK and chopOK
+        longSetup = brkUp and upOK and sessOK and chopOK and lookOK
+        shortSetup = brkDn and dnOK and sessOK and chopOK and lookOK
         # --- stats (every historical bar is confirmed) ---
         for k in range(len(trades) - 1, -1, -1):
             dirn, en, stp, tg, bar = trades[k]
@@ -62,6 +70,8 @@ def pine_rbs(df, sym, dir_in=None, brkLen=30, stopLen=10, erLen=20, erMin=0.4, n
                     if r > 0: S[gi, 1] += 1; S[gi, 3] += r
                     else: S[gi, 4] -= r
                 del trades[k]
+        if start is not None and df.datetime.iloc[i] < start:
+            continue
         if longSetup and c[i] - lstop > 0:
             trades.append([1, c[i], lstop, c[i] + targetR * (c[i] - lstop), i]); sigs.append((i, 1, lstop + tick))
         if shortSetup and sstop - c[i] > 0:
@@ -73,7 +83,7 @@ for sym in ('NQ', 'ES'):
     for tf in (1, 5):
         df = prepared(sym, tf)
         # (1) same trend input as the research code -> signals must match the research rule exactly
-        sigs, S, _ = pine_rbs(df, sym, dir_in=df.tj_dir.values, tf=tf, exitClose=False)
+        sigs, S, _ = pine_rbs(df, sym, dir_in=df.tj_dir.values, tf=tf, exitClose=False, start=START)
         E = er_research(df)
         ref = [s for s in variant(df, sym, N=30) if E[s[0]] > 0.4]
         mine = [s for s in sigs if df.datetime.iloc[s[0]] >= START]
@@ -81,10 +91,10 @@ for sym in ('NQ', 'ES'):
         stops_same = all(abs(a[2] - b[2]) < 1e-9 for a, b in zip(mine, ref))
         print(f'{sym} {tf}m: signals identical to research rule: {same} ({len(mine)} vs {len(ref)}), stops identical: {stops_same}')
         # (2) trade results: Pine engine without session exits vs research simulator on one continuous block
-        df1 = df.copy(); df1['block'] = 0; df1['bar_in_block'] = np.arange(len(df1))
+        df1 = df.drop(columns='tradable'); df1['block'] = 0; df1['bar_in_block'] = np.arange(len(df1))
         t = simulate(df1, ref, sym, R=2.0, hold=60, warm=0)
         t = t[t.i < len(df1) - 61]
-        print(f'   research sim: n={len(t)} win={100*(t.R>0).mean():.2f}% avgR={t.R.mean():+.4f}   Pine port: n={S[0,0]:.0f} win={100*S[0,1]/S[0,0]:.2f}% avgR={S[0,2]/S[0,0]:+.4f} (port counts {len(sigs)-len(mine)} pre-start trades)')
+        print(f'   research sim: n={len(t)} win={100*(t.R>0).mean():.2f}% avgR={t.R.mean():+.4f}   Pine port: n={S[0,0]:.0f} win={100*S[0,1]/S[0,0]:.2f}% avgR={S[0,2]/S[0,0]:+.4f}')
         # (3) how close is the indicator's own minute-equivalent trend to the research trend?
         _, _, dc = pine_rbs(df, sym, tf=tf)
         ok = df.datetime >= START
@@ -100,3 +110,19 @@ for sym in ('NQ', 'ES'):
         ok = (df.datetime >= FULL).values
         print(f'{sym} {tf}m: minute-mode trend agrees with research trend on {100*(dc[ok] == df.tj_dir.values[ok]).mean():.1f}% '
               f'of bars on full-session days ({ok.sum()} bars)')
+
+# (5) with "開盤後等回看根數走完才出訊號" on, the Pine port must give exactly the signals of the rule used in the
+#     NQ study / holdout / final tables (nqlab: N-bar window inside today's 09:30 session).
+from nqlab import Lab
+STRONG = {'NQ': 40.0, 'ES': 8.0}
+ALL = (pd.Timestamp('2026-02-02', tz='UTC'), pd.Timestamp('2026-09-02', tz='UTC'))
+for sym in ('NQ', 'ES'):
+    for tf in (1, 2, 3, 5):
+        lab = Lab(sym, tf)
+        df = lab.df
+        sigs, _, _ = pine_rbs(df, sym, dir_in=df.tj_dir.values, tf=tf, rthLook=True)
+        keep = df.tradable.values & (df.datetime >= ALL[0]).values & (df.datetime < ALL[1]).values
+        mine = [(i, d) for i, d, _ in sigs if keep[i]]
+        idx, dirs = lab.signals(N=30, thr=STRONG[sym], erMin=0.4, period=ALL)
+        ref = list(zip(idx.tolist(), dirs.tolist()))
+        print(f'{sym} {tf}m (session lookback on): Pine port signals identical to the study rule: {mine == ref} ({len(mine)} vs {len(ref)})')

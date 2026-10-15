@@ -4,6 +4,8 @@
 
 `rbs/` 是 Remi's Buy/Sell 的研究程式（NQ ＋ ES、Trend Judge 趨勢過濾），結果整理在 [../remis_buy_sell.md](../remis_buy_sell.md)。
 
+> **注意**：getdata-finance 9/3 版的樣本有 13 天假價格（8/3–8/14、5/25、6/19、7/3）。`rbs/` 改用下面「乾淨資料」那一段做出來的檔案；BO Signals 的主表也已經用乾淨資料重跑過。
+
 ## 準備資料
 
 資料不放在 repo 裡，先下載 getdata-finance 的免費樣本（MIT 授權）：
@@ -18,6 +20,23 @@ curl -L -o indicators/backtest/data/ES_1m.csv \
 ```
 
 換成別的 1 分 K 資料也可以，欄位要是 `datetime,open,high,low,close,volume`，再用環境變數 `NQ_DATA`、`ES_DATA` 指定路徑。
+
+### 乾淨資料（rbs/ 用，2026-02-02 .. 09-01）
+
+用兩個版本的樣本接起來，剔除假資料（做法見 `rbs/build_data.py` 開頭的說明）：
+
+```bash
+mkdir -p indicators/backtest/data/raw
+B=https://raw.githubusercontent.com/getdata-finance
+curl -L -o indicators/backtest/data/raw/NQ_old.csv $B/nq-1m-ohlcv-stocks-historical-data/6a00d71d603fe8f43caa6f171b611644e90dce2c/NQ_1m.csv
+curl -L -o indicators/backtest/data/raw/NQ_new.csv $B/nq-1m-ohlcv-stocks-historical-data/41366a5861230b7b923e0985f28e093325946dc8/NQ_1m.csv
+curl -L -o indicators/backtest/data/raw/ES_old.csv $B/es-1m-ohlcv-stocks-historical-data/58b144ff72d4a9a850e2aa99dee4235b4e89b242/ES_1m.csv
+curl -L -o indicators/backtest/data/raw/ES_new.csv $B/es-1m-ohlcv-stocks-historical-data/0908875a9f414e56c1d5117166965b21175774ed/ES_1m.csv
+python3 indicators/backtest/rbs/build_data.py indicators/backtest/data/raw/NQ_old.csv indicators/backtest/data/raw/NQ_new.csv \
+  indicators/backtest/data/raw/ES_old.csv indicators/backtest/data/raw/ES_new.csv indicators/backtest/data
+```
+
+會產生 `data/NQ_1m_clean.csv`、`data/ES_1m_clean.csv`，`rbs/` 預設讀這兩個檔。
 
 ## 檔案
 
@@ -46,6 +65,15 @@ curl -L -o indicators/backtest/data/ES_1m.csv \
 | `round5.py`、`round5b.py` | 第 5 輪：停損寬度、固定口數點數、1 分 K 專用參數 |
 | `port_rbs.py` | 把 `remis_buy_sell.pine` 逐行改寫，跟研究規則逐筆比對；分鐘換算的趨勢一致率 |
 | `check_tj.py` | Trend Judge 各狀態所佔比例 |
+| `build_data.py` | 從兩個版本的樣本做出乾淨資料 |
+| `nqlab.py`、`nqlab_check.py` | NQ 研究用的快速回測（numba），以及跟 `rbs.py` 逐筆比對 |
+| `nq_stage1.py`、`nq_diag.py` | NQ 第一階段：一次只改一個參數；按時段、趨勢強度、效率比分組 |
+| `nq_stage2.py`、`nq_stage2_an.py` | NQ 第二階段：1,350 組全組合和分析 |
+| `nq_stage3.py` | NQ 第三階段：每天限制筆數 / 虧損次數 |
+| `holdout.py` | 定案的候選在 2–3 月驗證期的結果 |
+| `final_tables.py` | 文件第 3 節的各週期表格（2/4–9/1） |
+
+第 0–5 輪（`baseline.py` 到 `round5b.py`）是在含假資料的版本上做的；用乾淨資料重跑時，數字會跟文件第 6 節不同。
 
 ## 執行
 
@@ -56,8 +84,9 @@ python3 variants.py
 python3 pineport_v4.py
 
 cd rbs
-python3 final_cmp.py
+python3 final_tables.py
+python3 holdout.py
 python3 port_rbs.py
 ```
 
-需要 `pandas`、`numpy`。
+需要 `pandas`、`numpy`；`nqlab.py` 另外需要 `numba`。

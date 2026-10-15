@@ -4,6 +4,7 @@
 //   買：Trend Judge 強UP ＋ 收盤突破前 30 根最高價 ＋ 效率比 > 0.4 ＋ 美股盤中
 //   賣：Trend Judge 強Down ＋ 收盤跌破前 30 根最低價 ＋ 效率比 > 0.4 ＋ 美股盤中
 //   停損：近 10 根最低（買）/ 最高（賣）外 1 tick；目標 2R
+//   開盤（09:30）後要先走完 31 根才出訊號，突破的高低點只看今天盤中
 // 趨勢判讀取自 Trend Judge：5 秒 / 15 秒 EMA 1130 差值，每 2 分鐘鎖定一次
 // 回測與優化過程：indicators/remis_buy_sell.md
 indicator("Remi's Buy/Sell", overlay=true, max_lines_count=20, max_labels_count=20)
@@ -46,6 +47,8 @@ erMin      = input.float(0.4, "大於", minval=0, maxval=1, step=0.05, group=grp
 adxLen     = input.int(14, "ADX 長度", minval=1, group=grpS, inline="adx")
 adxMin     = input.float(25, "大於", minval=0, group=grpS, inline="adx")
 rthOnly    = input.bool(true, "只做美股盤中 09:30–16:00（紐約時間）", group=grpS, tooltip="夜盤的訊號回測明顯較差")
+rthLook    = input.bool(true, "開盤後等回看根數走完才出訊號", group=grpS,
+     tooltip="09:30 開盤後要先有「回看根數＋1」根 K 棒才出訊號，突破的高低點只看今天盤中，不跨到夜盤。回測就是這樣算的（回看 30 根時：1 分 K 10:01、5 分 K 12:05 才開始）。關掉後開盤不久就會出訊號，但這段沒有回測過")
 confirmBar = input.bool(true, "K 棒收盤才出訊號", group=grpS)
 
 // ═════════════════ ③ 停損 / 目標 ═════════════════
@@ -198,6 +201,15 @@ bool sessOK  = not rthOnly or inRth
 bool newDay  = ta.change(time("D")) != 0
 bool forceOut = rthOnly and exitClose and (not inHold or newDay)
 
+// 今天 09:30 開盤後第幾根（開盤那根 = 0，盤中以外 = -1）
+var int sinceOpen = -1
+if inRth and not inRth[1]
+    sinceOpen := 0
+else if inRth and sinceOpen >= 0
+    sinceOpen += 1
+else if not inRth
+    sinceOpen := -1
+
 float erDen  = math.sum(math.abs(ta.change(close)), erLen)
 float erVal  = erDen > 0 ? math.abs(close - close[erLen]) / erDen : 0.0
 [diP, diM, adxVal] = ta.dmi(adxLen, adxLen)
@@ -242,8 +254,10 @@ bool boSell = trigSell and close < boEma
 
 // ═════════════════ 最終訊號 ═════════════════
 bool useBrk     = sigType == "突破（建議）"
-bool longSetup  = (useBrk ? brkUp : boBuy) and upOK and sessOK and chopOK
-bool shortSetup = (useBrk ? brkDn : boSell) and dnOK and sessOK and chopOK
+int  lookNeed   = (useBrk ? brkLen : stageLen) + 1
+bool lookOK     = not (rthOnly and rthLook) or sinceOpen >= lookNeed
+bool longSetup  = (useBrk ? brkUp : boBuy) and upOK and sessOK and chopOK and lookOK
+bool shortSetup = (useBrk ? brkDn : boSell) and dnOK and sessOK and chopOK and lookOK
 float longStop  = (useBrk ? brkLongStop : boLongStop) - syminfo.mintick
 float shortStop = (useBrk ? brkShortStop : boShortStop) + syminfo.mintick
 bool barOk   = not confirmBar or barstate.isconfirmed
@@ -436,14 +450,17 @@ if barstate.islast
         table.cell(tbState, 1, r, sessOK ? "可交易" : "盤中外", text_color=textColor, bgcolor=sessOK ? color.new(color.green, 40) : color.new(color.gray, 40), text_size=txtSize)
         r += 1
         string nextTxt = "等待趨勢"
-        if upOK and sessOK and chopOK
-            nextTxt := "等突破 " + str.tostring(useBrk ? hh : refHigh, format.mintick) + " 做多"
-        else if dnOK and sessOK and chopOK
-            nextTxt := "等跌破 " + str.tostring(useBrk ? ll : refLow, format.mintick) + " 做空"
-        else if (upOK or dnOK) and not sessOK
+        bool trendOK = upOK or dnOK
+        if trendOK and not sessOK
             nextTxt := "趨勢中，但不在盤中"
-        else if upOK or dnOK
+        else if trendOK and not lookOK
+            nextTxt := "開盤第 " + str.tostring(sinceOpen + 1) + " 根，第 " + str.tostring(lookNeed + 1) + " 根起才出訊號"
+        else if trendOK and not chopOK
             nextTxt := "趨勢中，但盤整過濾未過"
+        else if upOK
+            nextTxt := "等突破 " + str.tostring(useBrk ? hh : refHigh, format.mintick) + " 做多"
+        else if dnOK
+            nextTxt := "等跌破 " + str.tostring(useBrk ? ll : refLow, format.mintick) + " 做空"
         table.cell(tbState, 0, r, "下一步", text_color=textColor, bgcolor=hdrBg, text_size=txtSize)
         table.cell(tbState, 1, r, nextTxt, text_color=textColor, bgcolor=hdrBg, text_size=txtSize)
     if vStats
