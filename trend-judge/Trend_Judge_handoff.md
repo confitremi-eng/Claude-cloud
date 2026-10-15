@@ -16,6 +16,7 @@ TradingView Pine Script 趨勢判讀指標，給期貨盤中交易使用（NQ / 
 
 - Pine 版本：`//@version=5`（主檔）。OR 原碼是 v6，已改寫成 v5 相容。
 - 沒有本地編譯器。修改後由使用者貼到 TradingView 編譯，有紅字錯誤會回貼。
+- 主檔放在 repo `confitremi-eng/Claude-cloud` 的 `trend-judge/`。使用者複製程式時請用 GitHub 的「Copy raw file」或下載後用文字編輯器開；從預覽畫面複製曾經被截斷，編譯時出現「could not be translated」或「must contain at least one plot」這類奇怪錯誤。
 
 ## 2. 使用情境
 
