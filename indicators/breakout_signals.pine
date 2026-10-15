@@ -212,6 +212,10 @@ color stateCol = isBull ? colUp : isBear ? colDn : colNt
 
 barcolor(vCandles ? stateCol : na, title="共識 K 棒顏色")
 
+// 保險：看不見的 K 棒高 / 低點。萬一指標在圖上被放到自己的刻度，它的自動縮放範圍也會跟 K 棒一樣，箭頭不會亂飄
+plot(high, "錨點 高", color=color.new(color.gray, 100), editable=false, display=display.pane)
+plot(low, "錨點 低", color=color.new(color.gray, 100), editable=false, display=display.pane)
+
 // ═════════════════ 支撐壓力線 ═════════════════
 float intermRes = ta.highest(high, intermLen)
 float intermSup = ta.lowest(low, intermLen)
