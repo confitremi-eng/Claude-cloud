@@ -39,7 +39,7 @@ showSig    = input.bool(true, "顯示買賣訊號", group=grpS)
 stageLen   = input.int(20, "階段", minval=2, group=grpS, tooltip="創前 N 根新低 / 新高，才算一個波段低點 / 高點")
 confirmWin = input.int(4, "低高點後幾根內確認", minval=0, group=grpS, tooltip="波段低點 / 高點出現後，這幾根內收盤穿越 EMA 才出訊號")
 emaEnable  = input.bool(true, "Ema enable", group=grpS, tooltip="開：收盤穿越 EMA 當確認。關：收盤突破前一根高點 / 跌破前一根低點當確認")
-emaLen     = input.int(8, "Ema number", minval=1, group=grpS)
+sigEmaLen  = input.int(8, "Ema number", minval=1, group=grpS)
 showEma    = input.bool(false, "顯示 EMA 線", group=grpS)
 colorBg    = input.bool(false, "Color background", group=grpS, tooltip="出訊號的 K 棒加背景色")
 cooldown   = input.int(3, "同向訊號間隔根數", minval=0, group=grpS)
@@ -136,7 +136,7 @@ fill(pFast, pSlow, color=fastMA > slowMA ? color.new(C_UP, 85) : color.new(C_DN,
 bool swingLow  = ta.lowest(low, confirmWin + 1) <= ta.lowest(low, stageLen)[confirmWin + 1]
 bool swingHigh = ta.highest(high, confirmWin + 1) >= ta.highest(high, stageLen)[confirmWin + 1]
 
-float sigEma = ta.ema(close, emaLen)
+float sigEma = ta.ema(close, sigEmaLen)
 bool emaUp   = ta.crossover(close, sigEma)
 bool emaDn   = ta.crossunder(close, sigEma)
 bool turnUp  = emaEnable ? emaUp : close > high[1]
