@@ -5,7 +5,8 @@
 //   線 1：EMA 1130，15 秒，藍色點線
 //   線 2：EMA 1130，5 秒，紫色點線
 //   線 3：SMA 5，1 天，橘色虛線
-// - 每條線各自設定：類型、長度、來源、偏移、時間週期、等待時間週期結束、顏色、線型、線寬
+// - 每條線各自設定：類型、長度、來源、偏移、時間週期、等待時間週期結束、顏色、線寬
+// - 線型（點線／虛線）寫在程式中；要改可到「樣式」分頁調整
 // - 線 1 / 線 2 之間的多空色帶、交叉訊號、快訊
 // 注意：秒級時間週期（5 秒、15 秒）需要 TradingView 付費方案。
 // ============================================================================
@@ -23,8 +24,7 @@ src1   = input.source(close, "來源", group = G1)
 off1   = input.int(0, "偏移", group = G1)
 tf1    = input.timeframe("15S", "時間週期", group = G1, tooltip = TIP_TF)
 wait1  = input.bool(true, "等待時間週期結束", group = G1, tooltip = TIP_WAIT)
-col1   = input.color(#2962FF, "顏色", inline = "s1", group = G1)
-style1 = input.string("點線", "線型", options = ["實線", "虛線", "點線"], inline = "s1", group = G1)
+col1   = input.color(#2962FF, "顏色", group = G1)
 w1     = input.int(2, "線寬", minval = 1, maxval = 4, group = G1)
 
 // ---------- 線 2（紫，EMA 1130 / 5 秒）----------
@@ -36,8 +36,7 @@ src2   = input.source(close, "來源", group = G2)
 off2   = input.int(0, "偏移", group = G2)
 tf2    = input.timeframe("5S", "時間週期", group = G2, tooltip = TIP_TF)
 wait2  = input.bool(true, "等待時間週期結束", group = G2, tooltip = TIP_WAIT)
-col2   = input.color(#E040FB, "顏色", inline = "s2", group = G2)
-style2 = input.string("點線", "線型", options = ["實線", "虛線", "點線"], inline = "s2", group = G2)
+col2   = input.color(#E040FB, "顏色", group = G2)
 w2     = input.int(2, "線寬", minval = 1, maxval = 4, group = G2)
 
 // ---------- 線 3（橘，SMA 5 / 1 天）----------
@@ -49,8 +48,7 @@ src3   = input.source(close, "來源", group = G3)
 off3   = input.int(0, "偏移", group = G3)
 tf3    = input.timeframe("1D", "時間週期", group = G3, tooltip = TIP_TF)
 wait3  = input.bool(true, "等待時間週期結束", group = G3, tooltip = TIP_WAIT)
-col3   = input.color(#E65A2B, "顏色", inline = "s3", group = G3)
-style3 = input.string("虛線", "線型", options = ["實線", "虛線", "點線"], inline = "s3", group = G3)
+col3   = input.color(#E65A2B, "顏色", group = G3)
 w3     = input.int(2, "線寬", minval = 1, maxval = 4, group = G3)
 
 // ---------- 訊號（線 1 × 線 2）----------
@@ -66,20 +64,14 @@ maTF(string maType, float src, int len, string tf, bool wait) =>
     // wait = true：取上一根已收盤值 + lookahead，等同內建「等待時間週期結束」，不重繪
     wait ? request.security(syminfo.tickerid, tf, m[1], lookahead = barmerge.lookahead_on) : request.security(syminfo.tickerid, tf, m)
 
-lineStyle(string s) =>
-    switch s
-        "實線" => plot.linestyle_solid
-        "虛線" => plot.linestyle_dashed
-        => plot.linestyle_dotted
-
 ma1 = maTF(type1, src1, len1, tf1, wait1)
 ma2 = maTF(type2, src2, len2, tf2, wait2)
 ma3 = maTF(type3, src3, len3, tf3, wait3)
 
 // ---------- 繪圖 ----------
-p1 = plot(show1 ? ma1 : na, "線 1", col1, w1, offset = off1, linestyle = lineStyle(style1))
-p2 = plot(show2 ? ma2 : na, "線 2", col2, w2, offset = off2, linestyle = lineStyle(style2))
-plot(show3 ? ma3 : na, "線 3", col3, w3, offset = off3, linestyle = lineStyle(style3))
+p1 = plot(show1 ? ma1 : na, "線 1", col1, w1, offset = off1, linestyle = plot.linestyle_dotted)
+p2 = plot(show2 ? ma2 : na, "線 2", col2, w2, offset = off2, linestyle = plot.linestyle_dotted)
+plot(show3 ? ma3 : na, "線 3", col3, w3, offset = off3, linestyle = plot.linestyle_dashed)
 fill(p1, p2, showRibbon ? color.new(ma2 > ma1 ? bullCol : bearCol, 85) : na, "色帶")
 
 // ---------- 交叉訊號 ----------
