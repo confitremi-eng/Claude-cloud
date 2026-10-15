@@ -272,6 +272,10 @@ isRed   = close < open
 alertcondition(dirCode >= 1 and isGreen, "多方趨勢+綠K (BUY用)", '{{ticker}} 多方趨勢+綠K｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
 alertcondition(dirCode <= -1 and isRed,  "空方趨勢+紅K (SELL用)", '{{ticker}} 空方趨勢+紅K｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
 
+// 強趨勢版:只在 強UP / 強Down 成立
+alertcondition(dirCode >= 2 and isGreen,  "強多+綠K (BUY用)",  '{{ticker}} 強多+綠K｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
+alertcondition(dirCode <= -2 and isRed,   "強空+紅K (SELL用)", '{{ticker}} 強空+紅K｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
+
 // ---- 建議矩陣 (3×3) ----
 // UP   : 站上ORH=只做多 | 區間內=偏多待突破 | 跌破ORL=觀望
 // MIX  : 站上ORH=突破待確認 | 區間內=觀望 | 跌破ORL=跌破待確認

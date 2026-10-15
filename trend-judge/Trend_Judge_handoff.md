@@ -93,6 +93,7 @@ alertcondition：
 - 有趨勢（強度 ≥ 1）、有強趨勢（強度 ≥ 2）
 - 多方趨勢 (UP+強UP)、強多 (強UP)、空方趨勢 (DOWN+強Down)、強空 (強Down)
 - 多方趨勢+綠K (BUY用)、空方趨勢+紅K (SELL用)：`dirCode >= 1 and close > open` / `dirCode <= -1 and close < open`。給 BUY/SELL 合併成同一條件的訊號指標用，十字線兩邊都不成立
+- 強多+綠K (BUY用)、強空+紅K (SELL用)：同上邏輯，門檻改成 `dirCode >= 2` / `dirCode <= -2`（使用者用在 1 分圖快訊）
 
 建議快訊設定：BUY 主條件 + 多方條件、SELL 主條件 + 空方條件，觸發選「每根K棒收盤時一次」。
 
