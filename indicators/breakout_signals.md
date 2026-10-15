@@ -14,6 +14,8 @@
 2. 把圖上的 BO Signals **刪掉**，再從「指標」選單**重新加入**。
 3. 如果還是分離：在 BO Signals 的線上或名稱上按右鍵 →「固定到刻度」（Pin to scale）→ 選跟 K 棒同一個刻度（通常是右側）。
 
+**已確認**：實際原因是圖上那份指標被設成「無刻度」（No scale）。改成右側刻度後，箭頭和線就貼回 K 棒了。程式另外加了看不見的 K 棒高 / 低點線，萬一又被放到別的刻度，自動縮放時也會跟 K 棒對齊。
+
 參考：[TradingView 說明：指標跟價格分開移動](https://www.tradingview.com/support/solutions/43000775579-indicator-moves-separately-or-is-not-attached-to-the-price/)、[Pine 文件：Visuals overview](https://www.tradingview.com/pine-script-docs/visuals/overview/)、[Pine 文件：Declaration statements](https://www.tradingview.com/pine-script-docs/language/declaration-statements/)
 
 ## 1. 這版新增什麼
