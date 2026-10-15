@@ -1,5 +1,6 @@
 //@version=6
-// 仿「Breakout alert (hugo)」：共識 K 棒 + Interm / Near T 支撐壓力 + 觸線收回的買賣訊號
+// 仿「Breakout alert (hugo)」：共識 K 棒 + Interm / Near T 支撐壓力
+// 仿「買賣訊號」：創「階段」根新低 / 新高後，收盤穿越 EMA 出買賣訊號
 // 設計說明見 indicators/breakout_signals.md
 indicator("Breakout Signals", shorttitle="BO Signals", overlay=true)
 
@@ -32,14 +33,16 @@ grpL = "支撐 / 壓力"
 intermLen = input.int(100, "Interm 回看根數", minval=2, group=grpL, tooltip="中期支撐壓力 = 這段期間的最高 / 最低")
 nearLen   = input.int(25, "Near T 回看根數", minval=2, group=grpL, tooltip="短期支撐壓力 = 這段期間的最高 / 最低")
 
-// ───────── 輸入：買賣訊號（原指標沒有，最後一張圖要的部分）─────────
+// ───────── 輸入：買賣訊號（對應「買賣訊號」指標的 階段 / Ema number / Ema enable / Color background）─────────
 grpS = "買賣訊號"
 showSig    = input.bool(true, "顯示買賣訊號", group=grpS)
-levelSrc   = input.string("Near T", "觸碰哪條線", options=["Near T", "Interm"], group=grpS, tooltip="Near T 訊號較多；Interm 只在中期高低點出訊號")
-atrLen     = input.int(14, "ATR 長度", minval=1, group=grpS)
-tolMult    = input.float(0.1, "觸線容許誤差 (×ATR)", minval=0, step=0.05, group=grpS, tooltip="價格離線多近就算碰到")
-wickPct    = input.float(0.4, "影線占比門檻", minval=0, maxval=1, step=0.05, group=grpS, tooltip="收黑（買訊收紅）或影線占整根 K 棒的比例超過這個值，才算被打回")
-cooldown   = input.int(5, "同向訊號間隔根數", minval=0, group=grpS)
+stageLen   = input.int(20, "階段", minval=2, group=grpS, tooltip="創前 N 根新低 / 新高，才算一個波段低點 / 高點")
+confirmWin = input.int(4, "低高點後幾根內確認", minval=0, group=grpS, tooltip="波段低點 / 高點出現後，這幾根內收盤穿越 EMA 才出訊號")
+emaEnable  = input.bool(true, "Ema enable", group=grpS, tooltip="開：收盤穿越 EMA 當確認。關：收盤突破前一根高點 / 跌破前一根低點當確認")
+emaLen     = input.int(8, "Ema number", minval=1, group=grpS)
+showEma    = input.bool(false, "顯示 EMA 線", group=grpS)
+colorBg    = input.bool(false, "Color background", group=grpS, tooltip="出訊號的 K 棒加背景色")
+cooldown   = input.int(3, "同向訊號間隔根數", minval=0, group=grpS)
 trendMode  = input.string("不過濾", "共識過濾", options=["不過濾", "只做順勢", "避開強勢反向"], group=grpS, tooltip="只做順勢：綠K才買、紅K才賣。避開強勢反向：紅K不買、綠K不賣")
 confirmBar = input.bool(true, "K 棒收盤才出訊號", group=grpS, tooltip="避免盤中出現又消失")
 showBO     = input.bool(false, "顯示突破 / 跌破 Interm 標記", group=grpS)
@@ -128,22 +131,19 @@ pFast = plot(showCloud ? fastMA : na, "Cloud Fast", color=color.new(C_NT, 100), 
 pSlow = plot(showCloud ? slowMA : na, "Cloud Slow", color=color.new(C_NT, 100), editable=false)
 fill(pFast, pSlow, color=fastMA > slowMA ? color.new(C_UP, 85) : color.new(C_DN, 85), title="Cloud")
 
-// ───────── 買賣訊號：碰到前一根的支撐/壓力，收盤又被打回 ─────────
-// 用 [1]：當根的最高/最低本身就算進 highest/lowest，不往前取一根永遠「碰到」
-float resLvl = levelSrc == "Near T" ? nearRes[1] : intermRes[1]
-float supLvl = levelSrc == "Near T" ? nearSup[1] : intermSup[1]
-float tol    = ta.atr(atrLen) * tolMult
-float rng    = high - low
-float upWick = high - math.max(open, close)
-float dnWick = math.min(open, close) - low
+// ───────── 買賣訊號：創「階段」根新低 / 新高後，幾根內收盤穿越 EMA ─────────
+// 最近 confirmWin+1 根裡的最低點，不高於再往前 stageLen 根的最低點 = 剛做出波段低點
+bool swingLow  = ta.lowest(low, confirmWin + 1) <= ta.lowest(low, stageLen)[confirmWin + 1]
+bool swingHigh = ta.highest(high, confirmWin + 1) >= ta.highest(high, stageLen)[confirmWin + 1]
 
-bool sellSetup = high >= resLvl - tol and close < resLvl and (close < open or upWick >= wickPct * rng)
-bool buySetup  = low <= supLvl + tol and close > supLvl and (close > open or dnWick >= wickPct * rng)
+float sigEma = ta.ema(close, emaLen)
+bool emaUp   = ta.crossover(close, sigEma)
+bool emaDn   = ta.crossunder(close, sigEma)
+bool turnUp  = emaEnable ? emaUp : close > high[1]
+bool turnDn  = emaEnable ? emaDn : close < low[1]
 
-// 一根 K 同時碰上下兩邊（大振幅十字）時，看哪邊影線長
-if buySetup and sellSetup
-    buySetup  := dnWick > upWick
-    sellSetup := not buySetup
+bool buySetup  = swingLow and turnUp
+bool sellSetup = swingHigh and turnDn
 
 bool okBuy  = trendMode == "不過濾" or (trendMode == "只做順勢" ? isBull : not isBear)
 bool okSell = trendMode == "不過濾" or (trendMode == "只做順勢" ? isBear : not isBull)
@@ -160,6 +160,8 @@ if sellSig
 
 plotshape(showSig and buySig, "Buy", shape.labelup, location.belowbar, color=C_UP, size=size.small)
 plotshape(showSig and sellSig, "Sell", shape.labeldown, location.abovebar, color=C_DN, size=size.small)
+plot(showEma ? sigEma : na, "Signal EMA", color=color.orange)
+bgcolor(colorBg and showSig and buySig ? color.new(C_UP, 85) : colorBg and showSig and sellSig ? color.new(C_DN, 85) : na, title="Signal background")
 
 // 原指標名稱的「Breakout」：收盤站上 / 跌破前一根的 Interm 線
 bool brkUp = close > intermRes[1]
@@ -182,7 +184,7 @@ if showTable and barstate.islast
          text_color=textColor, text_size=tsize, bgcolor=color.new(stateCol, 70))
 
 // ───────── 警示 ─────────
-alertcondition(buySig, "買進訊號", "{{ticker}} 碰支撐後收回，買進訊號 @ {{close}}")
-alertcondition(sellSig, "賣出訊號", "{{ticker}} 碰壓力後被打回，賣出訊號 @ {{close}}")
+alertcondition(buySig, "買進訊號", "{{ticker}} 波段低點後站回 EMA，買進訊號 @ {{close}}")
+alertcondition(sellSig, "賣出訊號", "{{ticker}} 波段高點後跌破 EMA，賣出訊號 @ {{close}}")
 alertcondition(brkUp and not brkUp[1], "突破 Interm 壓力", "{{ticker}} 收盤突破中期壓力 @ {{close}}")
 alertcondition(brkDn and not brkDn[1], "跌破 Interm 支撐", "{{ticker}} 收盤跌破中期支撐 @ {{close}}")
