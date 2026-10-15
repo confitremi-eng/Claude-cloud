@@ -264,6 +264,14 @@ alertcondition(dirCode >= 2,  "強多 (強UP)",            '{{ticker}} 強多｜
 alertcondition(dirCode <= -1, "空方趨勢 (DOWN+強Down)", '{{ticker}} 空方趨勢｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
 alertcondition(dirCode <= -2, "強空 (強Down)",          '{{ticker}} 強空｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
 
+// 趨勢 + K 棒顏色:給 BUY/SELL 合併成同一條件的訊號指標用
+// 多方只在綠K成立 (當作 BUY)、空方只在紅K成立 (當作 SELL),十字線 (close == open) 兩邊都不成立
+// 快訊1:BUY SELL 以及 多方趨勢+綠K → Buy ; 快訊2:BUY SELL 以及 空方趨勢+紅K → Sell
+isGreen = close > open
+isRed   = close < open
+alertcondition(dirCode >= 1 and isGreen, "多方趨勢+綠K (BUY用)", '{{ticker}} 多方趨勢+綠K｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
+alertcondition(dirCode <= -1 and isRed,  "空方趨勢+紅K (SELL用)", '{{ticker}} 空方趨勢+紅K｜方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}')
+
 // ---- 建議矩陣 (3×3) ----
 // UP   : 站上ORH=只做多 | 區間內=偏多待突破 | 跌破ORL=觀望
 // MIX  : 站上ORH=突破待確認 | 區間內=觀望 | 跌破ORL=跌破待確認
