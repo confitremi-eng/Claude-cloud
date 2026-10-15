@@ -1,0 +1,480 @@
+//@version=6
+// Remi's Buy/Sell
+// 只在 Trend Judge 判斷為（強）趨勢時，做順勢方向的訊號：
+//   買：Trend Judge 強UP ＋ 收盤突破前 30 根最高價 ＋ 效率比 > 0.4 ＋ 美股盤中
+//   賣：Trend Judge 強Down ＋ 收盤跌破前 30 根最低價 ＋ 效率比 > 0.4 ＋ 美股盤中
+//   停損：近 10 根最低（買）/ 最高（賣）外 1 tick；目標 2R
+// 趨勢判讀取自 Trend Judge：5 秒 / 15 秒 EMA 1130 差值，每 2 分鐘鎖定一次
+// 回測與優化過程：indicators/remis_buy_sell.md
+indicator("Remi's Buy/Sell", overlay=true, max_lines_count=20, max_labels_count=20)
+
+// ═════════════════ ⓪ 版面 ═════════════════
+grpV   = "⓪ 版面"
+layout = input.string("自訂", "版面模式", options=["自訂", "只看訊號", "全部顯示"], group=grpV,
+     tooltip="自訂：照下面每一項的開關。只看訊號：只畫買賣標記。全部顯示：所有線、背景、表格都打開")
+
+// ═════════════════ ① 趨勢（Trend Judge）═════════════════
+grpT      = "① 趨勢（Trend Judge）"
+trendSrc  = input.string("秒級（同 Trend Judge）", "趨勢計算", options=["秒級（同 Trend Judge）", "外部：Trend Judge", "分鐘換算（長歷史）"], group=grpT,
+     tooltip="秒級：跟 Trend Judge 完全一樣（需要 Premium 秒級資料，歷史只有一兩天）。外部：直接讀圖上 Trend Judge 的「趨勢方向」，要在下一格選它。分鐘換算：用圖表 K 棒推算同樣的 EMA，數值有些微差異，但有長歷史，回測統計表才有足夠樣本")
+extDir    = input.source(close, "外部來源（選 Trend Judge 的「趨勢方向」）", group=grpT)
+trendNeed = input.string("強趨勢", "只做", options=["強趨勢", "一般以上"], group=grpT, tooltip="強趨勢：只在 強UP 做多、強Down 做空（回測較好）。一般以上：UP / 強UP 做多、DOWN / 強Down 做空")
+emaLen    = input.int(1130, "EMA 長度", minval=1, group=grpT)
+fastSec   = input.int(5, "快線秒數", minval=1, group=grpT, inline="sec")
+slowSec   = input.int(15, "慢線秒數", minval=1, group=grpT, inline="sec")
+autoMode  = input.bool(true, "自動偵測標的門檻", group=grpT)
+thNQ  = input.float(20.0, "NQ 門檻", group=grpT, inline="nq")
+stNQ  = input.float(40.0, "強勢", group=grpT, inline="nq")
+thES  = input.float(4.0, "ES 門檻", group=grpT, inline="es")
+stES  = input.float(8.0, "強勢", group=grpT, inline="es")
+thTXF = input.float(40.0, "TXF 門檻", group=grpT, inline="tx")
+stTXF = input.float(80.0, "強勢", group=grpT, inline="tx")
+thMan = input.float(20.0, "手動門檻", group=grpT, inline="mn")
+stMan = input.float(40.0, "強勢", group=grpT, inline="mn")
+
+// ═════════════════ ② 進場訊號 ═════════════════
+grpS       = "② 進場訊號"
+sigType    = input.string("突破（建議）", "訊號類型", options=["突破（建議）", "買賣訊號（舊）"], group=grpS,
+     tooltip="突破：收盤突破前 N 根最高 / 最低（回測較好）。買賣訊號：創「階段」根新低後，第一根收盤站上那根 K 的高點（原本的邏輯）")
+brkLen     = input.int(30, "突破回看根數", minval=2, group=grpS)
+stageLen   = input.int(25, "階段（買賣訊號用）", minval=2, group=grpS)
+boEmaLen   = input.int(8, "Ema number（買賣訊號用）", minval=1, group=grpS)
+chopFilter = input.string("效率比", "盤整過濾", options=["效率比", "ADX", "不使用"], group=grpS,
+     tooltip="效率比 = |N 根淨變動| ÷ N 根每根變動加總，越接近 1 走得越直。ADX 越大趨勢越強")
+erLen      = input.int(20, "效率比長度", minval=2, group=grpS, inline="er")
+erMin      = input.float(0.4, "大於", minval=0, maxval=1, step=0.05, group=grpS, inline="er")
+adxLen     = input.int(14, "ADX 長度", minval=1, group=grpS, inline="adx")
+adxMin     = input.float(25, "大於", minval=0, group=grpS, inline="adx")
+rthOnly    = input.bool(true, "只做美股盤中 09:30–16:00（紐約時間）", group=grpS, tooltip="夜盤的訊號回測明顯較差")
+confirmBar = input.bool(true, "K 棒收盤才出訊號", group=grpS)
+
+// ═════════════════ ③ 停損 / 目標 ═════════════════
+grpX      = "③ 停損 / 目標"
+stopLen   = input.int(10, "停損回看根數（突破用）", minval=1, group=grpX, tooltip="買：近 N 根最低再外 1 tick。買賣訊號模式用波段那根 K 的極值")
+targetR   = input.float(2.0, "目標（R 倍數）", minval=0.1, step=0.1, group=grpX)
+maxHold   = input.int(60, "最長持有根數", minval=1, group=grpX)
+exitClose = input.bool(true, "16:15 收盤強制出場", group=grpX, tooltip="只做盤中時，持倉到 16:15（紐約時間）或換日就出場")
+costAuto  = input.bool(true, "成本自動（NQ 1 點、ES 0.5 點、TXF 2 點）", group=grpX)
+costMan   = input.float(1.0, "手動成本（點）", minval=0, step=0.25, group=grpX)
+
+// ═════════════════ ④ 外觀 ═════════════════
+grpA       = "④ 外觀"
+showBuy    = input.bool(true, "顯示買訊", group=grpA, inline="bs")
+showSell   = input.bool(true, "顯示賣訊", group=grpA, inline="bs")
+sigStyle   = input.string("標籤", "樣式", options=["標籤", "三角形"], group=grpA, inline="st")
+sigSize    = input.string("小", "大小", options=["小", "中", "大"], group=grpA, inline="st")
+buyColor   = input.color(#39FF3C, "買訊", group=grpA, inline="sc")
+sellColor  = input.color(#F23645, "賣訊", group=grpA, inline="sc")
+showSLTP   = input.bool(true, "停損 / 目標線（最新訊號）", group=grpA, inline="x0")
+showSLTPLb = input.bool(true, "價格標籤", group=grpA, inline="x0")
+slColor    = input.color(#F23645, "停損", group=grpA, inline="x1")
+tpColor    = input.color(#39FF3C, "目標", group=grpA, inline="x1")
+sltpStyleS = input.string("虛線", "樣式", options=["實線", "虛線", "點線"], group=grpA, inline="x2")
+sltpWidth  = input.int(1, "粗細", minval=1, maxval=4, group=grpA, inline="x2")
+showLevels = input.bool(false, "突破線（前 N 根高 / 低）", group=grpA, inline="lv")
+levelColor = input.color(color.new(#787B86, 30), "", group=grpA, inline="lv")
+showEmas   = input.bool(false, "趨勢 EMA（快 / 慢）", group=grpA, inline="em")
+fastColor  = input.color(color.aqua, "", group=grpA, inline="em")
+slowColor  = input.color(color.orange, "", group=grpA, inline="em")
+showBg     = input.bool(false, "趨勢背景色", group=grpA, inline="bg")
+bgTransp   = input.int(92, "透明度", minval=0, maxval=100, group=grpA, inline="bg")
+showState  = input.bool(true, "狀態表", group=grpA, inline="t1")
+statePos   = input.string("左上", "", options=["右上", "右下", "左上", "左下", "中上", "中下"], group=grpA, inline="t1")
+showStats  = input.bool(true, "回測統計表", group=grpA, inline="t2")
+statsPos   = input.string("右下", "", options=["右上", "右下", "左上", "左下", "中上", "中下"], group=grpA, inline="t2")
+textColor  = input.color(color.white, "表格文字", group=grpA, inline="tx")
+fontSize   = input.string("小", "字型大小", options=["極小", "小", "普通", "大"], group=grpA, inline="tx")
+topPad     = input.int(2, "狀態表頂部留白列", minval=0, maxval=5, group=grpA, tooltip="放左上時避開指標名稱")
+
+// ═════════════════ 版面模式 → 實際要畫什麼 ═════════════════
+bool custom  = layout == "自訂"
+bool full    = layout == "全部顯示"
+bool vSLTP   = custom ? showSLTP   : full
+bool vLevels = custom ? showLevels : full
+bool vEmas   = custom ? showEmas   : full
+bool vBg     = custom ? showBg     : full
+bool vState  = custom ? showState  : full
+bool vStats  = custom ? showStats  : full
+
+// ═════════════════ 工具函式 ═════════════════
+posOf(string s) =>
+    switch s
+        "右上" => position.top_right
+        "右下" => position.bottom_right
+        "左上" => position.top_left
+        "左下" => position.bottom_left
+        "中上" => position.top_center
+        => position.bottom_center
+
+sizeOf(string s) =>
+    switch s
+        "極小" => size.tiny
+        "小"   => size.small
+        "普通" => size.normal
+        => size.large
+
+// 任意平滑係數的 EMA（分鐘換算用）
+emaAlpha(float src, float a) =>
+    var float e = na
+    e := na(e) ? src : a * src + (1 - a) * e
+    e
+
+// 一筆交易在這根 K 的結果：0 未出場、1 目標、-1 停損、2 到期、3 收盤強制出場。停損和目標同一根都碰到時算停損
+evalTrade(int dirn, float entry, float stp, float tgt, int age, bool forceOut) =>
+    bool hitStop = dirn == 1 ? low <= stp : high >= stp
+    bool hitTgt  = dirn == 1 ? high >= tgt : low <= tgt
+    int res = forceOut ? 3 : hitStop ? -1 : hitTgt ? 1 : age >= maxHold ? 2 : 0
+    float px = res == 3 ? open : res == -1 ? stp : res == 1 ? tgt : close
+    [res, px]
+
+fmtSigned(float x) =>
+    (x >= 0 ? "+" : "") + str.tostring(x, "0.00")
+
+// 保險：看不見的 K 棒高 / 低點。萬一指標被放到自己的刻度，自動縮放範圍也跟 K 棒一樣
+plot(high, "錨點 高", color=color.new(color.gray, 100), editable=false, display=display.pane)
+plot(low, "錨點 低", color=color.new(color.gray, 100), editable=false, display=display.pane)
+
+// ═════════════════ 標的偵測（同 Trend Judge）═════════════════
+string root    = syminfo.root != "" ? syminfo.root : syminfo.ticker
+bool isNQ      = str.contains(root, "NQ")
+bool isES      = str.contains(root, "ES")
+bool isTXF     = str.contains(root, "TXF") or str.contains(root, "MXF")
+bool supported = isNQ or isES or isTXF
+float threshold = autoMode ? (isNQ ? thNQ : isES ? thES : isTXF ? thTXF : na) : thMan
+float strongTh  = autoMode ? (isNQ ? stNQ : isES ? stES : isTXF ? stTXF : na) : stMan
+float costPts   = costAuto ? (isNQ ? 1.0 : isES ? 0.5 : isTXF ? 2.0 : costMan) : costMan
+
+// ═════════════════ 趨勢：秒級 EMA（同 Trend Judge）═════════════════
+fArr = request.security_lower_tf(syminfo.tickerid, str.tostring(fastSec) + "S", ta.ema(close, emaLen))
+sArr = request.security_lower_tf(syminfo.tickerid, str.tostring(slowSec) + "S", ta.ema(close, emaLen))
+var float secFast = na
+var float secSlow = na
+if array.size(fArr) > 0
+    secFast := array.last(fArr)
+if array.size(sArr) > 0
+    secSlow := array.last(sArr)
+
+// 分鐘換算：每根圖表 K 棒相當於幾根 5 秒 / 15 秒 K，換成同樣衰減速度的 EMA
+float tfMin  = timeframe.in_seconds() / 60.0
+float aFast  = 1 - math.pow(1 - 2.0 / (emaLen + 1), 60.0 / fastSec * tfMin)
+float aSlow  = 1 - math.pow(1 - 2.0 / (emaLen + 1), 60.0 / slowSec * tfMin)
+float minFast = emaAlpha(close, aFast)
+float minSlow = emaAlpha(close, aSlow)
+
+bool useMin   = trendSrc == "分鐘換算（長歷史）"
+bool useExt   = trendSrc == "外部：Trend Judge"
+float maFast  = useMin ? minFast : secFast
+float maSlow  = useMin ? minSlow : secSlow
+
+// 每 2 分鐘鎖定一次差值（同 Trend Judge）
+var float lockedDiff = na
+bool newWindow = ta.change(time("2")) != 0
+if newWindow and supported and not na(maFast) and not na(maSlow)
+    lockedDiff := maFast - maSlow
+
+int dirCode = 0
+bool extOk  = not na(extDir) and extDir >= -2 and extDir <= 2
+if useExt
+    dirCode := extOk ? int(math.round(extDir)) : 0
+else if not na(lockedDiff) and not na(threshold)
+    bool hasStrong = not na(strongTh)
+    if hasStrong and lockedDiff > strongTh
+        dirCode := 2
+    else if lockedDiff > threshold
+        dirCode := 1
+    else if hasStrong and lockedDiff < -strongTh
+        dirCode := -2
+    else if lockedDiff < -threshold
+        dirCode := -1
+
+int need  = trendNeed == "強趨勢" ? 2 : 1
+bool upOK = dirCode >= need
+bool dnOK = dirCode <= -need
+
+// ═════════════════ 時段 / 盤整過濾 ═════════════════
+bool inRth   = not na(time(timeframe.period, "0930-1600", "America/New_York"))
+bool inHold  = not na(time(timeframe.period, "0930-1615", "America/New_York"))
+bool sessOK  = not rthOnly or inRth
+bool newDay  = ta.change(time("D")) != 0
+bool forceOut = rthOnly and exitClose and (not inHold or newDay)
+
+float erDen  = math.sum(math.abs(ta.change(close)), erLen)
+float erVal  = erDen > 0 ? math.abs(close - close[erLen]) / erDen : 0.0
+[diP, diM, adxVal] = ta.dmi(adxLen, adxLen)
+bool chopOK  = chopFilter == "不使用" or (chopFilter == "效率比" ? erVal > erMin : adxVal > adxMin)
+
+// ═════════════════ 訊號：突破 ═════════════════
+float hh = ta.highest(high, brkLen)[1]
+float ll = ta.lowest(low, brkLen)[1]
+bool brkUp = close > hh and close[1] <= hh[1]
+bool brkDn = close < ll and close[1] >= ll[1]
+float brkLongStop  = ta.lowest(low, stopLen)
+float brkShortStop = ta.highest(high, stopLen)
+
+// ═════════════════ 訊號：買賣訊號（舊）═════════════════
+bool newLow  = low < ta.lowest(low, stageLen)[1]
+bool newHigh = high > ta.highest(high, stageLen)[1]
+var float refHigh = na
+var float swLow   = na
+var float refLow  = na
+var float swHigh  = na
+var bool  armBuy  = false
+var bool  armSell = false
+float boEma   = ta.ema(hl2, boEmaLen)
+bool trigBuy  = not newLow and armBuy and close > refHigh
+bool trigSell = not newHigh and armSell and close < refLow
+float boLongStop  = swLow
+float boShortStop = swHigh
+if newLow
+    refHigh := high
+    swLow   := low
+    armBuy  := true
+else if trigBuy
+    armBuy := false
+if newHigh
+    refLow  := low
+    swHigh  := high
+    armSell := true
+else if trigSell
+    armSell := false
+bool boBuy  = trigBuy and close > boEma
+bool boSell = trigSell and close < boEma
+
+// ═════════════════ 最終訊號 ═════════════════
+bool useBrk     = sigType == "突破（建議）"
+bool longSetup  = (useBrk ? brkUp : boBuy) and upOK and sessOK and chopOK
+bool shortSetup = (useBrk ? brkDn : boSell) and dnOK and sessOK and chopOK
+float longStop  = (useBrk ? brkLongStop : boLongStop) - syminfo.mintick
+float shortStop = (useBrk ? brkShortStop : boShortStop) + syminfo.mintick
+bool barOk   = not confirmBar or barstate.isconfirmed
+bool buySig  = longSetup and barOk
+bool sellSig = shortSetup and barOk
+bool drawBuy  = showBuy and buySig
+bool drawSell = showSell and sellSig
+
+bool stLabel = sigStyle == "標籤"
+bool szS = sigSize == "小"
+bool szM = sigSize == "中"
+bool szL = sigSize == "大"
+plotshape(drawBuy and stLabel and szS, "買 標籤小", shape.labelup, location.belowbar, color=buyColor, size=size.small, editable=false)
+plotshape(drawBuy and stLabel and szM, "買 標籤中", shape.labelup, location.belowbar, color=buyColor, size=size.normal, editable=false)
+plotshape(drawBuy and stLabel and szL, "買 標籤大", shape.labelup, location.belowbar, color=buyColor, size=size.large, editable=false)
+plotshape(drawBuy and not stLabel and szS, "買 三角小", shape.triangleup, location.belowbar, color=buyColor, size=size.small, editable=false)
+plotshape(drawBuy and not stLabel and szM, "買 三角中", shape.triangleup, location.belowbar, color=buyColor, size=size.normal, editable=false)
+plotshape(drawBuy and not stLabel and szL, "買 三角大", shape.triangleup, location.belowbar, color=buyColor, size=size.large, editable=false)
+plotshape(drawSell and stLabel and szS, "賣 標籤小", shape.labeldown, location.abovebar, color=sellColor, size=size.small, editable=false)
+plotshape(drawSell and stLabel and szM, "賣 標籤中", shape.labeldown, location.abovebar, color=sellColor, size=size.normal, editable=false)
+plotshape(drawSell and stLabel and szL, "賣 標籤大", shape.labeldown, location.abovebar, color=sellColor, size=size.large, editable=false)
+plotshape(drawSell and not stLabel and szS, "賣 三角小", shape.triangledown, location.abovebar, color=sellColor, size=size.small, editable=false)
+plotshape(drawSell and not stLabel and szM, "賣 三角中", shape.triangledown, location.abovebar, color=sellColor, size=size.normal, editable=false)
+plotshape(drawSell and not stLabel and szL, "賣 三角大", shape.triangledown, location.abovebar, color=sellColor, size=size.large, editable=false)
+
+plot(vLevels and useBrk ? hh : na, "突破線 高", color=levelColor, style=plot.style_linebr)
+plot(vLevels and useBrk ? ll : na, "突破線 低", color=levelColor, style=plot.style_linebr)
+plot(vEmas ? maFast : na, "趨勢 EMA 快", color=fastColor)
+plot(vEmas ? maSlow : na, "趨勢 EMA 慢", color=slowColor)
+bgcolor(vBg ? (dirCode >= 2 ? color.new(color.lime, bgTransp) : dirCode == 1 ? color.new(color.green, bgTransp) : dirCode <= -2 ? color.new(color.maroon, bgTransp) : dirCode == -1 ? color.new(color.red, bgTransp) : na) : na, title="趨勢背景")
+
+// 給快訊「新增條件」用的狀態值（只出現在資料視窗）
+plot(buySig ? 1 : 0, "BUY 訊號", display=display.data_window)
+plot(sellSig ? 1 : 0, "SELL 訊號", display=display.data_window)
+plot(dirCode, "趨勢方向", display=display.data_window)
+plot(lockedDiff, "趨勢差值", display=display.data_window)
+
+// ═════════════════ 回測統計 ═════════════════
+// 每個訊號一筆獨立交易：訊號 K 收盤進場、停損 / 目標 / 到期 / 收盤強制出場。統計分 0 全部、1 買、2 賣
+var array<int>   tDir   = array.new_int()
+var array<float> tEntry = array.new_float()
+var array<float> tStop  = array.new_float()
+var array<float> tTgt   = array.new_float()
+var array<int>   tBar   = array.new_int()
+var array<float> sN  = array.new_float(3, 0.0)
+var array<float> sW  = array.new_float(3, 0.0)
+var array<float> sR  = array.new_float(3, 0.0)
+var array<float> sGW = array.new_float(3, 0.0)
+var array<float> sGL = array.new_float(3, 0.0)
+var array<float> sP  = array.new_float(3, 0.0)
+
+if barstate.isconfirmed
+    int nOpen = array.size(tDir)
+    if nOpen > 0
+        for i = nOpen - 1 to 0
+            int dirn = array.get(tDir, i)
+            float en = array.get(tEntry, i)
+            float st = array.get(tStop, i)
+            [res, px] = evalTrade(dirn, en, st, array.get(tTgt, i), bar_index - array.get(tBar, i), forceOut)
+            if res != 0
+                float pts = (px - en) * dirn - costPts
+                float r   = pts / ((en - st) * dirn)
+                int g = dirn == 1 ? 1 : 2
+                for j = 0 to 1
+                    int gi = j == 0 ? 0 : g
+                    array.set(sN, gi, array.get(sN, gi) + 1)
+                    array.set(sR, gi, array.get(sR, gi) + r)
+                    array.set(sP, gi, array.get(sP, gi) + pts)
+                    if r > 0
+                        array.set(sW, gi, array.get(sW, gi) + 1)
+                        array.set(sGW, gi, array.get(sGW, gi) + r)
+                    else
+                        array.set(sGL, gi, array.get(sGL, gi) - r)
+                array.remove(tDir, i)
+                array.remove(tEntry, i)
+                array.remove(tStop, i)
+                array.remove(tTgt, i)
+                array.remove(tBar, i)
+    if longSetup and close - longStop > 0
+        array.push(tDir, 1)
+        array.push(tEntry, close)
+        array.push(tStop, longStop)
+        array.push(tTgt, close + targetR * (close - longStop))
+        array.push(tBar, bar_index)
+    if shortSetup and shortStop - close > 0
+        array.push(tDir, -1)
+        array.push(tEntry, close)
+        array.push(tStop, shortStop)
+        array.push(tTgt, close - targetR * (shortStop - close))
+        array.push(tBar, bar_index)
+
+// ═════════════════ 停損 / 目標線（最新一個訊號）═════════════════
+var line  slLn = na
+var line  tpLn = na
+var label slLb = na
+var label tpLb = na
+var int   lnDir   = 0
+var float lnEntry = na
+var float lnStop  = na
+var float lnTgt   = na
+var int   lnBar   = na
+var bool  lnLive  = false
+lineStyle = sltpStyleS == "實線" ? line.style_solid : sltpStyleS == "點線" ? line.style_dotted : line.style_dashed
+
+if barstate.isconfirmed
+    if lnLive
+        [res, px] = evalTrade(lnDir, lnEntry, lnStop, lnTgt, bar_index - lnBar, forceOut)
+        if not na(slLn)
+            line.set_x2(slLn, bar_index)
+            line.set_x2(tpLn, bar_index)
+        if not na(slLb)
+            label.set_x(slLb, bar_index)
+            label.set_x(tpLb, bar_index)
+        if res != 0
+            lnLive := false
+    if vSLTP and (drawBuy or drawSell)
+        if not na(slLn)
+            line.delete(slLn)
+            line.delete(tpLn)
+        if not na(slLb)
+            label.delete(slLb)
+            label.delete(tpLb)
+        lnDir   := drawBuy ? 1 : -1
+        lnEntry := close
+        lnStop  := drawBuy ? longStop : shortStop
+        lnTgt   := lnEntry + targetR * (lnEntry - lnStop)
+        lnBar   := bar_index
+        lnLive  := true
+        slLn := line.new(bar_index, lnStop, bar_index, lnStop, color=slColor, style=lineStyle, width=sltpWidth)
+        tpLn := line.new(bar_index, lnTgt, bar_index, lnTgt, color=tpColor, style=lineStyle, width=sltpWidth)
+        if showSLTPLb
+            slLb := label.new(bar_index, lnStop, "停損 " + str.tostring(lnStop, format.mintick), style=label.style_label_left, color=color.new(slColor, 80), textcolor=slColor, size=size.small)
+            tpLb := label.new(bar_index, lnTgt, "目標 " + str.tostring(lnTgt, format.mintick), style=label.style_label_left, color=color.new(tpColor, 80), textcolor=tpColor, size=size.small)
+
+// ═════════════════ 表格 ═════════════════
+txtSize = sizeOf(fontSize)
+hdrBg   = color.new(color.black, 20)
+blank   = color.new(color.black, 100)
+stateRows = 5 + topPad
+var table tbState = table.new(posOf(statePos), 2, stateRows, border_width=1)
+var table tbStats = table.new(posOf(statsPos), 6, 5, border_width=1)
+if barstate.isfirst
+    table.merge_cells(tbStats, 0, 0, 5, 0)
+
+if barstate.islast
+    if vState
+        int r = 0
+        while r < topPad
+            table.cell(tbState, 0, r, " ", text_color=blank, bgcolor=blank, text_size=txtSize)
+            table.cell(tbState, 1, r, " ", text_color=blank, bgcolor=blank, text_size=txtSize)
+            r += 1
+        string stTxt = "MIX"
+        color  stCol = color.new(color.orange, 0)
+        if dirCode >= 2
+            stTxt := "強UP"
+            stCol := color.new(color.lime, 0)
+        else if dirCode == 1
+            stTxt := "UP"
+            stCol := color.new(color.green, 0)
+        else if dirCode <= -2
+            stTxt := "強Down"
+            stCol := color.new(color.maroon, 0)
+        else if dirCode == -1
+            stTxt := "DOWN"
+            stCol := color.new(color.red, 0)
+        if useExt and not extOk
+            stTxt := "請選 Trend Judge 的趨勢方向"
+            stCol := color.new(color.gray, 30)
+        else if not useExt and not supported
+            stTxt := "不支援此標的"
+            stCol := color.new(color.red, 20)
+        table.cell(tbState, 0, r, "趨勢", text_color=textColor, bgcolor=hdrBg, text_size=txtSize)
+        table.cell(tbState, 1, r, stTxt, text_color=textColor, bgcolor=stCol, text_size=txtSize)
+        r += 1
+        string diffTxt = "—"
+        if not useExt and not na(lockedDiff)
+            diffTxt := str.tostring(lockedDiff, "#.##") + " 點"
+        table.cell(tbState, 0, r, "差值", text_color=textColor, bgcolor=hdrBg, text_size=txtSize)
+        table.cell(tbState, 1, r, diffTxt, text_color=textColor, bgcolor=hdrBg, text_size=txtSize)
+        r += 1
+        string chopTxt = "不使用"
+        if chopFilter == "效率比"
+            chopTxt := str.tostring(erVal, "0.00") + (chopOK ? " ✓" : " ✗")
+        else if chopFilter == "ADX"
+            chopTxt := str.tostring(adxVal, "0.0") + (chopOK ? " ✓" : " ✗")
+        table.cell(tbState, 0, r, chopFilter == "ADX" ? "ADX" : "效率比", text_color=textColor, bgcolor=hdrBg, text_size=txtSize)
+        table.cell(tbState, 1, r, chopTxt, text_color=textColor, bgcolor=chopOK ? color.new(color.green, 40) : color.new(color.gray, 40), text_size=txtSize)
+        r += 1
+        table.cell(tbState, 0, r, "時段", text_color=textColor, bgcolor=hdrBg, text_size=txtSize)
+        table.cell(tbState, 1, r, sessOK ? "可交易" : "盤中外", text_color=textColor, bgcolor=sessOK ? color.new(color.green, 40) : color.new(color.gray, 40), text_size=txtSize)
+        r += 1
+        string nextTxt = "等待趨勢"
+        if upOK and sessOK and chopOK
+            nextTxt := "等突破 " + str.tostring(useBrk ? hh : refHigh, format.mintick) + " 做多"
+        else if dnOK and sessOK and chopOK
+            nextTxt := "等跌破 " + str.tostring(useBrk ? ll : refLow, format.mintick) + " 做空"
+        else if (upOK or dnOK) and not sessOK
+            nextTxt := "趨勢中，但不在盤中"
+        else if upOK or dnOK
+            nextTxt := "趨勢中，但盤整過濾未過"
+        table.cell(tbState, 0, r, "下一步", text_color=textColor, bgcolor=hdrBg, text_size=txtSize)
+        table.cell(tbState, 1, r, nextTxt, text_color=textColor, bgcolor=hdrBg, text_size=txtSize)
+    if vStats
+        table.cell(tbStats, 0, 0, "回測 目標" + str.tostring(targetR, "0.0") + "R・持有" + str.tostring(maxHold) + "根・成本" + str.tostring(costPts, "0.##") + "點",
+             text_color=textColor, text_size=txtSize, bgcolor=hdrBg)
+        hdr = array.from("", "筆數", "勝率", "平均 R", "獲利因子", "淨點數")
+        for c = 0 to 5
+            table.cell(tbStats, c, 1, array.get(hdr, c), text_color=textColor, text_size=txtSize, bgcolor=hdrBg)
+        names = array.from("全部", "買", "賣")
+        for g = 0 to 2
+            float n  = array.get(sN, g)
+            float gl = array.get(sGL, g)
+            float avgR = n > 0 ? array.get(sR, g) / n : 0.0
+            color rowCol = n == 0 ? color.new(color.gray, 60) : avgR > 0 ? color.new(color.green, 40) : color.new(color.red, 40)
+            string winTxt = "-"
+            string avgTxt = "-"
+            string pfTxt  = "-"
+            string ptsTxt = "-"
+            if n > 0
+                winTxt := str.tostring(100 * array.get(sW, g) / n, "0.0") + "%"
+                avgTxt := fmtSigned(avgR)
+                pfTxt  := gl > 0 ? str.tostring(array.get(sGW, g) / gl, "0.00") : "∞"
+                ptsTxt := fmtSigned(array.get(sP, g))
+            table.cell(tbStats, 0, g + 2, array.get(names, g), text_color=textColor, text_size=txtSize, bgcolor=rowCol)
+            table.cell(tbStats, 1, g + 2, str.tostring(n, "0"), text_color=textColor, text_size=txtSize, bgcolor=rowCol)
+            table.cell(tbStats, 2, g + 2, winTxt, text_color=textColor, text_size=txtSize, bgcolor=rowCol)
+            table.cell(tbStats, 3, g + 2, avgTxt, text_color=textColor, text_size=txtSize, bgcolor=rowCol)
+            table.cell(tbStats, 4, g + 2, pfTxt, text_color=textColor, text_size=txtSize, bgcolor=rowCol)
+            table.cell(tbStats, 5, g + 2, ptsTxt, text_color=textColor, text_size=txtSize, bgcolor=rowCol)
+
+// ═════════════════ 快訊 ═════════════════
+alertcondition(buySig, "Remi BUY", '{{ticker}} Remi BUY｜趨勢方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}｜{{close}}')
+alertcondition(sellSig, "Remi SELL", '{{ticker}} Remi SELL｜趨勢方向 {{plot("趨勢方向")}}｜差值 {{plot("趨勢差值")}}｜{{close}}')
+alertcondition(buySig or sellSig, "Remi BUY 或 SELL", '{{ticker}} Remi 訊號｜趨勢方向 {{plot("趨勢方向")}}｜{{close}}')
