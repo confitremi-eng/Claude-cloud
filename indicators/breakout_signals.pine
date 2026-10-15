@@ -1,0 +1,188 @@
+//@version=6
+// 仿「Breakout alert (hugo)」：共識 K 棒 + Interm / Near T 支撐壓力 + 觸線收回的買賣訊號
+// 設計說明見 indicators/breakout_signals.md
+indicator("Breakout Signals", shorttitle="BO Signals", overlay=true)
+
+// ───────── 輸入：共識 / K 棒顏色（對應原指標「輸入」頁）─────────
+grpC = "共識 / K 棒顏色"
+macdType   = input.string("EMA", "MACD AverageType", options=["EMA", "SMA", "WMA", "WILDERS"], group=grpC)
+dmiType    = input.string("WILDERS", "DMI averageType", options=["WILDERS", "EMA", "SMA", "WMA"], group=grpC)
+adxType    = input.string("WILDERS", "ADX averageType", options=["WILDERS", "EMA", "SMA", "WMA"], group=grpC)
+coloredOn  = input.bool(true, "Colored Candles On", group=grpC)
+confFactor = input.int(7, "Confirmation Factor", minval=1, maxval=10, group=grpC, tooltip="10 個指標中至少幾個同向，K 棒和線才變綠／紅，否則灰")
+showCloud  = input.bool(false, "Show Cloud", group=grpC, tooltip="MACD 快慢均線之間的雲")
+showTable  = input.bool(true, "顯示共識狀態", group=grpC)
+textColor  = input.color(color.black, "Label Text color", group=grpC)
+textSizeS  = input.string("auto", "Text size", options=["auto", "tiny", "small", "normal", "large"], group=grpC)
+
+grpP = "指標參數"
+macdFast   = input.int(12, "MACD 快線", minval=1, group=grpP, inline="m")
+macdSlow   = input.int(26, "慢線", minval=1, group=grpP, inline="m")
+macdSigLen = input.int(9, "訊號線", minval=1, group=grpP, inline="m")
+dmiLen     = input.int(14, "DMI 長度", minval=1, group=grpP, inline="d")
+adxLen     = input.int(14, "ADX 平滑", minval=1, group=grpP, inline="d")
+rsiLen     = input.int(14, "RSI 長度", minval=1, group=grpP)
+stochLen   = input.int(14, "Stoch 長度", minval=1, group=grpP)
+momLen     = input.int(10, "Momentum 長度", minval=1, group=grpP)
+cciLen     = input.int(20, "CCI 長度", minval=1, group=grpP)
+emaLen     = input.int(20, "EMA 長度", minval=1, group=grpP)
+
+// ───────── 輸入：支撐壓力線（對應原指標「樣式」頁的四條線）─────────
+grpL = "支撐 / 壓力"
+intermLen = input.int(100, "Interm 回看根數", minval=2, group=grpL, tooltip="中期支撐壓力 = 這段期間的最高 / 最低")
+nearLen   = input.int(25, "Near T 回看根數", minval=2, group=grpL, tooltip="短期支撐壓力 = 這段期間的最高 / 最低")
+
+// ───────── 輸入：買賣訊號（原指標沒有，最後一張圖要的部分）─────────
+grpS = "買賣訊號"
+showSig    = input.bool(true, "顯示買賣訊號", group=grpS)
+levelSrc   = input.string("Near T", "觸碰哪條線", options=["Near T", "Interm"], group=grpS, tooltip="Near T 訊號較多；Interm 只在中期高低點出訊號")
+atrLen     = input.int(14, "ATR 長度", minval=1, group=grpS)
+tolMult    = input.float(0.1, "觸線容許誤差 (×ATR)", minval=0, step=0.05, group=grpS, tooltip="價格離線多近就算碰到")
+wickPct    = input.float(0.4, "影線占比門檻", minval=0, maxval=1, step=0.05, group=grpS, tooltip="收黑（買訊收紅）或影線占整根 K 棒的比例超過這個值，才算被打回")
+cooldown   = input.int(5, "同向訊號間隔根數", minval=0, group=grpS)
+trendMode  = input.string("不過濾", "共識過濾", options=["不過濾", "只做順勢", "避開強勢反向"], group=grpS, tooltip="只做順勢：綠K才買、紅K才賣。避開強勢反向：紅K不買、綠K不賣")
+confirmBar = input.bool(true, "K 棒收盤才出訊號", group=grpS, tooltip="避免盤中出現又消失")
+showBO     = input.bool(false, "顯示突破 / 跌破 Interm 標記", group=grpS)
+
+// ───────── 工具函式 ─────────
+ma(float src, simple int len, simple string maType) =>
+    float s = ta.sma(src, len)
+    float e = ta.ema(src, len)
+    float w = ta.wma(src, len)
+    float r = ta.rma(src, len)
+    maType == "SMA" ? s : maType == "EMA" ? e : maType == "WMA" ? w : r
+
+// DMI 可選平均方式（內建 ta.dmi 只有 Wilder）
+dirMove(simple int len, simple string maType) =>
+    float up      = ta.change(high)
+    float down    = -ta.change(low)
+    float plusDM  = na(up) ? na : (up > down and up > 0 ? up : 0)
+    float minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+    float trur    = ma(ta.tr(true), len, maType)
+    float plus    = fixnan(100 * ma(plusDM, len, maType) / trur)
+    float minus   = fixnan(100 * ma(minusDM, len, maType) / trur)
+    [plus, minus]
+
+vote(bool bull, bool bear) =>
+    bull ? 1 : bear ? -1 : 0
+
+// ───────── 共識：10 個指標投票 ─────────
+float fastMA   = ma(close, macdFast, macdType)
+float slowMA   = ma(close, macdSlow, macdType)
+float macdLine = fastMA - slowMA
+float macdSig  = ma(macdLine, macdSigLen, macdType)
+float macdHist = macdLine - macdSig
+
+[diPlus, diMinus] = dirMove(dmiLen, dmiType)
+float diSum = diPlus + diMinus
+float adx   = ma(100 * math.abs(diPlus - diMinus) / (diSum == 0 ? 1 : diSum), adxLen, adxType)
+
+float rsi   = ta.rsi(close, rsiLen)
+float k     = ta.sma(ta.stoch(close, high, low, stochLen), 3)
+float d     = ta.sma(k, 3)
+float mom   = ta.mom(close, momLen)
+float cci   = ta.cci(close, cciLen)
+float emaC  = ta.ema(close, emaLen)
+bool adxUp  = adx > adx[1]
+
+int[] votes = array.from(
+     vote(macdLine > macdSig, macdLine < macdSig),
+     vote(macdHist > macdHist[1], macdHist < macdHist[1]),
+     vote(rsi > 50, rsi < 50),
+     vote(k > d, k < d),
+     vote(k > 50, k < 50),
+     vote(diPlus > diMinus, diPlus < diMinus),
+     vote(adxUp and diPlus > diMinus, adxUp and diPlus < diMinus),
+     vote(mom > 0, mom < 0),
+     vote(cci > 0, cci < 0),
+     vote(close > emaC, close < emaC))
+
+int bullCnt = 0
+int bearCnt = 0
+for v in votes
+    bullCnt += v > 0 ? 1 : 0
+    bearCnt += v < 0 ? 1 : 0
+
+bool isBull = bullCnt >= confFactor and bullCnt > bearCnt
+bool isBear = bearCnt >= confFactor and bearCnt > bullCnt
+
+color C_UP   = #39FF3C
+color C_DN   = #F23645
+color C_NT   = #787B86
+color stateCol = isBull ? C_UP : isBear ? C_DN : C_NT
+
+barcolor(coloredOn ? stateCol : na)
+
+// ───────── 支撐壓力線 ─────────
+float intermRes = ta.highest(high, intermLen)
+float intermSup = ta.lowest(low, intermLen)
+float nearRes   = ta.highest(high, nearLen)
+float nearSup   = ta.lowest(low, nearLen)
+
+plot(intermRes, "Interm Resistance", color=stateCol)
+plot(intermSup, "Interm Support", color=stateCol)
+plot(nearRes, "Near T Resistance", color=stateCol, style=plot.style_cross)
+plot(nearSup, "Near T Support", color=stateCol, style=plot.style_cross)
+
+pFast = plot(showCloud ? fastMA : na, "Cloud Fast", color=color.new(C_NT, 100), editable=false)
+pSlow = plot(showCloud ? slowMA : na, "Cloud Slow", color=color.new(C_NT, 100), editable=false)
+fill(pFast, pSlow, color=fastMA > slowMA ? color.new(C_UP, 85) : color.new(C_DN, 85), title="Cloud")
+
+// ───────── 買賣訊號：碰到前一根的支撐/壓力，收盤又被打回 ─────────
+// 用 [1]：當根的最高/最低本身就算進 highest/lowest，不往前取一根永遠「碰到」
+float resLvl = levelSrc == "Near T" ? nearRes[1] : intermRes[1]
+float supLvl = levelSrc == "Near T" ? nearSup[1] : intermSup[1]
+float tol    = ta.atr(atrLen) * tolMult
+float rng    = high - low
+float upWick = high - math.max(open, close)
+float dnWick = math.min(open, close) - low
+
+bool sellSetup = high >= resLvl - tol and close < resLvl and (close < open or upWick >= wickPct * rng)
+bool buySetup  = low <= supLvl + tol and close > supLvl and (close > open or dnWick >= wickPct * rng)
+
+// 一根 K 同時碰上下兩邊（大振幅十字）時，看哪邊影線長
+if buySetup and sellSetup
+    buySetup  := dnWick > upWick
+    sellSetup := not buySetup
+
+bool okBuy  = trendMode == "不過濾" or (trendMode == "只做順勢" ? isBull : not isBear)
+bool okSell = trendMode == "不過濾" or (trendMode == "只做順勢" ? isBear : not isBull)
+bool barOk  = not confirmBar or barstate.isconfirmed
+
+var int lastBuy  = na
+var int lastSell = na
+bool buySig  = buySetup and okBuy and barOk and (na(lastBuy) or bar_index - lastBuy > cooldown)
+bool sellSig = sellSetup and okSell and barOk and (na(lastSell) or bar_index - lastSell > cooldown)
+if buySig
+    lastBuy := bar_index
+if sellSig
+    lastSell := bar_index
+
+plotshape(showSig and buySig, "Buy", shape.labelup, location.belowbar, color=C_UP, size=size.small)
+plotshape(showSig and sellSig, "Sell", shape.labeldown, location.abovebar, color=C_DN, size=size.small)
+
+// 原指標名稱的「Breakout」：收盤站上 / 跌破前一根的 Interm 線
+bool brkUp = close > intermRes[1]
+bool brkDn = close < intermSup[1]
+plotshape(showBO and brkUp and not brkUp[1], "Breakout Up", shape.triangleup, location.belowbar, color=C_UP, size=size.tiny)
+plotshape(showBO and brkDn and not brkDn[1], "Breakout Down", shape.triangledown, location.abovebar, color=C_DN, size=size.tiny)
+
+// ───────── 共識狀態 ─────────
+string tsize = switch textSizeS
+    "tiny"   => size.tiny
+    "small"  => size.small
+    "normal" => size.normal
+    "large"  => size.large
+    => size.auto
+
+var table tb = table.new(position.top_right, 1, 1)
+if showTable and barstate.islast
+    string state = isBull ? "多方" : isBear ? "空方" : "中性"
+    table.cell(tb, 0, 0, state + "  " + str.tostring(bullCnt) + "↑ / " + str.tostring(bearCnt) + "↓  門檻 " + str.tostring(confFactor),
+         text_color=textColor, text_size=tsize, bgcolor=color.new(stateCol, 70))
+
+// ───────── 警示 ─────────
+alertcondition(buySig, "買進訊號", "{{ticker}} 碰支撐後收回，買進訊號 @ {{close}}")
+alertcondition(sellSig, "賣出訊號", "{{ticker}} 碰壓力後被打回，賣出訊號 @ {{close}}")
+alertcondition(brkUp and not brkUp[1], "突破 Interm 壓力", "{{ticker}} 收盤突破中期壓力 @ {{close}}")
+alertcondition(brkDn and not brkDn[1], "跌破 Interm 支撐", "{{ticker}} 收盤跌破中期支撐 @ {{close}}")
