@@ -50,7 +50,9 @@ avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=g
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpF, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
 avoidAsia = input.bool(true, "避開美東 20:00–03:00（亞洲盤）", group=grpF, tooltip="台灣時間：夏令 08:00–15:00，冬令 09:00–16:00")
 tgtR      = input.float(2.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpF, tooltip="快訊訊息會附上停損價，和這個倍數的目標價。回測用 2R")
-showFMark = input.bool(true, "圖上標出通過過濾的訊號", group=grpF, tooltip="在圖的最下方畫小三角形，只在啟用過濾快訊時出現")
+showFMark = input.bool(true, "圖上標出通過過濾的訊號", group=grpF, inline="fm", tooltip="在訊號 K 棒外側畫菱形（買在下方、賣在上方），只在啟用過濾快訊時出現")
+fMarkCol  = input.color(#FFD600, "", group=grpF, inline="fm")
+markGap   = input.float(1.0, "標記離 K 棒（ATR 倍數）", minval=0, step=0.25, group=grpF, tooltip="菱形畫在最低價下方（賣：最高價上方）這個倍數的 ATR，避開原本的買賣標籤。兩種快訊的標記共用")
 
 // ═════════════════ 1 分亞洲盤快訊（預設關閉，獨立開關）═════════════════
 // 回測（NQ 1 分 K，一年）：參數 (40, 0, 13, 1)、Trend Judge 強趨勢、1 小時同向、只在美東 20:00–03:00，停利 1R：
@@ -62,7 +64,8 @@ xEmaLen   = input.int(13, "Ema number", minval=1, group=grpX)
 xTjMode   = input.string("強趨勢", "Trend Judge", options=["強趨勢", "順勢（一般 + 強）"], group=grpX, tooltip="強趨勢：買要 強UP、賣要 強Down。順勢：UP / 強UP、DOWN / 強Down 都算（回測停利 1R 勝率 56.7%）")
 xUse1h    = input.bool(true, "1 小時趨勢同向", group=grpX)
 xTgtR     = input.float(1.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpX, tooltip="回測用 1R")
-xShow     = input.bool(true, "圖上標出", group=grpX, tooltip="在圖的最下方畫小圓點，只在啟用時出現")
+xShow     = input.bool(true, "圖上標出", group=grpX, inline="xm", tooltip="在訊號 K 棒外側畫菱形，只在啟用時出現。距離用上面「標記離 K 棒」的設定")
+xMarkCol  = input.color(#00E5FF, "", group=grpX, inline="xm")
 
 // 保險：看不見的 K 棒高 / 低點。萬一指標被放到「無刻度」或別的刻度，自動縮放也跟 K 棒一致，標籤不會漂移
 plot(high, "錨點 高", color=color.new(color.gray, 100), editable=false, display=display.pane)
@@ -165,8 +168,10 @@ bool fSell = filtOn and sellSig and sellPass
 
 float fStop = fBuy ? buyStop : fSell ? sellStop : na
 float fTgt  = na(fStop) ? na : close + tgtR * (close - fStop)
-plotshape(showFMark and fBuy, "過濾買", shape.triangleup, location.bottom, color=buyColor, size=size.tiny, editable=false)
-plotshape(showFMark and fSell, "過濾賣", shape.triangledown, location.bottom, color=sellColor, size=size.tiny, editable=false)
+// 標記畫在訊號 K 棒外側（買：最低價下方，賣：最高價上方），跟原本的標籤錯開
+float markOff = na(atrPrev) ? 0.0 : markGap * atrPrev
+plotshape(showFMark and fBuy ? low - markOff : na, "過濾買", shape.diamond, location.absolute, color=fMarkCol, size=size.small, editable=false)
+plotshape(showFMark and fSell ? high + markOff : na, "過濾賣", shape.diamond, location.absolute, color=fMarkCol, size=size.small, editable=false)
 plot(fBuy ? 1 : 0, "BUY 過濾", display=display.data_window)
 plot(fSell ? 1 : 0, "SELL 過濾", display=display.data_window)
 plot(fStop, "過濾停損", display=display.data_window)
@@ -202,8 +207,8 @@ bool aSell = asiaOn and xTrigSell and close < xEma and barOk and xSellOk
 
 float aStop = aBuy ? buyStop : aSell ? sellStop : na
 float aTgt  = na(aStop) ? na : close + xTgtR * (close - aStop)
-plotshape(xShow and aBuy, "亞洲盤買", shape.circle, location.bottom, color=buyColor, size=size.tiny, editable=false)
-plotshape(xShow and aSell, "亞洲盤賣", shape.circle, location.bottom, color=sellColor, size=size.tiny, editable=false)
+plotshape(xShow and aBuy ? low - markOff : na, "亞洲盤買", shape.diamond, location.absolute, color=xMarkCol, size=size.small, editable=false)
+plotshape(xShow and aSell ? high + markOff : na, "亞洲盤賣", shape.diamond, location.absolute, color=xMarkCol, size=size.small, editable=false)
 plot(aBuy ? 1 : 0, "BUY 亞洲盤", display=display.data_window)
 plot(aSell ? 1 : 0, "SELL 亞洲盤", display=display.data_window)
 plot(aStop, "亞洲盤停損", display=display.data_window)
