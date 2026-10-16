@@ -38,6 +38,21 @@ python3 indicators/backtest/rbs/build_data.py indicators/backtest/data/raw/NQ_ol
 
 會產生 `data/NQ_1m_clean.csv`、`data/ES_1m_clean.csv`，`rbs/` 預設讀這兩個檔。
 
+### Databento（NQ 一年全天，2025-10-15 .. 2026-10-14）
+
+在 Databento 網站下載（付費，一年約 US$2）：
+
+- Dataset `GLBX.MDP3`，product 選 `NQ`（整個產品，含所有合約），schema `OHLCV-1m`
+- Encoding CSV、價格 Decimal、時間 ISO 8601、包含 symbol 欄位
+
+下載的檔案不要放進 `indicators/`。轉成跟 TradingView NQ1! 一樣做換月調整的連續合約：
+
+```bash
+python3 indicators/backtest/rbs/build_databento.py 下載的.ohlcv-1m.csv indicators/backtest/data/NQ_1m_databento.csv
+```
+
+`rbs/` 用環境變數 `NQ_DATA=indicators/backtest/data/NQ_1m_databento.csv` 改讀這個檔。
+
 ## 檔案
 
 | 檔案 | 用途 |
@@ -70,6 +85,8 @@ python3 indicators/backtest/rbs/build_data.py indicators/backtest/data/raw/NQ_ol
 | `trend_quadrants_tv.py` | 同樣的分組，目標 1R / 1.5R / 2R / 3R，用 TradingView 匯出的 NQ1! 1 分、2 分 Remi's Buy/Sell 驗證（`clean` 改跑乾淨資料） |
 | `trend_regime.py` | NQ 2 分：逐月和匯出期間的行情特徵（日幅度、漲跌、效率、趨勢狀態比例）對照一般兩象限的結果；用事前可知的條件分組；盤中 / 夜盤 |
 | `build_data.py` | 從兩個版本的樣本做出乾淨資料 |
+| `build_databento.py` | Databento 下載的 NQ 所有合約 1 分 K → 仿 TradingView NQ1! 換月調整的連續合約 |
+| `trend_quadrants_full.py` | 一年 Databento 資料：趨勢分組 × 全部 / 盤中 / 夜盤，1R–3R，隨機抽樣、前後半年、逐月 |
 | `nqlab.py`、`nqlab_check.py` | NQ 研究用的快速回測（numba），以及跟 `rbs.py` 逐筆比對 |
 | `nq_stage1.py`、`nq_diag.py` | NQ 第一階段：一次只改一個參數；按時段、趨勢強度、效率比分組 |
 | `nq_stage2.py`、`nq_stage2_an.py` | NQ 第二階段：1,350 組全組合和分析 |
