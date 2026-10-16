@@ -11,6 +11,7 @@
 |------|------|------|
 | Remi's Buy/Sell | [remis_buy_sell.pine](remis_buy_sell.pine) | 仿原版「買賣訊號」，加上過濾快訊、1 分亞洲盤快訊。Trend Judge 門檻依商品自動選（NQ 20/40、ES 4/8、TXF 40/80、其他 0.4/0.8） |
 | Remi Superb | [remi_superb.pine](remi_superb.pine) | 以 Remi's Buy/Sell 為底，只支援 NQ / ES / TXF。Trend Judge 門檻：NQ 15 / 35、ES 3 / 6、TXF 30 / 60，預設值照你的設定 |
+| Remi Superb 1m | [remi_superb_1m.pine](remi_superb_1m.pine) | 跟 Remi Superb 一樣，只有 Trend Judge 改用 1 分 K 收盤推算（同回測），不需要秒級資料。用 NQ 一年資料比對，2 分 K 的 Trend Judge 方向跟回測 99.6% 相同 |
 
 兩支都用離線 Pine 檢查器檢查過，沒有語法錯誤。Remi Superb 還沒在 TradingView 上編譯確認。
 
@@ -102,6 +103,7 @@
 |------|------|
 | [remis_buy_sell.pine](remis_buy_sell.pine) | Remi's Buy/Sell |
 | [remi_superb.pine](remi_superb.pine) | Remi Superb（NQ / ES / TXF） |
+| [remi_superb_1m.pine](remi_superb_1m.pine) | Remi Superb 1m（不需秒級資料） |
 | [remis_buy_sell.md](remis_buy_sell.md) | 規則、比對、回測分級、快訊設定 |
 | [breakout_signals.md](breakout_signals.md) | BO Signals（同一套訊號的前身） |
 | [backtest/](backtest/) | 回測程式 |
