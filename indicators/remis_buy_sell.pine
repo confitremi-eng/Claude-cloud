@@ -50,6 +50,7 @@ atrLen    = input.int(14, "ATR 長度", minval=1, group=grpF, inline="rk", toolt
 avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpF, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpF, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
 avoidAsia = input.bool(true, "避開美東 20:00–03:00（亞洲盤）", group=grpF, tooltip="台灣時間：夏令 08:00–15:00，冬令 09:00–16:00")
+avoidCash = input.bool(false, "避開現金盤（台灣夏令 21:30–04:30）", group=grpF, tooltip="美東 09:30–16:30，看 K 棒收盤時間。跟著美國夏令 / 冬令走：台灣時間夏令 21:30–04:30，冬令 22:30–05:30")
 tgtR      = input.float(2.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpF, tooltip="快訊訊息會附上停損價，和這個倍數的目標價。回測用 2R")
 showFMark = input.bool(true, "圖上標出通過過濾的訊號", group=grpF, tooltip="在原本的買賣箭頭外側寫上下面的符號：買在箭頭下方、賣在箭頭上方。可以填 Emoji 或文字，只在啟用過濾快訊時出現")
 fBuyTxt   = input.string("⭐", "買訊符號", group=grpF, inline="fb")
@@ -57,7 +58,7 @@ fBuyCol   = input.color(#36FE02, "", group=grpF, inline="fb", tooltip="填一般
 fSellTxt  = input.string("🔻", "賣訊符號", group=grpF, inline="fs")
 fSellCol  = input.color(#F23645, "", group=grpF, inline="fs", tooltip="填一般文字時的顏色，Emoji 用它自己的顏色")
 markSize  = input.string("中", "符號大小", options=["小", "中", "大"], group=grpF, inline="ms")
-markLines = input.int(2, "離箭頭（空行數）", minval=0, maxval=6, group=grpF, inline="ms", tooltip="符號跟原本箭頭之間空幾行。跟箭頭重疊就加大，離太遠就減小；原本的訊號樣式選「大」時通常要 3 行。兩種快訊共用")
+markLines = input.int(2, "離箭頭（半行）", minval=0, maxval=12, group=grpF, inline="ms", tooltip="符號離原本箭頭的距離，每加 1 往外移半個符號高度。0 會蓋在箭頭上；跟箭頭重疊就加大，離太遠就減小。原本訊號樣式選「大」時通常要再多 1–2。兩種快訊共用")
 
 // ═════════════════ 1 分亞洲盤快訊（預設關閉，獨立開關）═════════════════
 // 回測（NQ 1 分 K，一年）：參數 (40, 0, 13, 1)、Trend Judge 強趨勢、1 小時同向、只在美東 20:00–03:00，停利 1R：
@@ -181,7 +182,8 @@ bool inOpen  = etMin >= 570 and etMin < 600                                     
 bool inClose = etMin >= 945 and etMin < 975                                                        // 15:45–16:15
 bool inGlbx  = (etMin >= 1005 and etMin < 1020) or (etMin >= 1080 and etMin < 1110)                // 16:45–17:00、18:00–18:30
 bool inAsia  = etMin >= 1200 or etMin < 180                                                        // 20:00–03:00
-bool timeOk  = not (avoidEvt and (inData or inFomc or inOpen or inClose or inGlbx)) and not (avoidAsia and inAsia)
+bool inCash  = etMin >= 570 and etMin < 990                                                       // 09:30–16:30
+bool timeOk  = not (avoidEvt and (inData or inFomc or inOpen or inClose or inGlbx)) and not (avoidAsia and inAsia) and not (avoidCash and inCash)
 
 bool buyPass  = (not useTJ or tjBuyOk) and (not use1h or (not na(h1Ema) and h1Close > h1Ema)) and (not useRisk or (not na(atrPrev) and close - buyStop >= riskMult * atrPrev)) and timeOk
 bool sellPass = (not useTJ or tjSellOk) and (not use1h or (not na(h1Ema) and h1Close < h1Ema)) and (not useRisk or (not na(atrPrev) and sellStop - close >= riskMult * atrPrev)) and timeOk
@@ -191,16 +193,16 @@ bool fSell = filtOn and sellSig and sellPass
 float fStop = fBuy ? buyStop : fSell ? sellStop : na
 float fTgt  = na(fStop) ? na : close + tgtR * (close - fStop)
 // 標記畫在訊號 K 棒外側（買：最低價下方，賣：最高價上方），跟原本的標籤錯開
-// 符號貼在原本箭頭的同一個位置（K 棒下方 / 上方），再用空行往外推，所以縮放圖表也不會跑到箭頭裡面
+// 符號以原本箭頭的位置（K 棒下方 / 上方）為中心，每多一個換行往外移半個符號高度，所以縮放圖表也不會跑到箭頭裡面
 markSz = markSize == "小" ? size.small : markSize == "大" ? size.large : size.normal
 string markPad = ""
 if markLines > 0
     for k = 1 to markLines
         markPad := markPad + "\n"
 drawBuyMark(txt, col) =>
-    label.new(bar_index, low, markPad + txt, xloc=xloc.bar_index, yloc=yloc.belowbar, style=label.style_label_up, color=color.new(color.black, 100), textcolor=col, size=markSz)
+    label.new(bar_index, low, markPad + txt, xloc=xloc.bar_index, yloc=yloc.belowbar, style=label.style_none, textcolor=col, size=markSz)
 drawSellMark(txt, col) =>
-    label.new(bar_index, high, txt + markPad, xloc=xloc.bar_index, yloc=yloc.abovebar, style=label.style_label_down, color=color.new(color.black, 100), textcolor=col, size=markSz)
+    label.new(bar_index, high, txt + markPad, xloc=xloc.bar_index, yloc=yloc.abovebar, style=label.style_none, textcolor=col, size=markSz)
 if showFMark and fBuy
     drawBuyMark(fBuyTxt, fBuyCol)
 if showFMark and fSell
