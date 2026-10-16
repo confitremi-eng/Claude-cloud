@@ -8,6 +8,7 @@
 //     4. Ema enable 開啟時，觸發那根的收盤也要在 EMA 之上，不然這次不出訊號（機會照樣用掉）
 //   賣：反過來（創新高那根的最低價、收盤跌破、收盤在 EMA 之下）
 // 對照原版匯出資料：1m / 2m / 3m / 5m 每根 K 都跟原版一致，見 indicators/remis_buy_sell.md
+// 另有預設關閉的「過濾快訊」：只多出快訊條件和資料視窗數值，上面的訊號、標籤、快訊都不變
 indicator("Remi's Buy/Sell", overlay=true)
 
 // ═════════════════ 訊號（同原版）═════════════════
@@ -33,6 +34,23 @@ hcColor   = input.color(#4CAF50, "", group=grpA, inline="hc")
 showLC    = input.bool(true, "Low Close 線", group=grpA, inline="lc", tooltip="前「階段」根的最低收盤價，同原版的 Low Close。只是畫出來看，不影響訊號")
 lcColor   = input.color(#FF5252, "", group=grpA, inline="lc")
 lineWidth = input.int(2, "線寬", minval=1, maxval=4, group=grpA)
+
+// ═════════════════ 過濾快訊（預設關閉）═════════════════
+// 規則來自 NQ 2 分 K 的一年回測：訊號要跟 Trend Judge、1 小時趨勢同向，停損不能太小，也不在數據、開收盤、亞洲盤時段
+grpF      = "過濾快訊（預設關閉，不影響原本訊號）"
+filtOn    = input.bool(false, "啟用過濾快訊", group=grpF, tooltip="開：「Remi BUY（過濾）」等快訊條件只在訊號通過下面勾選的過濾時成立。原本的訊號、標籤和快訊都不變。規則來自 NQ 2 分 K 的一年回測，見 remis_buy_sell.md")
+useTJ     = input.bool(true, "Trend Judge 同向", group=grpF, inline="tj")
+tjSrc     = input.source(close, "", group=grpF, inline="tj", tooltip="先把 Trend Judge 加到同一張圖，再在這裡選 Trend Judge 的「趨勢方向」。買要 UP 或 強UP（≥ 1），賣要 DOWN 或 強Down（≤ -1）。沒選的話過濾快訊不會成立，右下角會提示")
+use1h     = input.bool(true, "1 小時趨勢同向（EMA 長度）", group=grpF, inline="h1")
+h1Len     = input.int(20, "", minval=1, group=grpF, inline="h1", tooltip="看上一根已收完的 1 小時 K：買要收盤在 1 小時 EMA 之上，賣要在之下（等同 EMA 正在上升 / 下降）")
+useRisk   = input.bool(true, "停損 ≥ ATR ×", group=grpF, inline="rk")
+riskMult  = input.float(1.0, "", minval=0, step=0.1, group=grpF, inline="rk")
+atrLen    = input.int(14, "ATR 長度", minval=1, group=grpF, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）。停損距離小於「倍數 × 上一根的 ATR」就不發")
+avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpF, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00")
+fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpF, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
+avoidAsia = input.bool(true, "避開美東 20:00–03:00（亞洲盤）", group=grpF, tooltip="台灣時間：夏令 08:00–15:00，冬令 09:00–16:00")
+tgtR      = input.float(2.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpF, tooltip="快訊訊息會附上停損價，和這個倍數的目標價。回測用 2R")
+showFMark = input.bool(true, "圖上標出通過過濾的訊號", group=grpF, tooltip="在圖的最下方畫小三角形，只在啟用過濾快訊時出現")
 
 // 保險：看不見的 K 棒高 / 低點。萬一指標被放到「無刻度」或別的刻度，自動縮放也跟 K 棒一致，標籤不會漂移
 plot(high, "錨點 高", color=color.new(color.gray, 100), editable=false, display=display.pane)
@@ -98,7 +116,64 @@ plot(showLC ? lowClose : na, "Low Close", color=lcColor, linewidth=lineWidth)
 plot(buySig ? 1 : 0, "BUY 訊號", display=display.data_window)
 plot(sellSig ? 1 : 0, "SELL 訊號", display=display.data_window)
 
+// ═════════════════ 過濾快訊（預設關閉）═════════════════
+// Trend Judge 方向：來源還是預設的 K 棒價格時，當成沒設定
+float tjDir    = tjSrc
+bool  tjLinked = not na(tjDir) and math.abs(tjDir) <= 2 and tjDir == math.round(tjDir)
+
+// 1 小時趨勢：上一根已收完的 1 小時 K，不重繪
+h1Vals() =>
+    float h1e = ta.ema(close, h1Len)
+    [close[1], h1e[1]]
+[h1Close, h1Ema] = request.security(syminfo.tickerid, "60", h1Vals(), lookahead=barmerge.lookahead_on)
+
+// 停損 = 訊號 K 和前一根的極值，停損距離跟上一根的 ATR 比
+float atrPrev  = ta.atr(atrLen)[1]
+float buyStop  = math.min(low, low[1])
+float sellStop = math.max(high, high[1])
+
+// 時段：看 K 棒收盤時間（= 進場時間），美東時間
+int  tClose  = na(time_close) ? time + timeframe.in_seconds() * 1000 : time_close
+int  etMin   = hour(tClose, "America/New_York") * 60 + minute(tClose, "America/New_York")
+int  etDow   = dayofweek(tClose, "America/New_York")
+bool isWkday = etDow >= dayofweek.monday and etDow <= dayofweek.friday
+bool isFomc  = str.contains(fomcDates, str.format_time(tClose, "yyyy-MM-dd", "America/New_York"))
+bool inData  = isWkday and ((etMin >= 508 and etMin < 540) or (etMin >= 598 and etMin < 615))    // 08:28–09:00、09:58–10:15
+bool inFomc  = isFomc and etMin >= 838 and etMin < 900                                             // 13:58–15:00
+bool inOpen  = etMin >= 570 and etMin < 600                                                        // 09:30–10:00
+bool inClose = etMin >= 945 and etMin < 975                                                        // 15:45–16:15
+bool inGlbx  = (etMin >= 1005 and etMin < 1020) or (etMin >= 1080 and etMin < 1110)                // 16:45–17:00、18:00–18:30
+bool inAsia  = etMin >= 1200 or etMin < 180                                                        // 20:00–03:00
+bool timeOk  = not (avoidEvt and (inData or inFomc or inOpen or inClose or inGlbx)) and not (avoidAsia and inAsia)
+
+bool buyPass  = (not useTJ or (tjLinked and tjDir >= 1)) and (not use1h or (not na(h1Ema) and h1Close > h1Ema)) and (not useRisk or (not na(atrPrev) and close - buyStop >= riskMult * atrPrev)) and timeOk
+bool sellPass = (not useTJ or (tjLinked and tjDir <= -1)) and (not use1h or (not na(h1Ema) and h1Close < h1Ema)) and (not useRisk or (not na(atrPrev) and sellStop - close >= riskMult * atrPrev)) and timeOk
+bool fBuy  = filtOn and buySig and buyPass
+bool fSell = filtOn and sellSig and sellPass
+
+float fStop = fBuy ? buyStop : fSell ? sellStop : na
+float fTgt  = na(fStop) ? na : close + tgtR * (close - fStop)
+plotshape(showFMark and fBuy, "過濾買", shape.triangleup, location.bottom, color=buyColor, size=size.tiny, editable=false)
+plotshape(showFMark and fSell, "過濾賣", shape.triangledown, location.bottom, color=sellColor, size=size.tiny, editable=false)
+plot(fBuy ? 1 : 0, "BUY 過濾", display=display.data_window)
+plot(fSell ? 1 : 0, "SELL 過濾", display=display.data_window)
+plot(fStop, "過濾停損", display=display.data_window)
+plot(fTgt, "過濾目標", display=display.data_window)
+
+// 開了 Trend Judge 過濾，但還沒選來源：右下角提示
+var table fWarn = table.new(position.bottom_right, 1, 1)
+if barstate.islast
+    if filtOn and useTJ and not tjLinked
+        table.cell(fWarn, 0, 0, "過濾快訊：請在設定選 Trend Judge 的「趨勢方向」", text_color=color.white, bgcolor=color.new(color.red, 20), text_size=size.small)
+    else
+        table.clear(fWarn, 0, 0)
+
 // ═════════════════ 快訊 ═════════════════
 alertcondition(buySig, "Remi BUY", '{{ticker}} Remi BUY｜{{close}}')
 alertcondition(sellSig, "Remi SELL", '{{ticker}} Remi SELL｜{{close}}')
 alertcondition(buySig or sellSig, "Remi BUY 或 SELL", '{{ticker}} Remi 訊號｜{{close}}')
+
+// 過濾快訊：要先在設定開啟「啟用過濾快訊」才會成立
+alertcondition(fBuy, "Remi BUY（過濾）", '{{ticker}} Remi BUY（過濾）｜{{close}}｜停損 {{plot("過濾停損")}}｜目標 {{plot("過濾目標")}}')
+alertcondition(fSell, "Remi SELL（過濾）", '{{ticker}} Remi SELL（過濾）｜{{close}}｜停損 {{plot("過濾停損")}}｜目標 {{plot("過濾目標")}}')
+alertcondition(fBuy or fSell, "Remi BUY 或 SELL（過濾）", '{{ticker}} Remi 過濾訊號｜{{close}}｜停損 {{plot("過濾停損")}}｜目標 {{plot("過濾目標")}}')

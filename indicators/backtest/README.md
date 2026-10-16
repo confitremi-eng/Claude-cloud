@@ -87,6 +87,9 @@ python3 indicators/backtest/rbs/build_databento.py 下載的.ohlcv-1m.csv indica
 | `build_data.py` | 從兩個版本的樣本做出乾淨資料 |
 | `build_databento.py` | Databento 下載的 NQ 所有合約 1 分 K → 仿 TradingView NQ1! 換月調整的連續合約 |
 | `trend_quadrants_full.py` | 一年 Databento 資料：趨勢分組 × 全部 / 盤中 / 夜盤，1R–3R，隨機抽樣、前後半年、逐月 |
+| `setup_study.py` | 推薦交易設定的研究：各條件單獨看、1,152 組設定前段挑後段驗、推薦規則（= 過濾快訊）在 1/2/3/5 分、停損位置比較 |
+| `stop_management.py` | 同樣的進場和目標，只換停損規則（收線停損、緩衝、硬停損、保本、移動停損、再進場），順勢 vs 非順勢、1/2/3/5 分 |
+| `param_compare.py` | 參數 (20,0,8,1)、(20,0,8,0) EMA 關閉、(30,0,13,1) 在 1 分和 2 分，各順勢層級、四象限、EMA 擋掉的訊號、逐月 |
 | `nqlab.py`、`nqlab_check.py` | NQ 研究用的快速回測（numba），以及跟 `rbs.py` 逐筆比對 |
 | `nq_stage1.py`、`nq_diag.py` | NQ 第一階段：一次只改一個參數；按時段、趨勢強度、效率比分組 |
 | `nq_stage2.py`、`nq_stage2_an.py` | NQ 第二階段：1,350 組全組合和分析 |
