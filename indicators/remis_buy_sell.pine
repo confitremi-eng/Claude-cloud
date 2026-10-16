@@ -27,6 +27,11 @@ buyColor  = input.color(#36FE02, "買訊", group=grpA, inline="c")
 sellColor = input.color(#F23645, "賣訊", group=grpA, inline="c")
 showEma   = input.bool(false, "顯示 EMA 線", group=grpA, inline="e")
 emaColor  = input.color(color.orange, "", group=grpA, inline="e")
+showHC    = input.bool(true, "High Close 線", group=grpA, inline="hc", tooltip="前「階段」根的最高收盤價，同原版的 High Close。只是畫出來看，不影響訊號")
+hcColor   = input.color(#4CAF50, "", group=grpA, inline="hc")
+showLC    = input.bool(true, "Low Close 線", group=grpA, inline="lc", tooltip="前「階段」根的最低收盤價，同原版的 Low Close。只是畫出來看，不影響訊號")
+lcColor   = input.color(#FF5252, "", group=grpA, inline="lc")
+lineWidth = input.int(2, "線寬", minval=1, maxval=4, group=grpA)
 
 // 保險：看不見的 K 棒高 / 低點。萬一指標被放到「無刻度」或別的刻度，自動縮放也跟 K 棒一致，標籤不會漂移
 plot(high, "錨點 高", color=color.new(color.gray, 100), editable=false, display=display.pane)
@@ -81,6 +86,12 @@ plotshape(drawSell and not stLabel and szM, "賣 三角中", shape.triangledown,
 plotshape(drawSell and not stLabel and szL, "賣 三角大", shape.triangledown, location.abovebar, color=sellColor, size=size.large, editable=false)
 
 plot(showEma ? sigEma : na, "EMA", color=emaColor)
+
+// 原版的兩條線：前「階段」根的最高 / 最低收盤價（只是畫出來看，不影響訊號）
+float highClose = ta.highest(close, stageLen)[1]
+float lowClose  = ta.lowest(close, stageLen)[1]
+plot(showHC ? highClose : na, "High Close", color=hcColor, linewidth=lineWidth)
+plot(showLC ? lowClose : na, "Low Close", color=lcColor, linewidth=lineWidth)
 
 // 給快訊「新增條件」用的狀態值（只出現在資料視窗）
 plot(buySig ? 1 : 0, "BUY 訊號", display=display.data_window)
