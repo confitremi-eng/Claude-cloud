@@ -12,7 +12,6 @@ stop first if both hit, 60-bar time exit). The first 2 New York dates of each fi
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-MODE = 'clean' if sys.argv[1] == 'clean' else 'tv'
 import numpy as np, pandas as pd
 from rbs import trend_diff_minutes, trend_judge, prepared, COST
 from remi_export import signals
@@ -67,7 +66,7 @@ def warm_mask(dt, days=2):
     return ~day.isin(sorted(day.unique())[:days]).values
 
 
-if MODE == 'tv':
+if __name__ == '__main__' and sys.argv[1] != 'clean':
     d1 = load_tv(sys.argv[1]); d2 = load_tv(sys.argv[2])
     # Trend Judge for the 1m chart from its own 1-minute closes
     one = d1.set_index('datetime')[['open', 'high', 'low', 'close']]
@@ -94,7 +93,7 @@ if MODE == 'tv':
         t['dir'] = b.tj_dir.values[t.i]
         dd = d.datetime.dt.tz_convert('America/New_York')
         report(f'{name}  {dd[warm_mask(d.datetime)].iloc[0]:%m/%d}..{dd.iloc[-1]:%m/%d}', t, COST['NQ'])
-else:
+elif __name__ == '__main__':
     for tf in (1, 2):
         df = prepared('NQ', tf); B, S = signals(df); t = trades(df, B, S)
         t = t[df.tradable.values[t.i]].reset_index(drop=True); t['dir'] = df.tj_dir.values[t.i]
