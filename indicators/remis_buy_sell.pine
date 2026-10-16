@@ -9,7 +9,7 @@
 //   賣：反過來（創新高那根的最低價、收盤跌破、收盤在 EMA 之下）
 // 對照原版匯出資料：1m / 2m / 3m / 5m 每根 K 都跟原版一致，見 indicators/remis_buy_sell.md
 // 另有預設關閉的「過濾快訊」：只多出快訊條件和資料視窗數值，上面的訊號、標籤、快訊都不變
-indicator("Remi's Buy/Sell", overlay=true)
+indicator("Remi's Buy/Sell", overlay=true, max_labels_count=500)
 
 // ═════════════════ 訊號（同原版）═════════════════
 grpS       = "訊號（同原版）"
@@ -38,9 +38,9 @@ lineWidth = input.int(2, "線寬", minval=1, maxval=4, group=grpA)
 // ═════════════════ 過濾快訊（預設關閉）═════════════════
 // 規則來自 NQ 2 分 K 的一年回測：訊號要跟 Trend Judge、1 小時趨勢同向，停損不能太小，也不在數據、開收盤、亞洲盤時段
 grpF      = "過濾快訊（預設關閉，不影響原本訊號）"
-filtOn    = input.bool(false, "啟用過濾快訊", group=grpF, tooltip="開：「Remi BUY（過濾）」等快訊條件只在訊號通過下面勾選的過濾時成立。原本的訊號、標籤和快訊都不變。規則來自 NQ 2 分 K 的一年回測，見 remis_buy_sell.md")
+filtOn    = input.bool(true, "啟用過濾快訊", group=grpF, tooltip="開：「Remi BUY（過濾）」等快訊條件只在訊號通過下面勾選的過濾時成立。原本的訊號、標籤和快訊都不變。規則來自 NQ 2 分 K 的一年回測，見 remis_buy_sell.md")
 useTJ     = input.bool(true, "Trend Judge 同向", group=grpF, inline="tj")
-tjSrc     = input.source(close, "", group=grpF, inline="tj", tooltip="先把 Trend Judge 加到同一張圖，再在這裡選 Trend Judge 的「趨勢方向」。買要 UP 或 強UP（≥ 1），賣要 DOWN 或 強Down（≤ -1）。沒選的話過濾快訊不會成立，右下角會提示")
+tjSrc     = input.source(close, "", group=grpF, inline="tj", tooltip="先把 Trend Judge 加到同一張圖，再在這裡選 Trend Judge 的「趨勢方向」（-2 到 2）。不要選「有趨勢」「多方趨勢」這些 0/1 的條件，那樣賣訊永遠不會成立。買要 UP 或 強UP（≥ 1），賣要 DOWN 或 強Down（≤ -1）。沒選或可能選錯時右下角會提示")
 use1h     = input.bool(true, "1 小時趨勢同向（EMA 長度）", group=grpF, inline="h1")
 h1Len     = input.int(20, "", minval=1, group=grpF, inline="h1", tooltip="看上一根已收完的 1 小時 K：買要收盤在 1 小時 EMA 之上，賣要在之下（等同 EMA 正在上升 / 下降）")
 useRisk   = input.bool(true, "停損 ≥ ATR ×", group=grpF, inline="rk")
@@ -50,9 +50,11 @@ avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=g
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpF, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
 avoidAsia = input.bool(true, "避開美東 20:00–03:00（亞洲盤）", group=grpF, tooltip="台灣時間：夏令 08:00–15:00，冬令 09:00–16:00")
 tgtR      = input.float(2.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpF, tooltip="快訊訊息會附上停損價，和這個倍數的目標價。回測用 2R")
-showFMark = input.bool(true, "圖上標出通過過濾的訊號", group=grpF, inline="fm", tooltip="在訊號 K 棒外側畫菱形（買在下方、賣在上方），只在啟用過濾快訊時出現")
-fMarkCol  = input.color(#FFD600, "", group=grpF, inline="fm")
-markGap   = input.float(1.0, "標記離 K 棒（ATR 倍數）", minval=0, step=0.25, group=grpF, tooltip="菱形畫在最低價下方（賣：最高價上方）這個倍數的 ATR，避開原本的買賣標籤。兩種快訊的標記共用")
+showFMark = input.bool(true, "圖上標出通過過濾的訊號", group=grpF, inline="fm", tooltip="在訊號 K 棒外側寫上右邊這個字（買在下方、賣在上方），可以填 Emoji 或文字，只在啟用過濾快訊時出現")
+fMarkTxt  = input.string("⭐", "", group=grpF, inline="fm")
+fMarkCol  = input.color(#FFD600, "", group=grpF, inline="fm", tooltip="填一般文字時的顏色，Emoji 用它自己的顏色")
+markSize  = input.string("中", "標記大小", options=["小", "中", "大"], group=grpF)
+markGap   = input.float(1.0, "標記離 K 棒（ATR 倍數）", minval=0, step=0.25, group=grpF, tooltip="標記畫在最低價下方（賣：最高價上方）這個倍數的 ATR，避開原本的買賣標籤。兩種快訊的標記共用，大小也共用")
 
 // ═════════════════ 1 分亞洲盤快訊（預設關閉，獨立開關）═════════════════
 // 回測（NQ 1 分 K，一年）：參數 (40, 0, 13, 1)、Trend Judge 強趨勢、1 小時同向、只在美東 20:00–03:00，停利 1R：
@@ -64,8 +66,9 @@ xEmaLen   = input.int(13, "Ema number", minval=1, group=grpX)
 xTjMode   = input.string("強趨勢", "Trend Judge", options=["強趨勢", "順勢（一般 + 強）"], group=grpX, tooltip="強趨勢：買要 強UP、賣要 強Down。順勢：UP / 強UP、DOWN / 強Down 都算（回測停利 1R 勝率 56.7%）")
 xUse1h    = input.bool(true, "1 小時趨勢同向", group=grpX)
 xTgtR     = input.float(1.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpX, tooltip="回測用 1R")
-xShow     = input.bool(true, "圖上標出", group=grpX, inline="xm", tooltip="在訊號 K 棒外側畫菱形，只在啟用時出現。距離用上面「標記離 K 棒」的設定")
-xMarkCol  = input.color(#00E5FF, "", group=grpX, inline="xm")
+xShow     = input.bool(true, "圖上標出", group=grpX, inline="xm", tooltip="在訊號 K 棒外側寫上右邊這個字，可以填 Emoji 或文字，只在啟用時出現。距離和大小用上面過濾快訊的設定")
+xMarkTxt  = input.string("💎", "", group=grpX, inline="xm")
+xMarkCol  = input.color(#00E5FF, "", group=grpX, inline="xm", tooltip="填一般文字時的顏色")
 
 // 保險：看不見的 K 棒高 / 低點。萬一指標被放到「無刻度」或別的刻度，自動縮放也跟 K 棒一致，標籤不會漂移
 plot(high, "錨點 高", color=color.new(color.gray, 100), editable=false, display=display.pane)
@@ -135,6 +138,17 @@ plot(sellSig ? 1 : 0, "SELL 訊號", display=display.data_window)
 // Trend Judge 方向：來源還是預設的 K 棒價格時，當成沒設定
 float tjDir    = tjSrc
 bool  tjLinked = not na(tjDir) and math.abs(tjDir) <= 2 and tjDir == math.round(tjDir)
+// 選成「有趨勢」這類 0/1 條件時只會出現 0 和 1：一段時間都沒出現負值或 2，就提示可能選錯
+var int  tjBars    = 0
+var bool tjSeenNeg = false
+var bool tjSeenTwo = false
+if tjLinked
+    tjBars += 1
+    if tjDir < 0
+        tjSeenNeg := true
+    if math.abs(tjDir) == 2
+        tjSeenTwo := true
+bool tjSuspect = tjBars > 300 and not tjSeenNeg and not tjSeenTwo
 
 // 1 小時趨勢：上一根已收完的 1 小時 K，不重繪
 h1Vals() =>
@@ -170,8 +184,13 @@ float fStop = fBuy ? buyStop : fSell ? sellStop : na
 float fTgt  = na(fStop) ? na : close + tgtR * (close - fStop)
 // 標記畫在訊號 K 棒外側（買：最低價下方，賣：最高價上方），跟原本的標籤錯開
 float markOff = na(atrPrev) ? 0.0 : markGap * atrPrev
-plotshape(showFMark and fBuy ? low - markOff : na, "過濾買", shape.diamond, location.absolute, color=fMarkCol, size=size.small, editable=false)
-plotshape(showFMark and fSell ? high + markOff : na, "過濾賣", shape.diamond, location.absolute, color=fMarkCol, size=size.small, editable=false)
+markSz = markSize == "小" ? size.small : markSize == "大" ? size.large : size.normal
+drawMark(y, txt, col) =>
+    label.new(bar_index, y, txt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_none, textcolor=col, size=markSz)
+if showFMark and fBuy
+    drawMark(low - markOff, fMarkTxt, fMarkCol)
+if showFMark and fSell
+    drawMark(high + markOff, fMarkTxt, fMarkCol)
 plot(fBuy ? 1 : 0, "BUY 過濾", display=display.data_window)
 plot(fSell ? 1 : 0, "SELL 過濾", display=display.data_window)
 plot(fStop, "過濾停損", display=display.data_window)
@@ -207,8 +226,10 @@ bool aSell = asiaOn and xTrigSell and close < xEma and barOk and xSellOk
 
 float aStop = aBuy ? buyStop : aSell ? sellStop : na
 float aTgt  = na(aStop) ? na : close + xTgtR * (close - aStop)
-plotshape(xShow and aBuy ? low - markOff : na, "亞洲盤買", shape.diamond, location.absolute, color=xMarkCol, size=size.small, editable=false)
-plotshape(xShow and aSell ? high + markOff : na, "亞洲盤賣", shape.diamond, location.absolute, color=xMarkCol, size=size.small, editable=false)
+if xShow and aBuy
+    drawMark(low - markOff, xMarkTxt, xMarkCol)
+if xShow and aSell
+    drawMark(high + markOff, xMarkTxt, xMarkCol)
 plot(aBuy ? 1 : 0, "BUY 亞洲盤", display=display.data_window)
 plot(aSell ? 1 : 0, "SELL 亞洲盤", display=display.data_window)
 plot(aStop, "亞洲盤停損", display=display.data_window)
@@ -219,6 +240,8 @@ var table fWarn = table.new(position.bottom_right, 1, 1)
 if barstate.islast
     if ((filtOn and useTJ) or asiaOn) and not tjLinked
         table.cell(fWarn, 0, 0, "過濾 / 亞洲盤快訊：請在設定選 Trend Judge 的「趨勢方向」", text_color=color.white, bgcolor=color.new(color.red, 20), text_size=size.small)
+    else if ((filtOn and useTJ) or asiaOn) and tjSuspect
+        table.cell(fWarn, 0, 0, "過濾 / 亞洲盤快訊：Trend Judge 來源可能選錯，要選「趨勢方向」，不是「有趨勢」", text_color=color.white, bgcolor=color.new(color.orange, 20), text_size=size.small)
     else
         table.clear(fWarn, 0, 0)
 
