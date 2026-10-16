@@ -10,7 +10,7 @@
 | 指標 | 檔案 | 用途 |
 |------|------|------|
 | Remi's Buy/Sell | [remis_buy_sell.pine](remis_buy_sell.pine) | 仿原版「買賣訊號」，加上過濾快訊、1 分亞洲盤快訊。Trend Judge 門檻依商品自動選（NQ 20/40、ES 4/8、TXF 40/80、其他 0.4/0.8） |
-| Remi Superb | [remi_superb.pine](remi_superb.pine) | 以 Remi's Buy/Sell 為底的 **NQ 專用**版。Trend Judge 門檻只有 NQ 一組（一般 15 / 強勢 35），預設值照你的設定 |
+| Remi Superb | [remi_superb.pine](remi_superb.pine) | 以 Remi's Buy/Sell 為底，只支援 NQ / ES / TXF。Trend Judge 門檻：NQ 15 / 35、ES 4 / 8、TXF 40 / 80，預設值照你的設定 |
 
 兩支都用離線 Pine 檢查器檢查過，沒有語法錯誤。Remi Superb 還沒在 TradingView 上編譯確認。
 
@@ -48,11 +48,11 @@
 | 過濾快訊 | 開。Trend Judge 同向（有趨勢）、1 小時 EMA 20、停損 ≥ 1 ATR（14）、避開數據 / 開收盤 / Globex、目標 2R |
 | 避開時段 | 亞洲盤**不避開**，現金盤也不避開 |
 | 過濾符號 | ⬆️ / ⬇️，大小「大」，離箭頭 0 |
-| Trend Judge | EMA 1130，快線 5 秒、慢線 15 秒，NQ 門檻 15 / 35 |
+| Trend Judge | EMA 1130，快線 5 秒、慢線 15 秒；門檻 NQ 15 / 35、ES 4 / 8、TXF 40 / 80 |
 
 注意：你的預設不避開亞洲盤，跟 A 級回測的條件不同。15 / 35 這組門檻也還沒回測過。
 
-**不是 NQ 的提示**：圖上商品不是 NQ / MNQ 時，右上角會顯示紅色提示。
+**不支援商品的提示**：圖上商品不是 NQ / ES / TXF（含 MNQ、MES、MXF）時，右上角會顯示紅色提示，Trend Judge 相關的過濾也一律不通過。
 
 **快訊**：作多、做空分開，沒有合併的條件。
 
@@ -66,7 +66,7 @@
 
 - Remi Superb 還沒在 TradingView 編譯確認，有紅字錯誤要貼回來。
 - 你的出場方式（固定 R、移動停損、反向訊號）還沒回答。
-- 15 / 35 門檻和「不避開亞洲盤」這兩個設定都還沒回測。可以用 `indicators/backtest/` 的程式和 Databento 資料重算。
+- NQ 15 / 35 門檻和「不避開亞洲盤」這兩個設定都還沒回測；ES、TXF 的門檻沿用 Remi's Buy/Sell 的值。可以用 `indicators/backtest/` 的程式和 Databento 資料重算。
 
 ## 6. 工具和資料
 
@@ -101,7 +101,7 @@
 | 檔案 | 內容 |
 |------|------|
 | [remis_buy_sell.pine](remis_buy_sell.pine) | Remi's Buy/Sell |
-| [remi_superb.pine](remi_superb.pine) | Remi Superb（NQ 專用） |
+| [remi_superb.pine](remi_superb.pine) | Remi Superb（NQ / ES / TXF） |
 | [remis_buy_sell.md](remis_buy_sell.md) | 規則、比對、回測分級、快訊設定 |
 | [breakout_signals.md](breakout_signals.md) | BO Signals（同一套訊號的前身） |
 | [backtest/](backtest/) | 回測程式 |

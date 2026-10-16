@@ -1,6 +1,6 @@
 //@version=6
-// Remi Superb（NQ 專用）
-// 以 Remi's Buy/Sell 為底，只改 Trend Judge 門檻：只有 NQ 一組，預設一般 15、強勢 35，其他設定都跟原來一樣
+// Remi Superb（NQ / ES / TXF）
+// 以 Remi's Buy/Sell 為底，Trend Judge 門檻只有 NQ（一般 15、強勢 35）、ES（4、8）、TXF（40、80）三組，其他設定跟原來一樣
 // 仿「買賣訊號」（階段 20、Color background 0、Ema number 8、Ema enable 1），全天適用，不分時段、不看其他指標
 //   買：
 //     1. 創前「階段」根新低的那根 K = 波段低點，記下它的最高價
@@ -67,7 +67,11 @@ tjEmaLen  = input.int(1130, "EMA 長度", minval=1, group=grpT)
 tjFastS   = input.int(5, "快線秒數", minval=1, group=grpT, inline="tjs")
 tjSlowS   = input.int(15, "慢線秒數", minval=1, group=grpT, inline="tjs")
 tjNqTh    = input.float(15.0, "NQ 門檻　一般", minval=0, group=grpT, inline="tnq")
-tjNqSt    = input.float(35.0, "強勢", minval=0, group=grpT, inline="tnq", tooltip="差值超過「一般」算 UP / DOWN，超過「強勢」算 強UP / 強Down。NQ 專用，單位是 NQ 點數")
+tjNqSt    = input.float(35.0, "強勢", minval=0, group=grpT, inline="tnq", tooltip="差值超過「一般」算 UP / DOWN，超過「強勢」算 強UP / 強Down。圖上的商品是 NQ / MNQ 時用這一列")
+tjEsTh    = input.float(4.0, "ES 門檻　一般", minval=0, group=grpT, inline="tes")
+tjEsSt    = input.float(8.0, "強勢", minval=0, group=grpT, inline="tes", tooltip="ES / MES 時用這一列")
+tjTxTh    = input.float(40.0, "TXF 門檻　一般", minval=0, group=grpT, inline="ttx")
+tjTxSt    = input.float(80.0, "強勢", minval=0, group=grpT, inline="ttx", tooltip="TXF / MXF 時用這一列")
 
 // ═════════════════ 1 分亞洲盤快訊（預設關閉，獨立開關）═════════════════
 // 回測（NQ 1 分 K，一年）：參數 (40, 0, 13, 1)、Trend Judge 強趨勢、1 小時同向、只在美東 20:00–03:00，停利 1R：
@@ -149,8 +153,12 @@ plot(sellSig ? 1 : 0, "SELL 訊號", display=display.data_window)
 
 // ═════════════════ 過濾快訊（預設關閉）═════════════════
 // Trend Judge 方向（內建）：同 Trend Judge 指標的算法。5 秒 / 15 秒 EMA 的差值，每 2 分鐘鎖定一次
-float  tjTh    = tjNqTh
-float  tjSt    = tjNqSt
+string tjRoot  = syminfo.root != "" ? syminfo.root : syminfo.ticker
+bool   tjIsNQ  = str.contains(tjRoot, "NQ")
+bool   tjIsES  = not tjIsNQ and str.contains(tjRoot, "ES")
+bool   tjIsTXF = str.contains(tjRoot, "TXF") or str.contains(tjRoot, "MXF")
+float  tjTh    = tjIsNQ ? tjNqTh : tjIsES ? tjEsTh : tjIsTXF ? tjTxTh : na
+float  tjSt    = tjIsNQ ? tjNqSt : tjIsES ? tjEsSt : tjIsTXF ? tjTxSt : na
 tjFastArr = request.security_lower_tf(syminfo.tickerid, str.tostring(tjFastS) + "S", ta.ema(close, tjEmaLen))
 tjSlowArr = request.security_lower_tf(syminfo.tickerid, str.tostring(tjSlowS) + "S", ta.ema(close, tjEmaLen))
 var float tjMaFast = na
@@ -165,7 +173,7 @@ if tjNewWin and not na(tjMaFast) and not na(tjMaSlow)
     tjDiff := tjMaFast - tjMaSlow
 int   tjDirI   = na(tjDiff) ? 0 : tjDiff > tjSt ? 2 : tjDiff > tjTh ? 1 : tjDiff < -tjSt ? -2 : tjDiff < -tjTh ? -1 : 0
 float tjDir    = tjDirI
-bool  tjLinked = not na(tjDiff)
+bool  tjLinked = not na(tjDiff) and not na(tjTh)    // 不支援的商品沒有門檻，過濾一律不通過
 // 過濾快訊的 Trend Judge 條件
 int  tjNeed   = tjMode == "有強趨勢" ? 2 : 1
 bool tjRange  = tjMode == "震盪區間"
@@ -266,13 +274,11 @@ plot(aSell ? 1 : 0, "SELL 亞洲盤", display=display.data_window)
 plot(aStop, "亞洲盤停損", display=display.data_window)
 plot(aTgt, "亞洲盤目標", display=display.data_window)
 
-// ═════════════════ 不是 NQ 的提示 ═════════════════
-// 門檻是 NQ 點數，放在其他商品上 Trend Judge 方向會不準，所以在圖上提示
-string symRoot = syminfo.root != "" ? syminfo.root : syminfo.ticker
-bool   isNQ    = str.contains(symRoot, "NQ")
+// ═════════════════ 不支援商品的提示 ═════════════════
+// 門檻只有 NQ / ES / TXF 三組，其他商品沒有門檻（Trend Judge 一律算 MIX），所以在圖上提示
 var table warnTbl = table.new(position.top_right, 1, 1)
-if barstate.islast and not isNQ
-    table.cell(warnTbl, 0, 0, "Remi Superb 是 NQ 專用（NQ / MNQ）\n目前商品：" + syminfo.ticker + "，Trend Judge 門檻不適用", text_color=color.white, bgcolor=color.new(color.red, 15), text_size=size.normal)
+if barstate.islast and not (tjIsNQ or tjIsES or tjIsTXF)
+    table.cell(warnTbl, 0, 0, "Remi Superb 只支援 NQ / ES / TXF（含 MNQ、MES、MXF）\n目前商品：" + syminfo.ticker + "，Trend Judge 門檻不適用", text_color=color.white, bgcolor=color.new(color.red, 15), text_size=size.normal)
 
 // ═════════════════ 快訊（作多、做空分開）═════════════════
 alertcondition(buySig, "Remi Superb Buy", '{{ticker}} Remi Superb Buy｜{{close}}')
