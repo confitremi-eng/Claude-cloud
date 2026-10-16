@@ -39,8 +39,7 @@ lineWidth = input.int(2, "線寬", minval=1, maxval=4, group=grpA)
 // 規則來自 NQ 2 分 K 的一年回測：訊號要跟 Trend Judge、1 小時趨勢同向，停損不能太小，也不在數據、開收盤、亞洲盤時段
 grpF      = "過濾快訊（預設關閉，不影響原本訊號）"
 filtOn    = input.bool(true, "啟用過濾快訊", group=grpF, tooltip="開：「Remi BUY（過濾）」等快訊條件只在訊號通過下面勾選的過濾時成立。原本的訊號、標籤和快訊都不變。規則來自 NQ 2 分 K 的一年回測，見 remis_buy_sell.md")
-useTJ     = input.bool(true, "Trend Judge 同向", group=grpF, inline="tj")
-tjSrc     = input.source(close, "", group=grpF, inline="tj", tooltip="先把 Trend Judge 加到同一張圖，再在這裡選 Trend Judge 的「趨勢方向」（-2 到 2）。不要選「有趨勢」「多方趨勢」這些 0/1 的條件，那樣賣訊永遠不會成立。買要 UP 或 強UP（≥ 1），賣要 DOWN 或 強Down（≤ -1）。沒選或可能選錯時右下角會提示")
+useTJ     = input.bool(true, "Trend Judge 同向", group=grpF, tooltip="用下面「Trend Judge（內建）」算的趨勢方向，跟 Trend Judge 指標同一套算法，不用另外加 Trend Judge 或選來源")
 tjMode    = input.string("有趨勢（一般 + 強）", "Trend Judge 條件", options=["有趨勢（一般 + 強）", "有強趨勢", "震盪區間"], group=grpF, tooltip="有趨勢：買要 UP 或 強UP，賣要 DOWN 或 強Down。有強趨勢：買要 強UP，賣要 強Down。震盪區間：Trend Judge 是 MIX（沒有趨勢）時才發，買賣都一樣。回測只有前兩種是正的，震盪區間是虧的")
 use1h     = input.bool(true, "1 小時趨勢同向（EMA 長度）", group=grpF, inline="h1")
 h1Len     = input.int(20, "", minval=1, group=grpF, inline="h1", tooltip="看上一根已收完的 1 小時 K：買要收盤在 1 小時 EMA 之上，賣要在之下（等同 EMA 正在上升 / 下降）")
@@ -60,11 +59,21 @@ fSellCol  = input.color(#F23645, "", group=grpF, inline="fs", tooltip="填一般
 markSize  = input.string("中", "符號大小", options=["小", "中", "大"], group=grpF, inline="ms")
 markLines = input.int(2, "離箭頭（半行）", minval=0, maxval=12, group=grpF, inline="ms", tooltip="符號離原本箭頭的距離，每加 1 往外移半個符號高度。0 會蓋在箭頭上；跟箭頭重疊就加大，離太遠就減小。原本訊號樣式選「大」時通常要再多 1–2。兩種快訊共用")
 
+// ═════════════════ Trend Judge（內建）═════════════════
+// 跟 Trend Judge 指標同一套算法：5 秒 / 15 秒 EMA 1130 的差值，每 2 分鐘鎖定，超過門檻算趨勢、超過強勢門檻算強趨勢。需要秒級資料（Premium）
+grpT      = "Trend Judge（內建，過濾和亞洲盤快訊共用）"
+tjEmaLen  = input.int(1130, "EMA 長度", minval=1, group=grpT)
+tjFastS   = input.int(5, "快線秒數", minval=1, group=grpT, inline="tjs")
+tjSlowS   = input.int(15, "慢線秒數", minval=1, group=grpT, inline="tjs")
+tjAuto    = input.bool(true, "自動偵測標的門檻（NQ 20 / 40、ES 4 / 8、TXF 40 / 80）", group=grpT)
+tjThMan   = input.float(20.0, "手動門檻", group=grpT, inline="tjm")
+tjStMan   = input.float(40.0, "強勢門檻", group=grpT, inline="tjm", tooltip="不是 NQ / ES / TXF（例如 QQQ）或關掉自動偵測時用。NQ 的 20 / 40 點約等於 QQQ 的 0.4 / 0.8")
+
 // ═════════════════ 1 分亞洲盤快訊（預設關閉，獨立開關）═════════════════
 // 回測（NQ 1 分 K，一年）：參數 (40, 0, 13, 1)、Trend Judge 強趨勢、1 小時同向、只在美東 20:00–03:00，停利 1R：
 // 91 筆，勝率 60.4%，每筆 +0.127R。用自己的階段 / EMA，跟上面的訊號和過濾快訊互不影響
 grpX      = "1 分亞洲盤快訊（預設關閉，獨立開關）"
-asiaOn    = input.bool(false, "啟用 1 分亞洲盤快訊", group=grpX, tooltip="開：多出「Remi 亞洲盤 BUY」等快訊條件。訊號用下面自己的階段和 EMA 另外計算，只在美東 20:00–03:00（台灣夏令 08:00–15:00、冬令 09:00–16:00）成立。Trend Judge 來源和 1 小時 EMA 長度共用上面「過濾快訊」的設定")
+asiaOn    = input.bool(false, "啟用 1 分亞洲盤快訊", group=grpX, tooltip="開：多出「Remi 亞洲盤 BUY」等快訊條件。訊號用下面自己的階段和 EMA 另外計算，只在美東 20:00–03:00（台灣夏令 08:00–15:00、冬令 09:00–16:00）成立。Trend Judge 用上面「Trend Judge（內建）」的計算，1 小時 EMA 長度共用「過濾快訊」的設定")
 xStage    = input.int(40, "階段", minval=2, group=grpX)
 xEmaLen   = input.int(13, "Ema number", minval=1, group=grpX)
 xTjMode   = input.string("有強趨勢", "Trend Judge 條件", options=["有強趨勢", "有趨勢（一般 + 強）", "震盪區間"], group=grpX, tooltip="有強趨勢：買要 強UP、賣要 強Down（回測停利 1R 勝率 60.4%）。有趨勢：UP / 強UP、DOWN / 強Down 都算（56.7%）。震盪區間：Trend Judge 是 MIX 時才發，沒有回測支持")
@@ -139,20 +148,28 @@ plot(buySig ? 1 : 0, "BUY 訊號", display=display.data_window)
 plot(sellSig ? 1 : 0, "SELL 訊號", display=display.data_window)
 
 // ═════════════════ 過濾快訊（預設關閉）═════════════════
-// Trend Judge 方向：來源還是預設的 K 棒價格時，當成沒設定
-float tjDir    = tjSrc
-bool  tjLinked = not na(tjDir) and math.abs(tjDir) <= 2 and tjDir == math.round(tjDir)
-// 選成「有趨勢」這類 0/1 條件時只會出現 0 和 1：一段時間都沒出現負值或 2，就提示可能選錯
-var int  tjBars    = 0
-var bool tjSeenNeg = false
-var bool tjSeenTwo = false
-if tjLinked
-    tjBars += 1
-    if tjDir < 0
-        tjSeenNeg := true
-    if math.abs(tjDir) == 2
-        tjSeenTwo := true
-bool tjSuspect = tjBars > 300 and not tjSeenNeg and not tjSeenTwo
+// Trend Judge 方向（內建）：同 Trend Judge 指標的算法。5 秒 / 15 秒 EMA 的差值，每 2 分鐘鎖定一次
+string tjRoot  = syminfo.root != "" ? syminfo.root : syminfo.ticker
+bool   tjIsNQ  = str.contains(tjRoot, "NQ")
+bool   tjIsES  = str.contains(tjRoot, "ES")
+bool   tjIsTXF = str.contains(tjRoot, "TXF") or str.contains(tjRoot, "MXF")
+float  tjTh    = tjAuto and tjIsNQ ? 20.0 : tjAuto and tjIsES ? 4.0 : tjAuto and tjIsTXF ? 40.0 : tjThMan
+float  tjSt    = tjAuto and tjIsNQ ? 40.0 : tjAuto and tjIsES ? 8.0 : tjAuto and tjIsTXF ? 80.0 : tjStMan
+tjFastArr = request.security_lower_tf(syminfo.tickerid, str.tostring(tjFastS) + "S", ta.ema(close, tjEmaLen))
+tjSlowArr = request.security_lower_tf(syminfo.tickerid, str.tostring(tjSlowS) + "S", ta.ema(close, tjEmaLen))
+var float tjMaFast = na
+var float tjMaSlow = na
+if array.size(tjFastArr) > 0
+    tjMaFast := array.last(tjFastArr)
+if array.size(tjSlowArr) > 0
+    tjMaSlow := array.last(tjSlowArr)
+var float tjDiff = na
+bool tjNewWin = ta.change(time("2")) != 0
+if tjNewWin and not na(tjMaFast) and not na(tjMaSlow)
+    tjDiff := tjMaFast - tjMaSlow
+int   tjDirI   = na(tjDiff) ? 0 : tjDiff > tjSt ? 2 : tjDiff > tjTh ? 1 : tjDiff < -tjSt ? -2 : tjDiff < -tjTh ? -1 : 0
+float tjDir    = tjDirI
+bool  tjLinked = not na(tjDiff)
 // 過濾快訊的 Trend Judge 條件
 int  tjNeed   = tjMode == "有強趨勢" ? 2 : 1
 bool tjRange  = tjMode == "震盪區間"
@@ -207,6 +224,7 @@ if showFMark and fBuy
     drawBuyMark(fBuyTxt, fBuyCol)
 if showFMark and fSell
     drawSellMark(fSellTxt, fSellCol)
+plot(tjDir, "內建 TJ 方向", display=display.data_window)
 plot(fBuy ? 1 : 0, "BUY 過濾", display=display.data_window)
 plot(fSell ? 1 : 0, "SELL 過濾", display=display.data_window)
 plot(fStop, "過濾停損", display=display.data_window)
@@ -251,16 +269,6 @@ plot(aBuy ? 1 : 0, "BUY 亞洲盤", display=display.data_window)
 plot(aSell ? 1 : 0, "SELL 亞洲盤", display=display.data_window)
 plot(aStop, "亞洲盤停損", display=display.data_window)
 plot(aTgt, "亞洲盤目標", display=display.data_window)
-
-// 開了 Trend Judge 過濾，但還沒選來源：右下角提示
-var table fWarn = table.new(position.bottom_right, 1, 1)
-if barstate.islast
-    if ((filtOn and useTJ) or asiaOn) and not tjLinked
-        table.cell(fWarn, 0, 0, "過濾 / 亞洲盤快訊：請在設定選 Trend Judge 的「趨勢方向」", text_color=color.white, bgcolor=color.new(color.red, 20), text_size=size.small)
-    else if ((filtOn and useTJ) or asiaOn) and tjSuspect
-        table.cell(fWarn, 0, 0, "過濾 / 亞洲盤快訊：Trend Judge 來源可能選錯，要選「趨勢方向」，不是「有趨勢」", text_color=color.white, bgcolor=color.new(color.orange, 20), text_size=size.small)
-    else
-        table.clear(fWarn, 0, 0)
 
 // ═════════════════ 快訊 ═════════════════
 alertcondition(buySig, "Remi BUY", '{{ticker}} Remi BUY｜{{close}}')
