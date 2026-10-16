@@ -2,7 +2,7 @@
 
 用 NQ 1 分 K 真實資料檢查 BO Signals 的買賣訊號有沒有賺錢空間。結果整理在 [../breakout_signals.md](../breakout_signals.md) 第 3 節。
 
-`rbs/` 是 Remi's Buy/Sell 的研究程式（NQ ＋ ES、Trend Judge 趨勢過濾），結果整理在 [../remis_buy_sell.md](../remis_buy_sell.md)。
+`rbs/` 是先前「Trend Judge 強趨勢 ＋ 突破」版 Remi's Buy/Sell 的研究程式（NQ ＋ ES）。那一版的程式和說明在 [commit 46df82e](https://github.com/confitremi-eng/Claude-cloud/tree/46df82ecbdc126a5bca6cb04bb15331e4de4659c/indicators)；現在的 Remi's Buy/Sell 已改成仿原版買賣訊號的版本，`port_rbs.py` 比對的是舊版。
 
 > **注意**：getdata-finance 9/3 版的樣本有 13 天假價格（8/3–8/14、5/25、6/19、7/3）。`rbs/` 改用下面「乾淨資料」那一段做出來的檔案；BO Signals 的主表也已經用乾淨資料重跑過。
 
