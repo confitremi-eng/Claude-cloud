@@ -67,6 +67,7 @@ python3 indicators/backtest/rbs/build_data.py indicators/backtest/data/raw/NQ_ol
 | `port_rbs.py` | 把 `remis_buy_sell.pine` 逐行改寫，跟研究規則逐筆比對；分鐘換算的趨勢一致率 |
 | `check_tj.py` | Trend Judge 各狀態所佔比例 |
 | `trend_quadrants.py` | 現在的 Remi's Buy/Sell 按訊號那根的 Trend Judge 狀態分組（強UP / UP + Buy、強Down / DOWN + Sell 等），跟不分趨勢比，NQ / ES 1 分、2 分 |
+| `trend_quadrants_tv.py` | 同樣的分組，目標 1R / 1.5R / 2R / 3R，用 TradingView 匯出的 NQ1! 1 分、2 分 Remi's Buy/Sell 驗證（`clean` 改跑乾淨資料） |
 | `build_data.py` | 從兩個版本的樣本做出乾淨資料 |
 | `nqlab.py`、`nqlab_check.py` | NQ 研究用的快速回測（numba），以及跟 `rbs.py` 逐筆比對 |
 | `nq_stage1.py`、`nq_diag.py` | NQ 第一階段：一次只改一個參數；按時段、趨勢強度、效率比分組 |
