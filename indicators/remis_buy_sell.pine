@@ -41,6 +41,7 @@ grpF      = "過濾快訊（預設關閉，不影響原本訊號）"
 filtOn    = input.bool(true, "啟用過濾快訊", group=grpF, tooltip="開：「Remi BUY（過濾）」等快訊條件只在訊號通過下面勾選的過濾時成立。原本的訊號、標籤和快訊都不變。規則來自 NQ 2 分 K 的一年回測，見 remis_buy_sell.md")
 useTJ     = input.bool(true, "Trend Judge 同向", group=grpF, inline="tj")
 tjSrc     = input.source(close, "", group=grpF, inline="tj", tooltip="先把 Trend Judge 加到同一張圖，再在這裡選 Trend Judge 的「趨勢方向」（-2 到 2）。不要選「有趨勢」「多方趨勢」這些 0/1 的條件，那樣賣訊永遠不會成立。買要 UP 或 強UP（≥ 1），賣要 DOWN 或 強Down（≤ -1）。沒選或可能選錯時右下角會提示")
+tjMode    = input.string("有趨勢（一般 + 強）", "Trend Judge 條件", options=["有趨勢（一般 + 強）", "有強趨勢", "震盪區間"], group=grpF, tooltip="有趨勢：買要 UP 或 強UP，賣要 DOWN 或 強Down。有強趨勢：買要 強UP，賣要 強Down。震盪區間：Trend Judge 是 MIX（沒有趨勢）時才發，買賣都一樣。回測只有前兩種是正的，震盪區間是虧的")
 use1h     = input.bool(true, "1 小時趨勢同向（EMA 長度）", group=grpF, inline="h1")
 h1Len     = input.int(20, "", minval=1, group=grpF, inline="h1", tooltip="看上一根已收完的 1 小時 K：買要收盤在 1 小時 EMA 之上，賣要在之下（等同 EMA 正在上升 / 下降）")
 useRisk   = input.bool(true, "停損 ≥ ATR ×", group=grpF, inline="rk")
@@ -50,11 +51,13 @@ avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=g
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpF, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
 avoidAsia = input.bool(true, "避開美東 20:00–03:00（亞洲盤）", group=grpF, tooltip="台灣時間：夏令 08:00–15:00，冬令 09:00–16:00")
 tgtR      = input.float(2.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpF, tooltip="快訊訊息會附上停損價，和這個倍數的目標價。回測用 2R")
-showFMark = input.bool(true, "圖上標出通過過濾的訊號", group=grpF, inline="fm", tooltip="在訊號 K 棒外側寫上右邊這個字（買在下方、賣在上方），可以填 Emoji 或文字，只在啟用過濾快訊時出現")
-fMarkTxt  = input.string("⭐", "", group=grpF, inline="fm")
-fMarkCol  = input.color(#FFD600, "", group=grpF, inline="fm", tooltip="填一般文字時的顏色，Emoji 用它自己的顏色")
-markSize  = input.string("中", "標記大小", options=["小", "中", "大"], group=grpF)
-markGap   = input.float(1.0, "標記離 K 棒（ATR 倍數）", minval=0, step=0.25, group=grpF, tooltip="標記畫在最低價下方（賣：最高價上方）這個倍數的 ATR，避開原本的買賣標籤。兩種快訊的標記共用，大小也共用")
+showFMark = input.bool(true, "圖上標出通過過濾的訊號", group=grpF, tooltip="在原本的買賣箭頭外側寫上下面的符號：買在箭頭下方、賣在箭頭上方。可以填 Emoji 或文字，只在啟用過濾快訊時出現")
+fBuyTxt   = input.string("⭐", "買訊符號", group=grpF, inline="fb")
+fBuyCol   = input.color(#36FE02, "", group=grpF, inline="fb", tooltip="填一般文字時的顏色，Emoji 用它自己的顏色")
+fSellTxt  = input.string("🔻", "賣訊符號", group=grpF, inline="fs")
+fSellCol  = input.color(#F23645, "", group=grpF, inline="fs", tooltip="填一般文字時的顏色，Emoji 用它自己的顏色")
+markSize  = input.string("中", "符號大小", options=["小", "中", "大"], group=grpF, inline="ms")
+markLines = input.int(2, "離箭頭（空行數）", minval=0, maxval=6, group=grpF, inline="ms", tooltip="符號跟原本箭頭之間空幾行。跟箭頭重疊就加大，離太遠就減小；原本的訊號樣式選「大」時通常要 3 行。兩種快訊共用")
 
 // ═════════════════ 1 分亞洲盤快訊（預設關閉，獨立開關）═════════════════
 // 回測（NQ 1 分 K，一年）：參數 (40, 0, 13, 1)、Trend Judge 強趨勢、1 小時同向、只在美東 20:00–03:00，停利 1R：
@@ -63,10 +66,10 @@ grpX      = "1 分亞洲盤快訊（預設關閉，獨立開關）"
 asiaOn    = input.bool(false, "啟用 1 分亞洲盤快訊", group=grpX, tooltip="開：多出「Remi 亞洲盤 BUY」等快訊條件。訊號用下面自己的階段和 EMA 另外計算，只在美東 20:00–03:00（台灣夏令 08:00–15:00、冬令 09:00–16:00）成立。Trend Judge 來源和 1 小時 EMA 長度共用上面「過濾快訊」的設定")
 xStage    = input.int(40, "階段", minval=2, group=grpX)
 xEmaLen   = input.int(13, "Ema number", minval=1, group=grpX)
-xTjMode   = input.string("強趨勢", "Trend Judge", options=["強趨勢", "順勢（一般 + 強）"], group=grpX, tooltip="強趨勢：買要 強UP、賣要 強Down。順勢：UP / 強UP、DOWN / 強Down 都算（回測停利 1R 勝率 56.7%）")
+xTjMode   = input.string("有強趨勢", "Trend Judge 條件", options=["有強趨勢", "有趨勢（一般 + 強）", "震盪區間"], group=grpX, tooltip="有強趨勢：買要 強UP、賣要 強Down（回測停利 1R 勝率 60.4%）。有趨勢：UP / 強UP、DOWN / 強Down 都算（56.7%）。震盪區間：Trend Judge 是 MIX 時才發，沒有回測支持")
 xUse1h    = input.bool(true, "1 小時趨勢同向", group=grpX)
 xTgtR     = input.float(1.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpX, tooltip="回測用 1R")
-xShow     = input.bool(true, "圖上標出", group=grpX, inline="xm", tooltip="在訊號 K 棒外側寫上右邊這個字，可以填 Emoji 或文字，只在啟用時出現。距離和大小用上面過濾快訊的設定")
+xShow     = input.bool(true, "圖上標出", group=grpX, inline="xm", tooltip="在原本的買賣箭頭外側寫上右邊這個字（買、賣共用），可以填 Emoji 或文字，只在啟用時出現。大小和空行數用上面過濾快訊的設定")
 xMarkTxt  = input.string("💎", "", group=grpX, inline="xm")
 xMarkCol  = input.color(#00E5FF, "", group=grpX, inline="xm", tooltip="填一般文字時的顏色")
 
@@ -149,6 +152,11 @@ if tjLinked
     if math.abs(tjDir) == 2
         tjSeenTwo := true
 bool tjSuspect = tjBars > 300 and not tjSeenNeg and not tjSeenTwo
+// 過濾快訊的 Trend Judge 條件
+int  tjNeed   = tjMode == "有強趨勢" ? 2 : 1
+bool tjRange  = tjMode == "震盪區間"
+bool tjBuyOk  = tjLinked and (tjRange ? tjDir == 0 : tjDir >= tjNeed)
+bool tjSellOk = tjLinked and (tjRange ? tjDir == 0 : tjDir <= -tjNeed)
 
 // 1 小時趨勢：上一根已收完的 1 小時 K，不重繪
 h1Vals() =>
@@ -175,22 +183,28 @@ bool inGlbx  = (etMin >= 1005 and etMin < 1020) or (etMin >= 1080 and etMin < 11
 bool inAsia  = etMin >= 1200 or etMin < 180                                                        // 20:00–03:00
 bool timeOk  = not (avoidEvt and (inData or inFomc or inOpen or inClose or inGlbx)) and not (avoidAsia and inAsia)
 
-bool buyPass  = (not useTJ or (tjLinked and tjDir >= 1)) and (not use1h or (not na(h1Ema) and h1Close > h1Ema)) and (not useRisk or (not na(atrPrev) and close - buyStop >= riskMult * atrPrev)) and timeOk
-bool sellPass = (not useTJ or (tjLinked and tjDir <= -1)) and (not use1h or (not na(h1Ema) and h1Close < h1Ema)) and (not useRisk or (not na(atrPrev) and sellStop - close >= riskMult * atrPrev)) and timeOk
+bool buyPass  = (not useTJ or tjBuyOk) and (not use1h or (not na(h1Ema) and h1Close > h1Ema)) and (not useRisk or (not na(atrPrev) and close - buyStop >= riskMult * atrPrev)) and timeOk
+bool sellPass = (not useTJ or tjSellOk) and (not use1h or (not na(h1Ema) and h1Close < h1Ema)) and (not useRisk or (not na(atrPrev) and sellStop - close >= riskMult * atrPrev)) and timeOk
 bool fBuy  = filtOn and buySig and buyPass
 bool fSell = filtOn and sellSig and sellPass
 
 float fStop = fBuy ? buyStop : fSell ? sellStop : na
 float fTgt  = na(fStop) ? na : close + tgtR * (close - fStop)
 // 標記畫在訊號 K 棒外側（買：最低價下方，賣：最高價上方），跟原本的標籤錯開
-float markOff = na(atrPrev) ? 0.0 : markGap * atrPrev
+// 符號貼在原本箭頭的同一個位置（K 棒下方 / 上方），再用空行往外推，所以縮放圖表也不會跑到箭頭裡面
 markSz = markSize == "小" ? size.small : markSize == "大" ? size.large : size.normal
-drawMark(y, txt, col) =>
-    label.new(bar_index, y, txt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_none, textcolor=col, size=markSz)
+string markPad = ""
+if markLines > 0
+    for k = 1 to markLines
+        markPad := markPad + "\n"
+drawBuyMark(txt, col) =>
+    label.new(bar_index, low, markPad + txt, xloc=xloc.bar_index, yloc=yloc.belowbar, style=label.style_label_up, color=color.new(color.black, 100), textcolor=col, size=markSz)
+drawSellMark(txt, col) =>
+    label.new(bar_index, high, txt + markPad, xloc=xloc.bar_index, yloc=yloc.abovebar, style=label.style_label_down, color=color.new(color.black, 100), textcolor=col, size=markSz)
 if showFMark and fBuy
-    drawMark(low - markOff, fMarkTxt, fMarkCol)
+    drawBuyMark(fBuyTxt, fBuyCol)
 if showFMark and fSell
-    drawMark(high + markOff, fMarkTxt, fMarkCol)
+    drawSellMark(fSellTxt, fSellCol)
 plot(fBuy ? 1 : 0, "BUY 過濾", display=display.data_window)
 plot(fSell ? 1 : 0, "SELL 過濾", display=display.data_window)
 plot(fStop, "過濾停損", display=display.data_window)
@@ -218,18 +232,19 @@ else if xNewHigh
     xRefLow  := low
     xArmSell := true
 
-int  xNeed  = xTjMode == "強趨勢" ? 2 : 1
-bool xBuyOk  = tjLinked and tjDir >= xNeed and (not xUse1h or (not na(h1Ema) and h1Close > h1Ema)) and inAsia
-bool xSellOk = tjLinked and tjDir <= -xNeed and (not xUse1h or (not na(h1Ema) and h1Close < h1Ema)) and inAsia
+int  xNeed  = xTjMode == "有強趨勢" ? 2 : 1
+bool xRange = xTjMode == "震盪區間"
+bool xBuyOk  = tjLinked and (xRange ? tjDir == 0 : tjDir >= xNeed) and (not xUse1h or (not na(h1Ema) and h1Close > h1Ema)) and inAsia
+bool xSellOk = tjLinked and (xRange ? tjDir == 0 : tjDir <= -xNeed) and (not xUse1h or (not na(h1Ema) and h1Close < h1Ema)) and inAsia
 bool aBuy  = asiaOn and xTrigBuy and close > xEma and barOk and xBuyOk
 bool aSell = asiaOn and xTrigSell and close < xEma and barOk and xSellOk
 
 float aStop = aBuy ? buyStop : aSell ? sellStop : na
 float aTgt  = na(aStop) ? na : close + xTgtR * (close - aStop)
 if xShow and aBuy
-    drawMark(low - markOff, xMarkTxt, xMarkCol)
+    drawBuyMark(xMarkTxt, xMarkCol)
 if xShow and aSell
-    drawMark(high + markOff, xMarkTxt, xMarkCol)
+    drawSellMark(xMarkTxt, xMarkCol)
 plot(aBuy ? 1 : 0, "BUY 亞洲盤", display=display.data_window)
 plot(aSell ? 1 : 0, "SELL 亞洲盤", display=display.data_window)
 plot(aStop, "亞洲盤停損", display=display.data_window)
