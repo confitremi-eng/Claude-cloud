@@ -52,6 +52,18 @@ avoidAsia = input.bool(true, "避開美東 20:00–03:00（亞洲盤）", group=
 tgtR      = input.float(2.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpF, tooltip="快訊訊息會附上停損價，和這個倍數的目標價。回測用 2R")
 showFMark = input.bool(true, "圖上標出通過過濾的訊號", group=grpF, tooltip="在圖的最下方畫小三角形，只在啟用過濾快訊時出現")
 
+// ═════════════════ 1 分亞洲盤快訊（預設關閉，獨立開關）═════════════════
+// 回測（NQ 1 分 K，一年）：參數 (40, 0, 13, 1)、Trend Judge 強趨勢、1 小時同向、只在美東 20:00–03:00，停利 1R：
+// 91 筆，勝率 60.4%，每筆 +0.127R。用自己的階段 / EMA，跟上面的訊號和過濾快訊互不影響
+grpX      = "1 分亞洲盤快訊（預設關閉，獨立開關）"
+asiaOn    = input.bool(false, "啟用 1 分亞洲盤快訊", group=grpX, tooltip="開：多出「Remi 亞洲盤 BUY」等快訊條件。訊號用下面自己的階段和 EMA 另外計算，只在美東 20:00–03:00（台灣夏令 08:00–15:00、冬令 09:00–16:00）成立。Trend Judge 來源和 1 小時 EMA 長度共用上面「過濾快訊」的設定")
+xStage    = input.int(40, "階段", minval=2, group=grpX)
+xEmaLen   = input.int(13, "Ema number", minval=1, group=grpX)
+xTjMode   = input.string("強趨勢", "Trend Judge", options=["強趨勢", "順勢（一般 + 強）"], group=grpX, tooltip="強趨勢：買要 強UP、賣要 強Down。順勢：UP / 強UP、DOWN / 強Down 都算（回測停利 1R 勝率 56.7%）")
+xUse1h    = input.bool(true, "1 小時趨勢同向", group=grpX)
+xTgtR     = input.float(1.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpX, tooltip="回測用 1R")
+xShow     = input.bool(true, "圖上標出", group=grpX, tooltip="在圖的最下方畫小圓點，只在啟用時出現")
+
 // 保險：看不見的 K 棒高 / 低點。萬一指標被放到「無刻度」或別的刻度，自動縮放也跟 K 棒一致，標籤不會漂移
 plot(high, "錨點 高", color=color.new(color.gray, 100), editable=false, display=display.pane)
 plot(low, "錨點 低", color=color.new(color.gray, 100), editable=false, display=display.pane)
@@ -160,11 +172,48 @@ plot(fSell ? 1 : 0, "SELL 過濾", display=display.data_window)
 plot(fStop, "過濾停損", display=display.data_window)
 plot(fTgt, "過濾目標", display=display.data_window)
 
+// ═════════════════ 1 分亞洲盤快訊（預設關閉，獨立開關）═════════════════
+// 自己的波段 / 觸發 / EMA 確認，規則同上面的訊號，只是階段和 EMA 長度另外設
+bool xNewLow  = low < ta.lowest(low, xStage)[1]
+bool xNewHigh = high > ta.highest(high, xStage)[1]
+var float xRefHigh = na
+var float xRefLow  = na
+var bool  xArmBuy  = false
+var bool  xArmSell = false
+float xEma      = ta.ema(close, xEmaLen)
+bool  xTrigBuy  = xArmBuy and close > xRefHigh
+bool  xTrigSell = xArmSell and close < xRefLow
+if xTrigBuy
+    xArmBuy := false
+else if xNewLow
+    xRefHigh := high
+    xArmBuy  := true
+if xTrigSell
+    xArmSell := false
+else if xNewHigh
+    xRefLow  := low
+    xArmSell := true
+
+int  xNeed  = xTjMode == "強趨勢" ? 2 : 1
+bool xBuyOk  = tjLinked and tjDir >= xNeed and (not xUse1h or (not na(h1Ema) and h1Close > h1Ema)) and inAsia
+bool xSellOk = tjLinked and tjDir <= -xNeed and (not xUse1h or (not na(h1Ema) and h1Close < h1Ema)) and inAsia
+bool aBuy  = asiaOn and xTrigBuy and close > xEma and barOk and xBuyOk
+bool aSell = asiaOn and xTrigSell and close < xEma and barOk and xSellOk
+
+float aStop = aBuy ? buyStop : aSell ? sellStop : na
+float aTgt  = na(aStop) ? na : close + xTgtR * (close - aStop)
+plotshape(xShow and aBuy, "亞洲盤買", shape.circle, location.bottom, color=buyColor, size=size.tiny, editable=false)
+plotshape(xShow and aSell, "亞洲盤賣", shape.circle, location.bottom, color=sellColor, size=size.tiny, editable=false)
+plot(aBuy ? 1 : 0, "BUY 亞洲盤", display=display.data_window)
+plot(aSell ? 1 : 0, "SELL 亞洲盤", display=display.data_window)
+plot(aStop, "亞洲盤停損", display=display.data_window)
+plot(aTgt, "亞洲盤目標", display=display.data_window)
+
 // 開了 Trend Judge 過濾，但還沒選來源：右下角提示
 var table fWarn = table.new(position.bottom_right, 1, 1)
 if barstate.islast
-    if filtOn and useTJ and not tjLinked
-        table.cell(fWarn, 0, 0, "過濾快訊：請在設定選 Trend Judge 的「趨勢方向」", text_color=color.white, bgcolor=color.new(color.red, 20), text_size=size.small)
+    if ((filtOn and useTJ) or asiaOn) and not tjLinked
+        table.cell(fWarn, 0, 0, "過濾 / 亞洲盤快訊：請在設定選 Trend Judge 的「趨勢方向」", text_color=color.white, bgcolor=color.new(color.red, 20), text_size=size.small)
     else
         table.clear(fWarn, 0, 0)
 
@@ -177,3 +226,8 @@ alertcondition(buySig or sellSig, "Remi BUY 或 SELL", '{{ticker}} Remi 訊號�
 alertcondition(fBuy, "Remi BUY（過濾）", '{{ticker}} Remi BUY（過濾）｜{{close}}｜停損 {{plot("過濾停損")}}｜目標 {{plot("過濾目標")}}')
 alertcondition(fSell, "Remi SELL（過濾）", '{{ticker}} Remi SELL（過濾）｜{{close}}｜停損 {{plot("過濾停損")}}｜目標 {{plot("過濾目標")}}')
 alertcondition(fBuy or fSell, "Remi BUY 或 SELL（過濾）", '{{ticker}} Remi 過濾訊號｜{{close}}｜停損 {{plot("過濾停損")}}｜目標 {{plot("過濾目標")}}')
+
+// 1 分亞洲盤快訊：要先在設定開啟「啟用 1 分亞洲盤快訊」才會成立
+alertcondition(aBuy, "Remi 亞洲盤 BUY", '{{ticker}} Remi 亞洲盤 BUY｜{{close}}｜停損 {{plot("亞洲盤停損")}}｜目標 {{plot("亞洲盤目標")}}')
+alertcondition(aSell, "Remi 亞洲盤 SELL", '{{ticker}} Remi 亞洲盤 SELL｜{{close}}｜停損 {{plot("亞洲盤停損")}}｜目標 {{plot("亞洲盤目標")}}')
+alertcondition(aBuy or aSell, "Remi 亞洲盤 BUY 或 SELL", '{{ticker}} Remi 亞洲盤訊號｜{{close}}｜停損 {{plot("亞洲盤停損")}}｜目標 {{plot("亞洲盤目標")}}')
