@@ -3,10 +3,11 @@
 // 仿「買賣訊號」（階段 20、Color background 0、Ema number 8、Ema enable 1），全天適用，不分時段、不看其他指標
 //   買：
 //     1. 創前「階段」根新低的那根 K = 波段低點，記下它的最高價
-//     2. 之後第一根收盤站上這個價位的 K 觸發；同一個波段只觸發一次，再創新低就換成新的那根
-//     3. Ema enable 開啟時，觸發那根的收盤也要在 EMA 之上，不然這次不出訊號
+//     2. 之後第一根收盤站上這個價位的 K 觸發（這根本身又創新低也算，比的是上一個波段低點的最高價）
+//     3. 觸發一次就用掉；觸發那根就算又創新低也不重新記，要等下一根新低才重新開始
+//     4. Ema enable 開啟時，觸發那根的收盤也要在 EMA 之上，不然這次不出訊號（機會照樣用掉）
 //   賣：反過來（創新高那根的最低價、收盤跌破、收盤在 EMA 之下）
-// 對照原版截圖的結果：indicators/remis_buy_sell.md
+// 對照原版匯出資料：1m / 2m / 3m / 5m 每根 K 都跟原版一致，見 indicators/remis_buy_sell.md
 indicator("Remi's Buy/Sell", overlay=true)
 
 // ═════════════════ 訊號（同原版）═════════════════
@@ -14,7 +15,7 @@ grpS       = "訊號（同原版）"
 stageLen   = input.int(20, "階段", minval=2, group=grpS, tooltip="創前 N 根新低 / 新高的那根 K，就是波段低點 / 高點。原版是 20")
 emaLen     = input.int(8, "Ema number", minval=1, group=grpS, tooltip="觸發那根 K 的收盤要站上（賣訊：跌破）這條 EMA，當作確認")
 emaEnable  = input.bool(true, "Ema enable", group=grpS, tooltip="開：要通過 EMA 確認才出訊號。關：只看收盤突破")
-emaSrc     = input.source(hl2, "Ema 計算來源", group=grpS, tooltip="EMA 用哪個價格算。對照原版截圖，(高＋低)/2 最吻合；也可以改成收盤價")
+emaSrc     = input.source(close, "Ema 計算來源", group=grpS, tooltip="EMA 用哪個價格算。原版是收盤價（對照原版匯出資料確認）")
 confirmBar = input.bool(true, "K 棒收盤才出訊號", group=grpS, tooltip="開：K 棒收盤後才出現，之後不會移動或消失。歷史 K 棒不受影響")
 
 // ═════════════════ 外觀 ═════════════════
@@ -47,19 +48,19 @@ var bool  armBuy  = false
 var bool  armSell = false
 
 float sigEma  = ta.ema(emaSrc, emaLen)
-bool trigBuy  = not newLow and armBuy and close > refHigh
-bool trigSell = not newHigh and armSell and close < refLow
+bool trigBuy  = armBuy and close > refHigh    // 用上一根為止記下的價位，這根創新低也照樣比
+bool trigSell = armSell and close < refLow
 
-if newLow
+if trigBuy
+    armBuy := false
+else if newLow
     refHigh := high
     armBuy  := true
-else if trigBuy
-    armBuy := false
-if newHigh
+if trigSell
+    armSell := false
+else if newHigh
     refLow  := low
     armSell := true
-else if trigSell
-    armSell := false
 
 // ═════════════════ 訊號 ═════════════════
 bool barOk   = not confirmBar or barstate.isconfirmed

@@ -49,6 +49,7 @@ python3 indicators/backtest/rbs/build_data.py indicators/backtest/data/raw/NQ_ol
 | `variants.py` | 12 種規則改法，4–6 月訓練、7–9 月驗證 |
 | `explore.py` | 順勢訊號設計 × 趨勢判斷 × 出場方式，訓練 / 驗證 |
 | `pineport_v4.py` | 把 Pine 的訊號和回測統計逐行改寫，跟 `bt.py` 逐筆比對 |
+| `remi_export.py` | 現在的 Remi's Buy/Sell（仿原版買賣訊號）：用 TradingView 匯出的 CSV 跟原版逐根比對（`match`），以及用你的停損回測新舊規則（`bt`）。說明見 [../remis_buy_sell.md](../remis_buy_sell.md) 第 3、4 節 |
 
 ### rbs/（Remi's Buy/Sell）
 
@@ -82,6 +83,8 @@ cd indicators/backtest
 python3 base.py
 python3 variants.py
 python3 pineport_v4.py
+python3 remi_export.py match 原版匯出.csv [Remi_1分匯出.csv]
+python3 remi_export.py bt data/NQ_1m_clean.csv
 
 cd rbs
 python3 final_tables.py
