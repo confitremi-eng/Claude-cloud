@@ -527,7 +527,7 @@ BUY、SELL 是分開的條件。要搭配 Trend Judge 時，主條件選 Remi BU
 1. 把 Remi's Buy/Sell 加到圖上。回測是 NQ1! 2 分 K，全天交易時段。
 2. 「過濾快訊」預設已開啟。Trend Judge 方向由設定裡的「Trend Judge（內建）」自己計算，跟 Trend Judge 指標同一套算法（5 秒 / 15 秒 EMA 1130、每 2 分鐘鎖定、NQ 20 / 40 點），不用另外加 Trend Judge 或選來源。
    - 需要秒級資料（TradingView Premium），跟 Trend Judge 指標一樣。
-   - 不是 NQ / ES / TXF（例如 QQQ）時，用「手動門檻 / 強勢門檻」。NQ 的 20 / 40 點約等於 QQQ 的 0.4 / 0.8。
+   - 門檻依圖上的商品自動選用：NQ 手動門檻（一般 20 / 強勢 40）、ES（4 / 8）、TXF（40 / 80），其他商品用「其他標的」（預設 0.4 / 0.8，約等於 QQQ）。每一列都可以改，改了就直接生效。
    - 資料視窗的「內建 TJ 方向」（−2 到 2）可以拿來跟 Trend Judge 指標的「趨勢方向」對照，兩者應該一樣。
 3. 新增快訊：條件選 Remi's Buy/Sell 的過濾快訊，觸發選「每根 K 線收盤時一次」。
 

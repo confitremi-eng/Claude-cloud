@@ -65,9 +65,14 @@ grpT      = "Trend Judge（內建，過濾和亞洲盤快訊共用）"
 tjEmaLen  = input.int(1130, "EMA 長度", minval=1, group=grpT)
 tjFastS   = input.int(5, "快線秒數", minval=1, group=grpT, inline="tjs")
 tjSlowS   = input.int(15, "慢線秒數", minval=1, group=grpT, inline="tjs")
-tjAuto    = input.bool(true, "自動偵測標的門檻（NQ 20 / 40、ES 4 / 8、TXF 40 / 80）", group=grpT)
-tjThMan   = input.float(20.0, "手動門檻", group=grpT, inline="tjm")
-tjStMan   = input.float(40.0, "強勢門檻", group=grpT, inline="tjm", tooltip="不是 NQ / ES / TXF（例如 QQQ）或關掉自動偵測時用。NQ 的 20 / 40 點約等於 QQQ 的 0.4 / 0.8")
+tjNqTh    = input.float(20.0, "NQ 手動門檻　一般", minval=0, group=grpT, inline="tnq")
+tjNqSt    = input.float(40.0, "強勢", minval=0, group=grpT, inline="tnq", tooltip="差值超過「一般」算 UP / DOWN，超過「強勢」算 強UP / 強Down。圖上的商品是 NQ / MNQ 時用這一列")
+tjEsTh    = input.float(4.0, "ES 手動門檻　一般", minval=0, group=grpT, inline="tes")
+tjEsSt    = input.float(8.0, "強勢", minval=0, group=grpT, inline="tes", tooltip="ES / MES 時用這一列")
+tjTxTh    = input.float(40.0, "TXF 手動門檻　一般", minval=0, group=grpT, inline="ttx")
+tjTxSt    = input.float(80.0, "強勢", minval=0, group=grpT, inline="ttx", tooltip="TXF / MXF 時用這一列")
+tjOtTh    = input.float(0.4, "其他標的　一般", minval=0, group=grpT, inline="tot")
+tjOtSt    = input.float(0.8, "強勢", minval=0, group=grpT, inline="tot", tooltip="不是上面三種商品時用這一列。預設約等於 QQQ（NQ 的 20 / 40 點約等於 QQQ 的 0.4 / 0.8）")
 
 // ═════════════════ 1 分亞洲盤快訊（預設關閉，獨立開關）═════════════════
 // 回測（NQ 1 分 K，一年）：參數 (40, 0, 13, 1)、Trend Judge 強趨勢、1 小時同向、只在美東 20:00–03:00，停利 1R：
@@ -153,8 +158,8 @@ string tjRoot  = syminfo.root != "" ? syminfo.root : syminfo.ticker
 bool   tjIsNQ  = str.contains(tjRoot, "NQ")
 bool   tjIsES  = str.contains(tjRoot, "ES")
 bool   tjIsTXF = str.contains(tjRoot, "TXF") or str.contains(tjRoot, "MXF")
-float  tjTh    = tjAuto and tjIsNQ ? 20.0 : tjAuto and tjIsES ? 4.0 : tjAuto and tjIsTXF ? 40.0 : tjThMan
-float  tjSt    = tjAuto and tjIsNQ ? 40.0 : tjAuto and tjIsES ? 8.0 : tjAuto and tjIsTXF ? 80.0 : tjStMan
+float  tjTh    = tjIsNQ ? tjNqTh : tjIsES ? tjEsTh : tjIsTXF ? tjTxTh : tjOtTh
+float  tjSt    = tjIsNQ ? tjNqSt : tjIsES ? tjEsSt : tjIsTXF ? tjTxSt : tjOtSt
 tjFastArr = request.security_lower_tf(syminfo.tickerid, str.tostring(tjFastS) + "S", ta.ema(close, tjEmaLen))
 tjSlowArr = request.security_lower_tf(syminfo.tickerid, str.tostring(tjSlowS) + "S", ta.ema(close, tjEmaLen))
 var float tjMaFast = na
