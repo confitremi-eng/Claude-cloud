@@ -1,4 +1,4 @@
-# Remi's Buy/Sell ／ Remi Superb 交接文件（2026-10-16）
+# Remi's Buy/Sell ／ Remi Superb 交接文件（2026-10-17）
 
 給下一個對話用：接手時先讀這份，細節再查 [remis_buy_sell.md](remis_buy_sell.md)。
 
@@ -10,7 +10,7 @@
 | 指標 | 檔案 | 用途 |
 |------|------|------|
 | Remi's Buy/Sell | [remis_buy_sell.pine](remis_buy_sell.pine) | 仿原版「買賣訊號」，加上過濾快訊、1 分亞洲盤快訊。Trend Judge 門檻依商品自動選（NQ 20/40、ES 4/8、TXF 40/80、其他 0.4/0.8） |
-| Remi Superb | [remi_superb.pine](remi_superb.pine) | 以 Remi's Buy/Sell 為底，只支援 NQ / ES / TXF。Trend Judge 門檻：NQ 10 / 35、ES 4 / 8、TXF 30 / 60，預設值照你的設定 |
+| Remi Superb | [remi_superb.pine](remi_superb.pine) | 以 Remi's Buy/Sell 為底，只支援 NQ / ES / TXF。Trend Judge 門檻：NQ 10 / 35、ES 4 / 8、TXF 30 / 60，預設值照你的設定。另有預設關閉的「MIX 區間突破快訊」 |
 | Remi Superb 1m | [remi_superb_1m.pine](remi_superb_1m.pine) | 跟 Remi Superb 一樣，只有 Trend Judge 改用 1 分 K 收盤推算（同回測），不需要秒級資料。用 NQ 一年資料比對，2 分 K 的 Trend Judge 方向跟回測 99.6% 相同 |
 
 兩支都用離線 Pine 檢查器檢查過，沒有語法錯誤。Remi Superb 還沒在 TradingView 上編譯確認。
@@ -62,6 +62,15 @@
 | Remi Superb Buy / Sell | `{{ticker}} Remi Superb Buy｜{{close}}` |
 | Remi Superb Buy / Sell（過濾） | 同上，再附停損價和目標價 |
 | Remi Superb Buy / Sell（亞洲盤） | 同上，再附停損價和目標價 |
+| Remi Superb MIX 區間成形 | 上破買價、下破賣價、停損（中線） |
+| Remi Superb Buy / Sell（MIX 突破） | 突破價、停損、目標（預設 3R） |
+
+**MIX 區間突破快訊**（預設關閉）：Trend Judge 連續 MIX 60 分鐘 → 用這段高低點當區間 → 形成後 60 分鐘內第一次突破 10% 順勢進場，停損在中線。NQ 2 分 K 一年：掛單 3R 每筆 +0.21R；跟過濾快訊一起做，一年 +135R → +205R、回撤不變。說明在 remis_buy_sell.md 第 4、5 節。
+
+**2026-10-17 的研究結論**（細節在 remis_buy_sell.md 第 4 節「Remi Superb 的優化」）：
+- 連虧跟隨機差不多，不是 MIX 或盤整造成；TJ 轉 MIX 出場、連虧暫停都沒用。
+- 「只做趨勢開始後 4 小時內」能把回撤從 35R 降到 12R，但一年少賺約 20R，後半年反而少賺 50R，沒有加進指標。
+- MIX 期間價格沒有收窄，區間上下緣反向做、盤整段改用原始指標都是虧的。
 
 ## 5. 待辦和還沒確認的
 
