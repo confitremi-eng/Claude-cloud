@@ -12,6 +12,7 @@
 | Remi's Buy/Sell | [remis_buy_sell.pine](remis_buy_sell.pine) | 仿原版「買賣訊號」(20, 0, 8, 1)，每根 K 跟原版一致（71 / 71 個訊號）。另有過濾快訊（門檻依商品：NQ 20/40、ES 4/8、TXF 40/80）、1 分亞洲盤快訊。通用版，這次沒再改 |
 | **Remi Superb** | [remi_superb.pine](remi_superb.pine) | **主力**。NQ 2 分 K 優化完成：過濾快訊＋MIX 區間突破快訊，Trend Judge 用秒級資料（要 Premium） |
 | **Remi Superb 1m** | [remi_superb_1m.pine](remi_superb_1m.pine) | 跟 Remi Superb 完全同步，只有 Trend Judge 改用 1 分 K 收盤推算（同回測），不需要 Premium；快訊名稱多「1m」 |
+| **Remi Superb 策略** | [remi_superb_strategy.pine](remi_superb_strategy.pine) | `strategy()` 版，給 TradingView 策略測試器回測和 webhook 自動交易：過濾訊號收盤市價進場、MIX 突破掛停損單（OCO），一次一筆，60 根時間出場、17:00 休市前平倉。Trend Judge 用 1 分 K 推算。說明在 remi_superb.md 第 8 節 |
 
 ## 2. Remi Superb 的最終設定（兩個版本相同）
 
@@ -59,7 +60,8 @@
 
 ## 4. 待辦和還沒確認的
 
-- **TradingView 編譯**：Remi Superb / Remi Superb 1m 這一版還沒在 TradingView 編譯確認，有紅字錯誤要貼回來。
+- **TradingView 編譯**：Remi Superb / Remi Superb 1m / Remi Superb 策略 還沒在 TradingView 編譯確認，有紅字錯誤要貼回來。
+- **策略回測對照**：你會在 TradingView 跑策略回測，結果要跟 remi_superb.md 第 8 節的每月數字比。
 - **前瞻追蹤**：先用 MNQ 小口數或只開快訊觀察，再跟回測比。
 - **ES、TXF 門檻**：ES 要一年資料才能定；TXF 30 / 60 沒有回測。
 - **出場方式**：你的出場方式還沒回答（回測用固定 R ＋ 60 根 K 時間出場）。
@@ -108,6 +110,7 @@
 |------|------|
 | [remi_superb.md](remi_superb.md) | **Remi Superb 完整說明（以 2 分 K 為準）** |
 | [remi_superb.pine](remi_superb.pine) / [remi_superb_1m.pine](remi_superb_1m.pine) | Remi Superb（秒級 TJ / 1 分推算 TJ） |
+| [remi_superb_strategy.pine](remi_superb_strategy.pine) | Remi Superb 策略（回測、自動交易） |
 | [remis_buy_sell.pine](remis_buy_sell.pine) | Remi's Buy/Sell |
 | [remis_buy_sell.md](remis_buy_sell.md) | 原版比對、早期回測分級、所有研究細節、快訊設定 |
 | [breakout_signals.md](breakout_signals.md) | BO Signals（同一套訊號的前身） |
