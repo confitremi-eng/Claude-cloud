@@ -112,6 +112,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `ma_position.py` | 訊號 K 棒相對均線的位置（EMA8/20/50、5 秒 / 15 秒 EMA1130、日線 SMA5），五等分和單一條件 |
 | `superb_matrix.py` | Remi Superb 預設的勝率矩陣：週期 × 1R/1.5R/2R/3R，加不加 EMA1130 距離條件；可換資料檔、門檻、成本 |
 | `streak_study.py` | 連續虧損：跟隨機排列比較、連虧後勝率、進場狀態（TJ 持續時間 / MIX 比例 / 切換、ER、CHOP、ADX…）五等分、過濾條件和停損機制、TJ 轉向出場 |
+| `trend_age.py` | 趨勢時間（TJ 這段趨勢開始多久）：過濾快訊依時間分組、4 小時濾網拿掉的賺 / 虧單；原始指標依趨勢時間和 TJ 狀態；「趨勢段做過濾快訊、盤整段做原始訊號」的組合 |
 | `param_compare.py` | 參數 (20,0,8,1)、(20,0,8,0) EMA 關閉、(30,0,13,1) 在 1 分和 2 分，各順勢層級、四象限、EMA 擋掉的訊號、逐月 |
 | `nqlab.py`、`nqlab_check.py` | NQ 研究用的快速回測（numba），以及跟 `rbs.py` 逐筆比對 |
 | `nq_stage1.py`、`nq_diag.py` | NQ 第一階段：一次只改一個參數；按時段、趨勢強度、效率比分組 |
