@@ -261,6 +261,14 @@ if showFMark and fSell
     drawSellMark(fSellTxt, fSellCol)
 plot(tjDir, "TJ 方向（1 分推算）", display=display.data_window)
 plot(tjDiff, "TJ 差值（1 分推算）", display=display.data_window)
+// 趨勢已持續多久：Trend Judge 進入這段趨勢（UP / 強UP 或 DOWN / 強Down）後的分鐘數，MIX 或轉向就歸零（只在資料視窗顯示）
+var int trendBars = 0
+int trendDir = tjLinked ? (tjDirI > 0 ? 1 : tjDirI < 0 ? -1 : 0) : 0
+if trendDir != 0 and trendDir == nz(trendDir[1])
+    trendBars += 1
+else
+    trendBars := trendDir != 0 ? 1 : 0
+plot(trendBars * timeframe.in_seconds() / 60, "趨勢已持續（分鐘）", display=display.data_window)
 plot(fBuy ? 1 : 0, "BUY 過濾", display=display.data_window)
 plot(fSell ? 1 : 0, "SELL 過濾", display=display.data_window)
 plot(fStop, "過濾停損", display=display.data_window)
