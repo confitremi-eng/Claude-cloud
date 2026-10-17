@@ -104,6 +104,8 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `setup_study.py` | 推薦交易設定的研究：各條件單獨看、1,152 組設定前段挑後段驗、推薦規則（= 過濾快訊）在 1/2/3/5 分、停損位置比較 |
 | `stop_management.py` | 同樣的進場和目標，只換停損規則（收線停損、緩衝、硬停損、保本、移動停損、再進場），順勢 vs 非順勢、1/2/3/5 分 |
 | `session_1m.py` | 1 分 K (40,0,13,1)、(50,0,15,1)：Trend Judge 強 / 一般 / 合計 + 1h，分現金盤、夜盤、亞洲盤；1 分亞洲盤快訊的依據 |
+| `superb_study.py` | Remi Superb 設定（2 分 K）：門檻 20/40 vs 15/35 × 亞洲盤、只做現金盤、現金盤多空分開、停損 ≥ 1 ATR 拿掉 |
+| `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `param_compare.py` | 參數 (20,0,8,1)、(20,0,8,0) EMA 關閉、(30,0,13,1) 在 1 分和 2 分，各順勢層級、四象限、EMA 擋掉的訊號、逐月 |
 | `nqlab.py`、`nqlab_check.py` | NQ 研究用的快速回測（numba），以及跟 `rbs.py` 逐筆比對 |
 | `nq_stage1.py`、`nq_diag.py` | NQ 第一階段：一次只改一個參數；按時段、趨勢強度、效率比分組 |
