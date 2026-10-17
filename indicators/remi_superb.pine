@@ -47,11 +47,13 @@ h1Len     = input.int(20, "", minval=1, group=grpF, inline="h1", tooltip="看上
 useRisk   = input.bool(true, "停損 ≥ ATR ×", group=grpF, inline="rk")
 riskMult  = input.float(1.0, "", minval=0, step=0.1, group=grpF, inline="rk")
 atrLen    = input.int(14, "ATR 長度", minval=1, group=grpF, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）。停損距離小於「倍數 × 上一根的 ATR」就不發")
+useSlow   = input.bool(true, "離 15 秒 EMA1130 ≤ ATR ×", group=grpF, inline="sl")
+slowMult  = input.float(3.0, "", minval=0, step=0.5, group=grpF, inline="sl", tooltip="買：收盤 − 15 秒 EMA1130（Trend Judge 慢線）不超過「倍數 × ATR」；賣反過來。價格已經離慢線太遠（追高 / 追低）就不發，在慢線另一側不受限。ATR 長度跟上面共用。NQ 2 分 K 一年回測：3 ATR 時每筆約從 +0.07R 變 +0.13R（2R）、+0.19R（3R）")
 avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpF, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpF, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
 avoidAsia = input.bool(false, "避開美東 20:00–03:00（亞洲盤）", group=grpF, tooltip="台灣時間：夏令 08:00–15:00，冬令 09:00–16:00")
 avoidCash = input.bool(false, "避開現金盤（台灣夏令 21:30–04:30）", group=grpF, tooltip="美東 09:30–16:30，看 K 棒收盤時間。跟著美國夏令 / 冬令走：台灣時間夏令 21:30–04:30，冬令 22:30–05:30")
-tgtR      = input.float(2.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpF, tooltip="快訊訊息會附上停損價，和這個倍數的目標價。回測用 2R")
+tgtR      = input.float(3.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpF, tooltip="快訊訊息會附上停損價，和這個倍數的目標價。加上 EMA1130 距離條件後，回測 3R 比 2R 好")
 showFMark = input.bool(true, "圖上標出通過過濾的訊號", group=grpF, tooltip="在原本的買賣箭頭外側寫上下面的符號：買在箭頭下方、賣在箭頭上方。可以填 Emoji 或文字，只在啟用過濾快訊時出現")
 fBuyTxt   = input.string("⬆️", "買訊符號", group=grpF, inline="fb")
 fBuyCol   = input.color(#36FE02, "", group=grpF, inline="fb", tooltip="填一般文字時的顏色，Emoji 用它自己的顏色")
@@ -188,6 +190,7 @@ h1Vals() =>
 
 // 停損 = 訊號 K 和前一根的極值，停損距離跟上一根的 ATR 比
 float atrPrev  = ta.atr(atrLen)[1]
+float atrNow   = ta.atr(atrLen)
 float buyStop  = math.min(low, low[1])
 float sellStop = math.max(high, high[1])
 
@@ -206,8 +209,8 @@ bool inAsia  = etMin >= 1200 or etMin < 180                                     
 bool inCash  = etMin >= 570 and etMin < 990                                                       // 09:30–16:30
 bool timeOk  = not (avoidEvt and (inData or inFomc or inOpen or inClose or inGlbx)) and not (avoidAsia and inAsia) and not (avoidCash and inCash)
 
-bool buyPass  = (not useTJ or tjBuyOk) and (not use1h or (not na(h1Ema) and h1Close > h1Ema)) and (not useRisk or (not na(atrPrev) and close - buyStop >= riskMult * atrPrev)) and timeOk
-bool sellPass = (not useTJ or tjSellOk) and (not use1h or (not na(h1Ema) and h1Close < h1Ema)) and (not useRisk or (not na(atrPrev) and sellStop - close >= riskMult * atrPrev)) and timeOk
+bool buyPass  = (not useTJ or tjBuyOk) and (not use1h or (not na(h1Ema) and h1Close > h1Ema)) and (not useRisk or (not na(atrPrev) and close - buyStop >= riskMult * atrPrev)) and (not useSlow or (not na(tjMaSlow) and not na(atrNow) and close - tjMaSlow <= slowMult * atrNow)) and timeOk
+bool sellPass = (not useTJ or tjSellOk) and (not use1h or (not na(h1Ema) and h1Close < h1Ema)) and (not useRisk or (not na(atrPrev) and sellStop - close >= riskMult * atrPrev)) and (not useSlow or (not na(tjMaSlow) and not na(atrNow) and tjMaSlow - close <= slowMult * atrNow)) and timeOk
 bool fBuy  = filtOn and buySig and buyPass
 bool fSell = filtOn and sellSig and sellPass
 
