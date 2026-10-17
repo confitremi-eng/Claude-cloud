@@ -731,9 +731,9 @@ BUY、SELL 是分開的條件。要搭配 Trend Judge 時，主條件選 Remi BU
 - **資料視窗**：多四個數值（BUY 亞洲盤、SELL 亞洲盤、亞洲盤停損、亞洲盤目標）。
 - **持倉**：不追蹤，回測是一次一筆，持倉中再出現的快訊要自己略過。
 
-### MIX 區間突破快訊（Remi Superb，預設關閉，獨立開關）
+### MIX 區間突破快訊（Remi Superb，預設開啟，獨立開關）
 
-第 4 節「Remi Superb 的優化」第 6 點的規則，跟主訊號和過濾快訊互相獨立。只在 NQ 2 分 K 回測過。
+第 4 節「Remi Superb 的優化」第 6 點的規則，跟主訊號和過濾快訊互相獨立。只在 NQ 2 分 K 回測過。Remi Superb 的完整說明（以 2 分 K 為準）在 [remi_superb.md](remi_superb.md)。
 
 **規則**
 

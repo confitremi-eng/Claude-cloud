@@ -1,7 +1,7 @@
 //@version=6
 // Remi Superb 1m（NQ / ES / TXF）：不需要秒級資料的版本
 // Trend Judge 改用 1 分 K 收盤推算（同回測的算法），不用 Premium 的秒級資料，其他跟 Remi Superb 完全一樣
-// 以 Remi's Buy/Sell 為底，Trend Judge 門檻只有 NQ（一般 15、強勢 35）、ES（3、6）、TXF（30、60）三組，其他設定跟原來一樣
+// 以 Remi's Buy/Sell 為底，Trend Judge 門檻只有 NQ（一般 10、強勢 35）、ES（4、8）、TXF（30、60）三組，其他設定跟原來一樣
 // 仿「買賣訊號」（階段 20、Color background 0、Ema number 8、Ema enable 1），全天適用，不分時段、不看其他指標
 //   買：
 //     1. 創前「階段」根新低的那根 K = 波段低點，記下它的最高價
@@ -10,8 +10,11 @@
 //     4. Ema enable 開啟時，觸發那根的收盤也要在 EMA 之上，不然這次不出訊號（機會照樣用掉）
 //   賣：反過來（創新高那根的最低價、收盤跌破、收盤在 EMA 之下）
 // 對照原版匯出資料：1m / 2m / 3m / 5m 每根 K 都跟原版一致，見 indicators/remis_buy_sell.md
-// 另有預設關閉的「過濾快訊」：只多出快訊條件和資料視窗數值，上面的訊號、標籤、快訊都不變
-indicator("Remi Superb 1m", overlay=true, max_labels_count=500)
+// 以 NQ 2 分 K 為準（回測和預設值都是 2 分 K），說明見 indicators/remi_superb.md
+// 「過濾快訊」（預設開）：原本的訊號再加 Trend Judge 同向、1 小時趨勢、停損 ≥ 1 ATR、離 15 秒 EMA1130 ≤ 3 ATR、避開事件時段
+// 「MIX 區間突破快訊」（預設開）：Trend Judge 連續 MIX 60 分鐘後畫出區間，60 分鐘內第一次突破時發快訊
+// 兩種快訊都只多出快訊條件、圖上標記和資料視窗數值，原本的訊號、標籤、快訊都不變
+indicator("Remi Superb 1m", overlay=true, max_labels_count=500, max_boxes_count=500, max_lines_count=500)
 
 // ═════════════════ 訊號（同原版）═════════════════
 grpS       = "訊號（同原版）"
@@ -37,10 +40,10 @@ showLC    = input.bool(false, "Low Close 線", group=grpA, inline="lc", tooltip=
 lcColor   = input.color(#FF5252, "", group=grpA, inline="lc")
 lineWidth = input.int(2, "線寬", minval=1, maxval=4, group=grpA)
 
-// ═════════════════ 過濾快訊（預設關閉）═════════════════
+// ═════════════════ 過濾快訊（預設開啟）═════════════════
 // 規則來自 NQ 2 分 K 的一年回測：訊號要跟 Trend Judge、1 小時趨勢同向，停損不能太小，也不在數據、開收盤、亞洲盤時段
-grpF      = "過濾快訊（預設關閉，不影響原本訊號）"
-filtOn    = input.bool(true, "啟用過濾快訊", group=grpF, tooltip="開：「Remi Superb 1m Buy（過濾）」等快訊條件只在訊號通過下面勾選的過濾時成立。原本的訊號、標籤和快訊都不變。規則來自 NQ 2 分 K 的一年回測，見 remis_buy_sell.md")
+grpF      = "過濾快訊（不影響原本訊號）"
+filtOn    = input.bool(true, "啟用過濾快訊", group=grpF, tooltip="開：「Remi Superb 1m Buy（過濾）」等快訊條件只在訊號通過下面勾選的過濾時成立。原本的訊號、標籤和快訊都不變。規則來自 NQ 2 分 K 的一年回測，見 remi_superb.md")
 useTJ     = input.bool(true, "Trend Judge 同向", group=grpF, tooltip="用下面「Trend Judge（1 分推算）」算的趨勢方向。用 1 分 K 收盤推算 5 秒 / 15 秒 EMA，跟回測同一套算法，不用另外加 Trend Judge 或選來源")
 tjMode    = input.string("有趨勢（一般 + 強）", "Trend Judge 條件", options=["有趨勢（一般 + 強）", "有強趨勢", "震盪區間"], group=grpF, tooltip="有趨勢：買要 UP 或 強UP，賣要 DOWN 或 強Down。有強趨勢：買要 強UP，賣要 強Down。震盪區間：Trend Judge 是 MIX（沒有趨勢）時才發，買賣都一樣。回測只有前兩種是正的，震盪區間是虧的")
 use1h     = input.bool(true, "1 小時趨勢同向（EMA 長度）", group=grpF, inline="h1")
@@ -48,11 +51,13 @@ h1Len     = input.int(20, "", minval=1, group=grpF, inline="h1", tooltip="看上
 useRisk   = input.bool(true, "停損 ≥ ATR ×", group=grpF, inline="rk")
 riskMult  = input.float(1.0, "", minval=0, step=0.1, group=grpF, inline="rk")
 atrLen    = input.int(14, "ATR 長度", minval=1, group=grpF, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）。停損距離小於「倍數 × 上一根的 ATR」就不發")
+useSlow   = input.bool(true, "離 15 秒 EMA1130 ≤ ATR ×", group=grpF, inline="sl")
+slowMult  = input.float(3.0, "", minval=0, step=0.5, group=grpF, inline="sl", tooltip="買：收盤 − 15 秒 EMA1130（Trend Judge 慢線）不超過「倍數 × ATR」；賣反過來。價格已經離慢線太遠（追高 / 追低）就不發，在慢線另一側不受限。ATR 長度跟上面共用。NQ 2 分 K 一年回測：3 ATR 時每筆約從 +0.07R 變 +0.13R（2R）、+0.19R（3R）")
 avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpF, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpF, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
 avoidAsia = input.bool(false, "避開美東 20:00–03:00（亞洲盤）", group=grpF, tooltip="台灣時間：夏令 08:00–15:00，冬令 09:00–16:00")
 avoidCash = input.bool(false, "避開現金盤（台灣夏令 21:30–04:30）", group=grpF, tooltip="美東 09:30–16:30，看 K 棒收盤時間。跟著美國夏令 / 冬令走：台灣時間夏令 21:30–04:30，冬令 22:30–05:30")
-tgtR      = input.float(2.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpF, tooltip="快訊訊息會附上停損價，和這個倍數的目標價。回測用 2R")
+tgtR      = input.float(3.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpF, tooltip="快訊訊息會附上停損價，和這個倍數的目標價。加上 EMA1130 距離條件後，回測 3R 比 2R 好")
 showFMark = input.bool(true, "圖上標出通過過濾的訊號", group=grpF, tooltip="在原本的買賣箭頭外側寫上下面的符號：買在箭頭下方、賣在箭頭上方。可以填 Emoji 或文字，只在啟用過濾快訊時出現")
 fBuyTxt   = input.string("⬆️", "買訊符號", group=grpF, inline="fb")
 fBuyCol   = input.color(#36FE02, "", group=grpF, inline="fb", tooltip="填一般文字時的顏色，Emoji 用它自己的顏色")
@@ -64,14 +69,14 @@ markLines = input.int(0, "離箭頭（半行）", minval=0, maxval=12, group=grp
 // ═════════════════ Trend Judge（1 分推算）═════════════════
 // 5 秒 / 15 秒 EMA 1130 的差值，改用 1 分 K 收盤推算：每分鐘把 EMA 往前推 60 / 秒數 步（同回測），每 2 分鐘鎖定一次
 // 超過門檻算趨勢、超過強勢門檻算強趨勢。只要 1 分資料，不需要 Premium；跟原本的 Trend Judge 會有小差異
-grpT      = "Trend Judge（1 分推算，過濾和亞洲盤快訊共用）"
+grpT      = "Trend Judge（1 分推算，過濾、亞洲盤、MIX 突破快訊共用）"
 tjEmaLen  = input.int(1130, "EMA 長度", minval=1, group=grpT)
 tjFastS   = input.int(5, "快線秒數", minval=1, group=grpT, inline="tjs")
 tjSlowS   = input.int(15, "慢線秒數", minval=1, group=grpT, inline="tjs")
-tjNqTh    = input.float(15.0, "NQ 門檻　一般", minval=0, group=grpT, inline="tnq")
+tjNqTh    = input.float(10.0, "NQ 門檻　一般", minval=0, group=grpT, inline="tnq")
 tjNqSt    = input.float(35.0, "強勢", minval=0, group=grpT, inline="tnq", tooltip="差值超過「一般」算 UP / DOWN，超過「強勢」算 強UP / 強Down。圖上的商品是 NQ / MNQ 時用這一列")
-tjEsTh    = input.float(3.0, "ES 門檻　一般", minval=0, group=grpT, inline="tes")
-tjEsSt    = input.float(6.0, "強勢", minval=0, group=grpT, inline="tes", tooltip="ES / MES 時用這一列")
+tjEsTh    = input.float(4.0, "ES 門檻　一般", minval=0, group=grpT, inline="tes")
+tjEsSt    = input.float(8.0, "強勢", minval=0, group=grpT, inline="tes", tooltip="ES / MES 時用這一列")
 tjTxTh    = input.float(30.0, "TXF 門檻　一般", minval=0, group=grpT, inline="ttx")
 tjTxSt    = input.float(60.0, "強勢", minval=0, group=grpT, inline="ttx", tooltip="TXF / MXF 時用這一列")
 
@@ -88,6 +93,24 @@ xTgtR     = input.float(1.0, "快訊附上的目標（R）", minval=0.1, step=0.
 xShow     = input.bool(true, "圖上標出", group=grpX, inline="xm", tooltip="在原本的買賣箭頭外側寫上右邊這個字（買、賣共用），可以填 Emoji 或文字，只在啟用時出現。大小和空行數用上面過濾快訊的設定")
 xMarkTxt  = input.string("💎", "", group=grpX, inline="xm")
 xMarkCol  = input.color(#00E5FF, "", group=grpX, inline="xm", tooltip="填一般文字時的顏色")
+
+// ═════════════════ MIX 區間突破快訊（預設開啟，獨立開關）═════════════════
+// 回測（NQ 2 分 K，一年）：Trend Judge 連續 MIX 60 分鐘，用這 60 分鐘的最高 / 最低價當區間；形成後 60 分鐘內第一次
+// 突破區間 10% 就順著突破方向進場，停損在區間中線。掛突破單、目標 3R：346 筆，勝率 43.1%，每筆 +0.21R，前後半年都賺。
+// 跟過濾快訊一起做（一次一筆）：一年 +135R → +205R，回撤不變。在區間上下緣反向做是虧的，見 remi_superb.md
+grpM      = "MIX 區間突破快訊（獨立開關）"
+mbOn      = input.bool(true, "啟用 MIX 區間突破快訊", group=grpM, tooltip="開：多出「Remi Superb 1m MIX 區間成形」「Remi Superb 1m Buy / Sell（MIX 突破）」快訊條件，圖上畫出區間。跟上面的訊號和過濾快訊互相獨立。只在 NQ 2 分 K 回測過")
+mbMin     = input.int(60, "區間觀察時間（分鐘）", minval=4, group=grpM, tooltip="Trend Judge 連續 MIX 這麼久之後，用這段時間的最高 / 最低價當區間（中間最多容許 4 分鐘的趨勢，資料中斷超過 30 分鐘就重算）。回測 45–60 分鐘最好，30 分鐘沒有優勢")
+mbValid   = input.int(60, "區間形成後有效時間（分鐘）", minval=2, group=grpM, tooltip="區間形成後這段時間內第一次突破才發快訊，之後區間作廢。回測：形成後 15–60 分鐘的突破最好，超過 60 分鐘就變差")
+mbBufPct  = input.float(10.0, "突破距離（區間高度 %）", minval=0, step=5, group=grpM, tooltip="價格超過區間上緣（下緣）這個比例的區間高度才算突破，這個價位就是進場價。同一根 K 上下都突破、或突破時在數據 / 開收盤 / Globex 時段（跟過濾快訊共用「避開」設定），這個區間就不做")
+mbTgtR    = input.float(3.0, "快訊附上的目標（R）", minval=0.1, step=0.5, group=grpM, tooltip="停損在區間中線，目標 = 進場價 ± 倍數 × 停損距離。回測：在突破價掛單進場 3R 最好；等 K 棒收盤才進場的話 2R 比較好")
+mbShowBox = input.bool(true, "圖上畫出區間", group=grpM, inline="mbb", tooltip="灰框是用來算區間的那段 MIX，虛線是上下突破價，畫到有效時間結束或突破為止")
+mbBoxCol  = input.color(color.new(#9598A1, 85), "", group=grpM, inline="mbb")
+mbLineCol = input.color(#9598A1, "線", group=grpM, inline="mbb")
+mbShow    = input.bool(true, "圖上標出突破", group=grpM, inline="mbm", tooltip="突破那根 K 的下方（買）/ 上方（賣）寫上符號，大小和離 K 棒的距離用過濾快訊的設定")
+mbBuyTxt  = input.string("🔼", "買", group=grpM, inline="mbm")
+mbSellTxt = input.string("🔽", "賣", group=grpM, inline="mbm")
+mbTxtCol  = input.color(#FFB300, "", group=grpM, inline="mbm", tooltip="填一般文字時的顏色")
 
 // 保險：看不見的 K 棒高 / 低點。萬一指標被放到「無刻度」或別的刻度，自動縮放也跟 K 棒一致，標籤不會漂移
 plot(high, "錨點 高", color=color.new(color.gray, 100), editable=false, display=display.pane)
@@ -153,7 +176,7 @@ plot(showLC ? lowClose : na, "Low Close", color=lcColor, linewidth=lineWidth)
 plot(buySig ? 1 : 0, "BUY 訊號", display=display.data_window)
 plot(sellSig ? 1 : 0, "SELL 訊號", display=display.data_window)
 
-// ═════════════════ 過濾快訊（預設關閉）═════════════════
+// ═════════════════ 過濾快訊 ═════════════════
 // Trend Judge 方向（1 分推算）：拿這根 K 裡每一根 1 分 K 的收盤，依序更新快 / 慢 EMA，再取差值，每 2 分鐘鎖定一次
 string tjRoot  = syminfo.root != "" ? syminfo.root : syminfo.ticker
 bool   tjIsNQ  = str.contains(tjRoot, "NQ")
@@ -195,6 +218,7 @@ h1Vals() =>
 
 // 停損 = 訊號 K 和前一根的極值，停損距離跟上一根的 ATR 比
 float atrPrev  = ta.atr(atrLen)[1]
+float atrNow   = ta.atr(atrLen)
 float buyStop  = math.min(low, low[1])
 float sellStop = math.max(high, high[1])
 
@@ -213,8 +237,8 @@ bool inAsia  = etMin >= 1200 or etMin < 180                                     
 bool inCash  = etMin >= 570 and etMin < 990                                                       // 09:30–16:30
 bool timeOk  = not (avoidEvt and (inData or inFomc or inOpen or inClose or inGlbx)) and not (avoidAsia and inAsia) and not (avoidCash and inCash)
 
-bool buyPass  = (not useTJ or tjBuyOk) and (not use1h or (not na(h1Ema) and h1Close > h1Ema)) and (not useRisk or (not na(atrPrev) and close - buyStop >= riskMult * atrPrev)) and timeOk
-bool sellPass = (not useTJ or tjSellOk) and (not use1h or (not na(h1Ema) and h1Close < h1Ema)) and (not useRisk or (not na(atrPrev) and sellStop - close >= riskMult * atrPrev)) and timeOk
+bool buyPass  = (not useTJ or tjBuyOk) and (not use1h or (not na(h1Ema) and h1Close > h1Ema)) and (not useRisk or (not na(atrPrev) and close - buyStop >= riskMult * atrPrev)) and (not useSlow or (not na(tjMaSlow) and not na(atrNow) and close - tjMaSlow <= slowMult * atrNow)) and timeOk
+bool sellPass = (not useTJ or tjSellOk) and (not use1h or (not na(h1Ema) and h1Close < h1Ema)) and (not useRisk or (not na(atrPrev) and sellStop - close >= riskMult * atrPrev)) and (not useSlow or (not na(tjMaSlow) and not na(atrNow) and tjMaSlow - close <= slowMult * atrNow)) and timeOk
 bool fBuy  = filtOn and buySig and buyPass
 bool fSell = filtOn and sellSig and sellPass
 
@@ -282,11 +306,129 @@ plot(aSell ? 1 : 0, "SELL 亞洲盤", display=display.data_window)
 plot(aStop, "亞洲盤停損", display=display.data_window)
 plot(aTgt, "亞洲盤目標", display=display.data_window)
 
-// ═════════════════ 不支援商品的提示 ═════════════════
-// 門檻只有 NQ / ES / TXF 三組，其他商品沒有門檻（Trend Judge 一律算 MIX），所以在圖上提示
-var table warnTbl = table.new(position.top_right, 1, 1)
-if barstate.islast and not (tjIsNQ or tjIsES or tjIsTXF)
-    table.cell(warnTbl, 0, 0, "Remi Superb 1m 只支援 NQ / ES / TXF（含 MNQ、MES、MXF）\n目前商品：" + syminfo.ticker + "，Trend Judge 門檻不適用", text_color=color.white, bgcolor=color.new(color.red, 15), text_size=size.normal)
+// ═════════════════ MIX 區間突破快訊 ═════════════════
+// MIX 期間：Trend Judge 是 MIX。中間最多容許 4 分鐘的趨勢，資料中斷超過 30 分鐘就重算
+float tfMin   = timeframe.in_seconds() / 60.0
+int   mbNeed  = math.max(1, math.round(mbMin / tfMin))
+int   mbGrace = math.max(0, math.round(4 / tfMin))
+int   mbLife  = math.max(1, math.round(mbValid / tfMin))
+bool  mbHole  = not na(time[1]) and time - time[1] > 30 * 60 * 1000
+bool  isMix   = tjLinked and tjDirI == 0
+
+var int   mbStart  = na       // 這段 MIX 從哪根 K 開始
+var int   mbRun    = 0        // MIX 中間連續幾根是趨勢
+var float mbHi     = na
+var float mbLo     = na
+var bool  mbFormed = false    // 這段 MIX 已經畫過區間
+if mbHole
+    mbStart := na
+    mbRun   := 0
+if isMix
+    if na(mbStart)
+        mbStart  := bar_index
+        mbHi     := high
+        mbLo     := low
+        mbFormed := false
+    else
+        mbHi := math.max(mbHi, high)
+        mbLo := math.min(mbLo, low)
+    mbRun := 0
+else if not na(mbStart)
+    if tjLinked and tjDirI != 0
+        mbRun += 1
+        if mbRun > mbGrace
+            mbStart := na
+            mbRun   := 0
+        else
+            mbHi := math.max(mbHi, high)
+            mbLo := math.min(mbLo, low)
+    else
+        mbStart := na
+        mbRun   := 0
+
+// 區間：MIX 滿「觀察時間」的那根 K 收完時成形
+var float bxTop  = na
+var float bxBot  = na
+var int   bxLeft = na
+var int   bxForm = na
+var int   bxEnd  = na
+var bool  bxLive = false
+bool mbForm = false
+if not na(mbStart) and not mbFormed and bar_index - mbStart + 1 >= mbNeed
+    mbFormed := true
+    mbForm   := true
+    bxTop    := mbHi
+    bxBot    := mbLo
+    bxLeft   := mbStart
+    bxForm   := bar_index
+    bxEnd    := bar_index + mbLife
+    bxLive   := mbHi > mbLo
+float bxH   = bxTop - bxBot
+float bxUpL = bxTop + mbBufPct / 100 * bxH
+float bxDnL = bxBot - mbBufPct / 100 * bxH
+float bxMid = (bxTop + bxBot) / 2
+
+// 突破：形成後的有效時間內，第一次碰到突破價（不用等收盤，快訊選「每根 K 線一次」就會在碰到時通知）
+bool mbBuyRaw  = false
+bool mbSellRaw = false
+if bxLive and not mbForm and bar_index > bxForm
+    if bar_index > bxEnd or mbHole
+        bxLive := false
+    else
+        bool upHit  = high >= bxUpL
+        bool dnHit  = low <= bxDnL
+        bool evtNow = avoidEvt and (inData or inFomc or inOpen or inClose or inGlbx)
+        if upHit or dnHit
+            bxLive := false
+            if not (upHit and dnHit) and not evtNow
+                mbBuyRaw  := upHit
+                mbSellRaw := dnHit
+bool mbBuy   = mbOn and mbBuyRaw
+bool mbSell  = mbOn and mbSellRaw
+bool mbReady = mbOn and mbForm and bxLive
+
+float mbEntry = mbBuy ? bxUpL : mbSell ? bxDnL : na
+float mbStopP = na(mbEntry) ? na : bxMid
+float mbTgtP  = na(mbEntry) ? na : mbEntry + mbTgtR * (mbEntry - bxMid)
+float mbUpShow  = mbOn and (bxLive or mbForm or mbBuy or mbSell) ? bxUpL : na
+float mbDnShow  = mbOn and (bxLive or mbForm or mbBuy or mbSell) ? bxDnL : na
+float mbMidShow = mbOn and (bxLive or mbForm or mbBuy or mbSell) ? bxMid : na
+
+var line bxUpLine = na
+var line bxDnLine = na
+if mbReady and mbShowBox and not na(bxTop) and not na(bxBot)
+    box.new(bxLeft, bxTop, bar_index, bxBot, border_color=mbLineCol, bgcolor=mbBoxCol)
+    int lineEnd = bar_index + math.min(mbLife, 500)    // 線最多畫到 500 根之後
+    bxUpLine := line.new(bar_index, bxUpL, lineEnd, bxUpL, color=mbLineCol, style=line.style_dashed)
+    bxDnLine := line.new(bar_index, bxDnL, lineEnd, bxDnL, color=mbLineCol, style=line.style_dashed)
+if (mbBuy or mbSell) and mbShowBox and not na(bxUpLine) and not na(bxDnLine)
+    line.set_x2(bxUpLine, bar_index)
+    line.set_x2(bxDnLine, bar_index)
+if mbShow and mbBuy
+    drawBuyMark(mbBuyTxt, mbTxtCol)
+if mbShow and mbSell
+    drawSellMark(mbSellTxt, mbTxtCol)
+plot(mbBuy ? 1 : 0, "BUY MIX 突破", display=display.data_window)
+plot(mbSell ? 1 : 0, "SELL MIX 突破", display=display.data_window)
+plot(mbEntry, "MIX 突破價", display=display.data_window)
+plot(mbStopP, "MIX 停損", display=display.data_window)
+plot(mbTgtP, "MIX 目標", display=display.data_window)
+plot(mbUpShow, "MIX 上破價", display=display.data_window)
+plot(mbDnShow, "MIX 下破價", display=display.data_window)
+plot(mbMidShow, "MIX 中線", display=display.data_window)
+
+// ═════════════════ 提示：不支援的商品、不是 2 分 K ═════════════════
+// 門檻只有 NQ / ES / TXF 三組，其他商品沒有門檻（Trend Judge 一律算 MIX）；快訊的回測和預設值都是 NQ 2 分 K
+var table warnTbl = table.new(position.top_right, 1, 2)
+bool badSym = not (tjIsNQ or tjIsES or tjIsTXF)
+bool badTf  = timeframe.period != "2"
+if barstate.islast
+    int warnRow = 0
+    if badSym
+        table.cell(warnTbl, 0, warnRow, "Remi Superb 1m 只支援 NQ / ES / TXF（含 MNQ、MES、MXF）\n目前商品：" + syminfo.ticker + "，Trend Judge 門檻不適用", text_color=color.white, bgcolor=color.new(color.red, 15), text_size=size.normal)
+        warnRow += 1
+    if badTf
+        table.cell(warnTbl, 0, warnRow, "Remi Superb 1m 的快訊以 2 分 K 為準（回測和預設值）\n目前週期：" + timeframe.period, text_color=color.white, bgcolor=color.new(color.orange, 20), text_size=size.small)
 
 // ═════════════════ 快訊（作多、做空分開）═════════════════
 alertcondition(buySig, "Remi Superb 1m Buy", '{{ticker}} Remi Superb 1m Buy｜{{close}}')
@@ -299,3 +441,8 @@ alertcondition(fSell, "Remi Superb 1m Sell（過濾）", '{{ticker}} Remi Superb
 // 1 分亞洲盤快訊：要先在設定開啟「啟用 1 分亞洲盤快訊」才會成立
 alertcondition(aBuy, "Remi Superb 1m Buy（亞洲盤）", '{{ticker}} Remi Superb 1m Buy（亞洲盤）｜{{close}}｜停損 {{plot("亞洲盤停損")}}｜目標 {{plot("亞洲盤目標")}}')
 alertcondition(aSell, "Remi Superb 1m Sell（亞洲盤）", '{{ticker}} Remi Superb 1m Sell（亞洲盤）｜{{close}}｜停損 {{plot("亞洲盤停損")}}｜目標 {{plot("亞洲盤目標")}}')
+
+// MIX 區間突破快訊：要先在設定開啟「啟用 MIX 區間突破快訊」才會成立
+alertcondition(mbReady, "Remi Superb 1m MIX 區間成形", '{{ticker}} Remi Superb 1m MIX 區間成形｜上破買 {{plot("MIX 上破價")}}｜下破賣 {{plot("MIX 下破價")}}｜停損在中線 {{plot("MIX 中線")}}')
+alertcondition(mbBuy, "Remi Superb 1m Buy（MIX 突破）", '{{ticker}} Remi Superb 1m Buy（MIX 突破）｜突破價 {{plot("MIX 突破價")}}｜停損 {{plot("MIX 停損")}}｜目標 {{plot("MIX 目標")}}')
+alertcondition(mbSell, "Remi Superb 1m Sell（MIX 突破）", '{{ticker}} Remi Superb 1m Sell（MIX 突破）｜突破價 {{plot("MIX 突破價")}}｜停損 {{plot("MIX 停損")}}｜目標 {{plot("MIX 目標")}}')

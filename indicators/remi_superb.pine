@@ -9,8 +9,10 @@
 //     4. Ema enable 開啟時，觸發那根的收盤也要在 EMA 之上，不然這次不出訊號（機會照樣用掉）
 //   賣：反過來（創新高那根的最低價、收盤跌破、收盤在 EMA 之下）
 // 對照原版匯出資料：1m / 2m / 3m / 5m 每根 K 都跟原版一致，見 indicators/remis_buy_sell.md
-// 另有預設關閉的「過濾快訊」：只多出快訊條件和資料視窗數值，上面的訊號、標籤、快訊都不變
-// 另有預設關閉的「MIX 區間突破快訊」：Trend Judge 連續 MIX 一段時間後畫出區間，第一次突破時發快訊（跟上面的訊號互相獨立）
+// 以 NQ 2 分 K 為準（回測和預設值都是 2 分 K），說明見 indicators/remi_superb.md
+// 「過濾快訊」（預設開）：原本的訊號再加 Trend Judge 同向、1 小時趨勢、停損 ≥ 1 ATR、離 15 秒 EMA1130 ≤ 3 ATR、避開事件時段
+// 「MIX 區間突破快訊」（預設開）：Trend Judge 連續 MIX 60 分鐘後畫出區間，60 分鐘內第一次突破時發快訊
+// 兩種快訊都只多出快訊條件、圖上標記和資料視窗數值，原本的訊號、標籤、快訊都不變
 indicator("Remi Superb", overlay=true, max_labels_count=500, max_boxes_count=500, max_lines_count=500)
 
 // ═════════════════ 訊號（同原版）═════════════════
@@ -37,10 +39,10 @@ showLC    = input.bool(false, "Low Close 線", group=grpA, inline="lc", tooltip=
 lcColor   = input.color(#FF5252, "", group=grpA, inline="lc")
 lineWidth = input.int(2, "線寬", minval=1, maxval=4, group=grpA)
 
-// ═════════════════ 過濾快訊（預設關閉）═════════════════
+// ═════════════════ 過濾快訊（預設開啟）═════════════════
 // 規則來自 NQ 2 分 K 的一年回測：訊號要跟 Trend Judge、1 小時趨勢同向，停損不能太小，也不在數據、開收盤、亞洲盤時段
-grpF      = "過濾快訊（預設關閉，不影響原本訊號）"
-filtOn    = input.bool(true, "啟用過濾快訊", group=grpF, tooltip="開：「Remi Superb Buy（過濾）」等快訊條件只在訊號通過下面勾選的過濾時成立。原本的訊號、標籤和快訊都不變。規則來自 NQ 2 分 K 的一年回測，見 remis_buy_sell.md")
+grpF      = "過濾快訊（不影響原本訊號）"
+filtOn    = input.bool(true, "啟用過濾快訊", group=grpF, tooltip="開：「Remi Superb Buy（過濾）」等快訊條件只在訊號通過下面勾選的過濾時成立。原本的訊號、標籤和快訊都不變。規則來自 NQ 2 分 K 的一年回測，見 remi_superb.md")
 useTJ     = input.bool(true, "Trend Judge 同向", group=grpF, tooltip="用下面「Trend Judge（內建）」算的趨勢方向，跟 Trend Judge 指標同一套算法，不用另外加 Trend Judge 或選來源")
 tjMode    = input.string("有趨勢（一般 + 強）", "Trend Judge 條件", options=["有趨勢（一般 + 強）", "有強趨勢", "震盪區間"], group=grpF, tooltip="有趨勢：買要 UP 或 強UP，賣要 DOWN 或 強Down。有強趨勢：買要 強UP，賣要 強Down。震盪區間：Trend Judge 是 MIX（沒有趨勢）時才發，買賣都一樣。回測只有前兩種是正的，震盪區間是虧的")
 use1h     = input.bool(true, "1 小時趨勢同向（EMA 長度）", group=grpF, inline="h1")
@@ -65,7 +67,7 @@ markLines = input.int(0, "離箭頭（半行）", minval=0, maxval=12, group=grp
 
 // ═════════════════ Trend Judge（內建）═════════════════
 // 跟 Trend Judge 指標同一套算法：5 秒 / 15 秒 EMA 1130 的差值，每 2 分鐘鎖定，超過門檻算趨勢、超過強勢門檻算強趨勢。需要秒級資料（Premium）
-grpT      = "Trend Judge（內建，過濾和亞洲盤快訊共用）"
+grpT      = "Trend Judge（內建，過濾、亞洲盤、MIX 突破快訊共用）"
 tjEmaLen  = input.int(1130, "EMA 長度", minval=1, group=grpT)
 tjFastS   = input.int(5, "快線秒數", minval=1, group=grpT, inline="tjs")
 tjSlowS   = input.int(15, "慢線秒數", minval=1, group=grpT, inline="tjs")
@@ -90,12 +92,12 @@ xShow     = input.bool(true, "圖上標出", group=grpX, inline="xm", tooltip="�
 xMarkTxt  = input.string("💎", "", group=grpX, inline="xm")
 xMarkCol  = input.color(#00E5FF, "", group=grpX, inline="xm", tooltip="填一般文字時的顏色")
 
-// ═════════════════ MIX 區間突破快訊（預設關閉，獨立開關）═════════════════
+// ═════════════════ MIX 區間突破快訊（預設開啟，獨立開關）═════════════════
 // 回測（NQ 2 分 K，一年）：Trend Judge 連續 MIX 60 分鐘，用這 60 分鐘的最高 / 最低價當區間；形成後 60 分鐘內第一次
 // 突破區間 10% 就順著突破方向進場，停損在區間中線。掛突破單、目標 3R：346 筆，勝率 43.1%，每筆 +0.21R，前後半年都賺。
-// 跟過濾快訊一起做（一次一筆）：一年 +135R → +205R，回撤不變。在區間上下緣反向做是虧的，見 remis_buy_sell.md
-grpM      = "MIX 區間突破快訊（預設關閉，獨立開關）"
-mbOn      = input.bool(false, "啟用 MIX 區間突破快訊", group=grpM, tooltip="開：多出「Remi Superb MIX 區間成形」「Remi Superb Buy / Sell（MIX 突破）」快訊條件，圖上畫出區間。跟上面的訊號和過濾快訊互相獨立。只在 NQ 2 分 K 回測過")
+// 跟過濾快訊一起做（一次一筆）：一年 +135R → +205R，回撤不變。在區間上下緣反向做是虧的，見 remi_superb.md
+grpM      = "MIX 區間突破快訊（獨立開關）"
+mbOn      = input.bool(true, "啟用 MIX 區間突破快訊", group=grpM, tooltip="開：多出「Remi Superb MIX 區間成形」「Remi Superb Buy / Sell（MIX 突破）」快訊條件，圖上畫出區間。跟上面的訊號和過濾快訊互相獨立。只在 NQ 2 分 K 回測過")
 mbMin     = input.int(60, "區間觀察時間（分鐘）", minval=4, group=grpM, tooltip="Trend Judge 連續 MIX 這麼久之後，用這段時間的最高 / 最低價當區間（中間最多容許 4 分鐘的趨勢，資料中斷超過 30 分鐘就重算）。回測 45–60 分鐘最好，30 分鐘沒有優勢")
 mbValid   = input.int(60, "區間形成後有效時間（分鐘）", minval=2, group=grpM, tooltip="區間形成後這段時間內第一次突破才發快訊，之後區間作廢。回測：形成後 15–60 分鐘的突破最好，超過 60 分鐘就變差")
 mbBufPct  = input.float(10.0, "突破距離（區間高度 %）", minval=0, step=5, group=grpM, tooltip="價格超過區間上緣（下緣）這個比例的區間高度才算突破，這個價位就是進場價。同一根 K 上下都突破、或突破時在數據 / 開收盤 / Globex 時段（跟過濾快訊共用「避開」設定），這個區間就不做")
@@ -172,7 +174,7 @@ plot(showLC ? lowClose : na, "Low Close", color=lcColor, linewidth=lineWidth)
 plot(buySig ? 1 : 0, "BUY 訊號", display=display.data_window)
 plot(sellSig ? 1 : 0, "SELL 訊號", display=display.data_window)
 
-// ═════════════════ 過濾快訊（預設關閉）═════════════════
+// ═════════════════ 過濾快訊 ═════════════════
 // Trend Judge 方向（內建）：同 Trend Judge 指標的算法。5 秒 / 15 秒 EMA 的差值，每 2 分鐘鎖定一次
 string tjRoot  = syminfo.root != "" ? syminfo.root : syminfo.ticker
 bool   tjIsNQ  = str.contains(tjRoot, "NQ")
@@ -407,11 +409,18 @@ plot(mbUpShow, "MIX 上破價", display=display.data_window)
 plot(mbDnShow, "MIX 下破價", display=display.data_window)
 plot(mbMidShow, "MIX 中線", display=display.data_window)
 
-// ═════════════════ 不支援商品的提示 ═════════════════
-// 門檻只有 NQ / ES / TXF 三組，其他商品沒有門檻（Trend Judge 一律算 MIX），所以在圖上提示
-var table warnTbl = table.new(position.top_right, 1, 1)
-if barstate.islast and not (tjIsNQ or tjIsES or tjIsTXF)
-    table.cell(warnTbl, 0, 0, "Remi Superb 只支援 NQ / ES / TXF（含 MNQ、MES、MXF）\n目前商品：" + syminfo.ticker + "，Trend Judge 門檻不適用", text_color=color.white, bgcolor=color.new(color.red, 15), text_size=size.normal)
+// ═════════════════ 提示：不支援的商品、不是 2 分 K ═════════════════
+// 門檻只有 NQ / ES / TXF 三組，其他商品沒有門檻（Trend Judge 一律算 MIX）；快訊的回測和預設值都是 NQ 2 分 K
+var table warnTbl = table.new(position.top_right, 1, 2)
+bool badSym = not (tjIsNQ or tjIsES or tjIsTXF)
+bool badTf  = timeframe.period != "2"
+if barstate.islast
+    int warnRow = 0
+    if badSym
+        table.cell(warnTbl, 0, warnRow, "Remi Superb 只支援 NQ / ES / TXF（含 MNQ、MES、MXF）\n目前商品：" + syminfo.ticker + "，Trend Judge 門檻不適用", text_color=color.white, bgcolor=color.new(color.red, 15), text_size=size.normal)
+        warnRow += 1
+    if badTf
+        table.cell(warnTbl, 0, warnRow, "Remi Superb 的快訊以 2 分 K 為準（回測和預設值）\n目前週期：" + timeframe.period, text_color=color.white, bgcolor=color.new(color.orange, 20), text_size=size.small)
 
 // ═════════════════ 快訊（作多、做空分開）═════════════════
 alertcondition(buySig, "Remi Superb Buy", '{{ticker}} Remi Superb Buy｜{{close}}')

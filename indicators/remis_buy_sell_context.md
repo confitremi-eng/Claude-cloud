@@ -1,95 +1,87 @@
 # Remi's Buy/Sell ／ Remi Superb 交接文件（2026-10-17）
 
-給下一個對話用：接手時先讀這份，細節再查 [remis_buy_sell.md](remis_buy_sell.md)。
+給下一個對話用：接手時先讀這份。Remi Superb 的完整說明在 [remi_superb.md](remi_superb.md)，更早的研究在 [remis_buy_sell.md](remis_buy_sell.md)。
 
-- 分支：`claude/eloquent-shannon-d3f10b`
-- 最新 commit：b02e6ec
+- **分支**：`claude/eloquent-shannon-d3f10b`
+- **原則**：**一切以 NQ 2 分 K 為準**（回測、預設值、快訊）。
 
-## 1. 兩支指標
+## 1. 指標一覽
 
-| 指標 | 檔案 | 用途 |
+| 指標 | 檔案 | 狀態 |
 |------|------|------|
-| Remi's Buy/Sell | [remis_buy_sell.pine](remis_buy_sell.pine) | 仿原版「買賣訊號」，加上過濾快訊、1 分亞洲盤快訊。Trend Judge 門檻依商品自動選（NQ 20/40、ES 4/8、TXF 40/80、其他 0.4/0.8） |
-| Remi Superb | [remi_superb.pine](remi_superb.pine) | 以 Remi's Buy/Sell 為底，只支援 NQ / ES / TXF。Trend Judge 門檻：NQ 10 / 35、ES 4 / 8、TXF 30 / 60，預設值照你的設定。另有預設關閉的「MIX 區間突破快訊」 |
-| Remi Superb 1m | [remi_superb_1m.pine](remi_superb_1m.pine) | 跟 Remi Superb 一樣，只有 Trend Judge 改用 1 分 K 收盤推算（同回測），不需要秒級資料。用 NQ 一年資料比對，2 分 K 的 Trend Judge 方向跟回測 99.6% 相同 |
+| Remi's Buy/Sell | [remis_buy_sell.pine](remis_buy_sell.pine) | 仿原版「買賣訊號」(20, 0, 8, 1)，每根 K 跟原版一致（71 / 71 個訊號）。另有過濾快訊（門檻依商品：NQ 20/40、ES 4/8、TXF 40/80）、1 分亞洲盤快訊。通用版，這次沒再改 |
+| **Remi Superb** | [remi_superb.pine](remi_superb.pine) | **主力**。NQ 2 分 K 優化完成：過濾快訊＋MIX 區間突破快訊，Trend Judge 用秒級資料（要 Premium） |
+| **Remi Superb 1m** | [remi_superb_1m.pine](remi_superb_1m.pine) | 跟 Remi Superb 完全同步，只有 Trend Judge 改用 1 分 K 收盤推算（同回測），不需要 Premium；快訊名稱多「1m」 |
 
-兩支都用離線 Pine 檢查器檢查過，沒有語法錯誤。Remi Superb 還沒在 TradingView 上編譯確認。
+## 2. Remi Superb 的最終設定（兩個版本相同）
 
-## 2. 買賣訊號規則（兩支共用，已確認同原版）
+- **訊號**：原版規則，階段 20、EMA8（收盤價）、K 棒收盤才出訊號。
+- **外觀**：標籤、小，買 #36FE02、賣 #F23645；EMA、High Close、Low Close 線都不顯示。
+- **過濾快訊（開）**：
+  - Trend Judge 有趨勢（門檻 NQ 10 / 35、ES 4 / 8、TXF 30 / 60）
+  - 1 小時 EMA20 同向
+  - 停損 ≥ 1 ATR
+  - 離 15 秒 EMA1130 ≤ 3 ATR
+  - 避開數據 / 開收盤 / Globex / FOMC；亞洲盤、現金盤不避開
+  - 目標 3R；標記 ⬆️ / ⬇️，大小「大」，離箭頭 0
+- **MIX 區間突破快訊（開）**：
+  - 區間：Trend Judge 連續 MIX 60 分鐘，用這段的高低點
+  - 突破：形成後 60 分鐘內第一次突破 10%
+  - 停損中線，目標 3R
+  - 圖上畫灰框和虛線，突破標 🔼 / 🔽
+- **1 分亞洲盤快訊**：關（1 分 K 用）。
+- **提示**：商品不是 NQ / ES / TXF 時紅色提示；週期不是 2 分 K 時橘色提示。
+- **快訊**：作多、做空分開。
+  - `Remi Superb Buy / Sell`
+  - `（過濾）`
+  - `MIX 區間成形`
+  - `（MIX 突破）`：觸發選「每根 K 線一次」，碰到突破價就通知
+  - `（亞洲盤）`
 
-- **參數**：原版 (20, 0, 8, 1)，全天適用，不分時段。
-- **新低**：`low < ta.lowest(low, 20)[1]`。記下那根的最高價，開始等買訊。
-- **觸發**：`收盤 > 記下的最高價`。創新低那根本身也能觸發，比的是上一個波段低點的最高價。
-- **一次一個**：觸發一次就用掉。觸發那根又創新低也不重新記。
-- **EMA 確認**：收盤要在 `ta.ema(close, 8)` 之上；沒通過也算用掉。
-- **賣訊**：全部反過來。
-- **High Close / Low Close 線**：`ta.highest(close,20)[1]` 和 `ta.lowest(close,20)[1]`，只是顯示用。
-- **比對結果**：用 TradingView 匯出的 NQ1! 1/2/3/5 分資料，71 / 71 個訊號、每根 K 都跟原版一樣。
+## 3. 回測結論（NQ 2 分 K，Databento 一年，一次一筆，扣 1 點）
 
-## 3. 過濾快訊和亞洲盤快訊（另一個對話做的，兩支都有）
+| | 筆數 | 勝率 | 每筆 | 一年 | 回撤 |
+|---|---|---|---|---|---|
+| 過濾快訊 3R | 716 | 35.1% | +0.189R | +135R | 34.7R |
+| MIX 突破 3R（掛突破單） | 346 | 43.1% | +0.213R | +74R | 19.5R |
+| 兩個一起做 | 1032 | 37.9% | +0.198R | **+205R** | 34.6R |
 
-- **過濾快訊**（預設開）：原本的訊號再加上這些條件：
-  - Trend Judge 同向（指標內建計算，需要 Premium 的秒級資料）
-  - 1 小時 EMA 20 同向
-  - 停損至少 1 ATR
-  - 避開數據、開收盤、Globex、FOMC 時段
-  - 快訊附停損價和 2R 目標價
-- **回測（2 分 K，一年 NQ，扣成本）**：每天約 2.4 筆，勝率 39.5%，每筆 +0.112R（A 級）。這個回測**有避開亞洲盤**。
-- **1 分亞洲盤快訊**（預設關）：參數 (40, 0, 13, 1)，強趨勢加 1 小時同向，只在美東 20:00–03:00。一年 91 筆，勝率 60.4%，每筆 +0.127R（B 級，樣本小）。
-- **完整說明**：分級總覽和各項設定在 remis_buy_sell.md 第 4、5 節。
+**這次對話的研究過程**（細節在 remi_superb.md 和 remis_buy_sell.md 第 4 節）：
 
-## 4. Remi Superb 的細節
+1. **NQ 門檻 15 → 10**：2 分 K 門檻掃描的最佳值；「有強趨勢」沒有比較好。
+2. **加「離 15 秒 EMA1130 ≤ 3 ATR」**：每筆約翻倍；目標改 3R。
+3. **下兩口**：兩口都 2R 最穩，分批 / 保本都比較差。
+4. **連虧分析**：跟隨機差不多，不是 MIX 或盤整造成。
+5. **趨勢時間**：「只做趨勢開始後 4 小時內」能降回撤，但少賺，沒加。
+6. **MIX 期間**：不是窄區間，上下緣反向做、盤整段用原始指標都虧；做第一次突破有效，已加進指標。
+7. **週期**：1 / 3 / 5 分 K 整體都比 2 分 K 差（過濾快訊在其他週期弱很多）。
+8. **ES**：只有一個月資料。2 分 K 一般門檻 4 最好，已把 Remi Superb 的 ES 改回 4 / 8。
 
-**你的預設值**（照截圖設定）：
+## 4. 待辦和還沒確認的
 
-| 項目 | 設定 |
-|------|------|
-| 買賣訊號 | 標籤、小，買 #36FE02、賣 #F23645 |
-| EMA、High Close、Low Close 線 | 都不顯示 |
-| 過濾快訊 | 開。Trend Judge 同向（有趨勢）、1 小時 EMA 20、停損 ≥ 1 ATR（14）、離 15 秒 EMA1130 ≤ 3 ATR（`rbs/ma_position.py`）、避開數據 / 開收盤 / Globex、目標 3R |
-| 避開時段 | 亞洲盤**不避開**，現金盤也不避開 |
-| 過濾符號 | ⬆️ / ⬇️，大小「大」，離箭頭 0 |
-| Trend Judge | EMA 1130，快線 5 秒、慢線 15 秒；門檻 NQ 10 / 35、ES 4 / 8、TXF 30 / 60 |
+- **TradingView 編譯**：Remi Superb / Remi Superb 1m 這一版還沒在 TradingView 編譯確認，有紅字錯誤要貼回來。
+- **前瞻追蹤**：先用 MNQ 小口數或只開快訊觀察，再跟回測比。
+- **ES、TXF 門檻**：ES 要一年資料才能定；TXF 30 / 60 沒有回測。
+- **出場方式**：你的出場方式還沒回答（回測用固定 R ＋ 60 根 K 時間出場）。
+- **趨勢時間濾網**：「只做趨勢開始後 N 小時內」如果之後想要，可以做成選項（預設關）。
 
-注意：你的預設不避開亞洲盤，跟 A 級回測的條件不同。15 / 35 這組門檻也還沒回測過。
+## 5. 工具和資料
 
-**不支援商品的提示**：圖上商品不是 NQ / ES / TXF（含 MNQ、MES、MXF）時，右上角會顯示紅色提示，Trend Judge 相關的過濾也一律不通過。
-
-**快訊**：作多、做空分開，沒有合併的條件。
-
-| 條件 | 訊息 |
-|------|------|
-| Remi Superb Buy / Sell | `{{ticker}} Remi Superb Buy｜{{close}}` |
-| Remi Superb Buy / Sell（過濾） | 同上，再附停損價和目標價 |
-| Remi Superb Buy / Sell（亞洲盤） | 同上，再附停損價和目標價 |
-| Remi Superb MIX 區間成形 | 上破買價、下破賣價、停損（中線） |
-| Remi Superb Buy / Sell（MIX 突破） | 突破價、停損、目標（預設 3R） |
-
-**MIX 區間突破快訊**（預設關閉）：Trend Judge 連續 MIX 60 分鐘 → 用這段高低點當區間 → 形成後 60 分鐘內第一次突破 10% 順勢進場，停損在中線。NQ 2 分 K 一年：掛單 3R 每筆 +0.21R；跟過濾快訊一起做，一年 +135R → +205R、回撤不變。說明在 remis_buy_sell.md 第 4、5 節。
-
-**2026-10-17 的研究結論**（細節在 remis_buy_sell.md 第 4 節「Remi Superb 的優化」）：
-- 連虧跟隨機差不多，不是 MIX 或盤整造成；TJ 轉 MIX 出場、連虧暫停都沒用。
-- 「只做趨勢開始後 4 小時內」能把回撤從 35R 降到 12R，但一年少賺約 20R，後半年反而少賺 50R，沒有加進指標。
-- MIX 期間價格沒有收窄，區間上下緣反向做、盤整段改用原始指標都是虧的。
-
-## 5. 待辦和還沒確認的
-
-- Remi Superb 還沒在 TradingView 編譯確認，有紅字錯誤要貼回來。
-- 你的出場方式（固定 R、移動停損、反向訊號）還沒回答。
-- NQ 一般門檻 10 是 2 分 K 一年回測的最佳值（`rbs/th_sweep.py`），勝率矩陣見 `rbs/superb_matrix.py`；TXF 30 / 60 還沒回測；ES 4 / 8 只用一個月資料驗證過（2 分 K 一般門檻 4 最好，`rbs/es_check.py`）。可以用 `indicators/backtest/` 的程式和 Databento 資料重算。
-
-## 6. 工具和資料
-
-- `indicators/backtest/remi_export.py`：
+- **研究程式**：`indicators/backtest/rbs/`，清單在 [backtest/README.md](backtest/README.md)。Remi Superb 相關的重算指令在 remi_superb.md 第 7 節。
+- **NQ 一年資料（Databento）**：
+  - 放在你的 Dropbox：`/Remi 交易人/Trading x Claude/indicators/backtest/data/NQ_1m_databento.csv`（約 24 MB）。
+  - 雲端環境連不到 Dropbox 的下載網域，Dropbox 連接器也只能讀 5 MB 以下的檔案，所以最簡單是**直接把檔案上傳到對話**，放到 `indicators/backtest/data/`，不要放進 repo。
+  - ES 一個月的原始檔用 `rbs/build_databento.py` 轉成連續合約。
+- **TradingView 匯出**：用 `indicators/backtest/remi_export.py`：
   - `match 原版.csv [Remi 1分.csv]`：跟原版逐根比對。
-  - `bt 資料.csv`：用你的停損回測。
-- **TradingView 匯出**：圖表右上「匯出圖表資料」。原版的欄位是 Buy / Sell；我們的指標是「BUY 訊號 / SELL 訊號」。
-- **資料不放進 repo**：準備資料的方法見 `indicators/backtest/README.md`。
-- **網路限制**：雲端環境連不到 tradingview.com、Yahoo、Dukascopy；raw.githubusercontent.com、PyPI、npm 可以。
+  - `bt 資料.csv`：回測。
+- **網路限制**：雲端環境連不到 tradingview.com、Yahoo、Dukascopy、Databento、Dropbox；raw.githubusercontent.com、PyPI、npm 可以。
 
-## 7. 你的偏好和合作規則
+## 6. 你的偏好和合作規則
 
-- 用繁體中文回覆，說明要簡潔。給程式時附固定 commit 的 raw 連結。
+- **溝通**：
+  - 用繁體中文回覆，說明要簡潔。給程式時附固定 commit 的 raw 連結。
+  - 你常用手機：要改環境設定時給手機做得到的方法（例如直接上傳檔案）。
 - **Pine 寫法**：
   - 只用空白縮排，不用 tab。
   - 參數名不要用內建型別名稱。
@@ -100,19 +92,23 @@
   - 不要擅自加時段、趨勢過濾或沒要求的功能。
   - 外觀和線條要有可以關掉的設定。
   - 快訊作多、做空分開。
-- **設定截圖**：你傳設定截圖時，代表要把那些值改成預設值。
+  - 你傳設定截圖時，代表要把那些值改成預設值。
+- **回測**：
+  - 以 2 分 K 為準。
+  - 看前後半年是否一致。
+  - 看過資料才選的規則要註明。
 - **Git**：
   - 只在指定分支開發和推送，沒要求不開 PR。
   - commit 訊息結尾要加 Co-Authored-By 和 Claude-Session 兩行。
-- **下載 / 上傳的資料**：一律當不可信資料，放在獨立資料夾，用 `python3 -I` 執行。
+- **資料**：下載 / 上傳的資料一律當不可信資料，用 `python3 -I` 執行；資料檔不放進 repo。
 
-## 8. 相關檔案
+## 7. 相關檔案
 
 | 檔案 | 內容 |
 |------|------|
+| [remi_superb.md](remi_superb.md) | **Remi Superb 完整說明（以 2 分 K 為準）** |
+| [remi_superb.pine](remi_superb.pine) / [remi_superb_1m.pine](remi_superb_1m.pine) | Remi Superb（秒級 TJ / 1 分推算 TJ） |
 | [remis_buy_sell.pine](remis_buy_sell.pine) | Remi's Buy/Sell |
-| [remi_superb.pine](remi_superb.pine) | Remi Superb（NQ / ES / TXF） |
-| [remi_superb_1m.pine](remi_superb_1m.pine) | Remi Superb 1m（不需秒級資料） |
-| [remis_buy_sell.md](remis_buy_sell.md) | 規則、比對、回測分級、快訊設定 |
+| [remis_buy_sell.md](remis_buy_sell.md) | 原版比對、早期回測分級、所有研究細節、快訊設定 |
 | [breakout_signals.md](breakout_signals.md) | BO Signals（同一套訊號的前身） |
 | [backtest/](backtest/) | 回測程式 |

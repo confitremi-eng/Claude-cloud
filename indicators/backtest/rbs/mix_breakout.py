@@ -10,7 +10,7 @@ on past W). Then, for up to 2 hours, the first bar that goes 10% of the box heig
 breakout: entry at that price (a stop order) or at the close of a bar that closes beyond it (an alert at the close);
 stop at the box middle, target R, 2-hour time exit, 1 point cost. A breakout bar in an event window, or one that
 breaks both sides, ends the box.
-Prints
+Prints (valid for 60 minutes after the box forms, the indicator default, unless stated)
   1. causal vs mix_range.py; stop-order entry vs entry at the close; W, target, window
   2. filtered alerts (Remi Superb defaults, 3R) alone, breakout alone, both (one position at a time)
   3. monthly R of both and their correlation
@@ -26,6 +26,7 @@ import streak_study as st
 import mix_range as mr
 
 COST = 1.0
+AGE = 30                                   # bars after the box forms (60 minutes on 2 minutes) = the indicator default
 
 
 def causal_boxes(B, W, grace=mr.GRACE):
@@ -112,7 +113,7 @@ def main():
         print(f'  W = {W * mr.TF} 分：原本 {len(old)} 筆 每筆 {old.net.mean():+.3f}R；逐根判斷有 {len(bx)} 個區間')
         for entry, nm in (('stop', '掛突破單（價到就成交）'), ('close', 'K 棒收在突破價外，收盤進場')):
             for R in (2.0, 3.0):
-                print(f'    {nm:<22} {R:g}R {summ(breakouts(B, bx, R, entry=entry))}')
+                print(f'    {nm:<22} {R:g}R {summ(breakouts(B, bx, R, max_age=AGE, entry=entry))}')
     print('  W = 60 分，掛突破單 3R，換有效時間')
     bx = causal_boxes(B, 30)
     for age in (30, 60, 120):
@@ -123,14 +124,14 @@ def main():
     print(f'  過濾快訊（3R）單獨          {summ(seq_all(fl))}')
     for entry, nm in (('stop', '掛單'), ('close', '收盤')):
         for R in (2.0, 3.0):
-            bo = breakouts(B, bx, R, entry=entry)
+            bo = breakouts(B, bx, R, max_age=AGE, entry=entry)
             both = seq_all(pd.concat([fl, bo[fl.columns]], ignore_index=True))
             part = '  '.join(f'{k} {(both.kind == k).sum()} 筆 {both.net[both.kind == k].sum():+.1f}R' for k in ('趨勢', '突破'))
             print(f'  + 突破（{nm}、{R:g}R）單獨     {summ(seq_all(bo))}')
             print(f'    合起來                   {summ(both)}（{part}）')
 
     print('\n######## 3. 每月 R（各自單獨做）')
-    bo = breakouts(B, bx, 3.0, entry='stop')
+    bo = breakouts(B, bx, 3.0, max_age=AGE, entry='stop')
     m1 = seq_all(fl).groupby('month').net.sum(); m2 = seq_all(bo).groupby('month').net.sum()
     m = pd.DataFrame({'過濾快訊': m1, 'MIX 突破': m2}).fillna(0)
     m['合計'] = m.sum(axis=1)
