@@ -53,6 +53,20 @@ python3 indicators/backtest/rbs/build_databento.py 下載的.ohlcv-1m.csv indica
 
 `rbs/` 用環境變數 `NQ_DATA=indicators/backtest/data/NQ_1m_databento.csv` 改讀這個檔。
 
+#### 雲端對話取得 Databento 檔
+
+`NQ_1m_databento.csv` 放在使用者的 Dropbox（`Trading x Claude/indicators/backtest/data/`），用 Dropbox 分享連結下載。連結由使用者在對話裡提供，**不要寫進 repo**（repo 是公開的，Databento 資料不能轉發）。
+
+```bash
+mkdir -p indicators/backtest/data
+# 把連結結尾的 dl=0 改成 dl=1
+curl -L -o indicators/backtest/data/NQ_1m_databento.csv "使用者給的連結（dl=1）"
+head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位名稱，不是 HTML
+```
+
+- 雲端環境的網路要能連到 `www.dropbox.com` 和 `dl.dropboxusercontent.com`。連不到的話，請使用者在雲端環境設定的網路存取加入這兩個網域。
+- 下載的檔案當不可信資料處理，用 `python3 -I` 讀。
+
 ## 檔案
 
 | 檔案 | 用途 |
