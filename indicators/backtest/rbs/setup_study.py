@@ -62,7 +62,7 @@ def bar_context(df, tf):
     h, l, c = df.high.values, df.low.values, df.close.values
     n = len(c)
     t0 = df.datetime
-    gap_after = ((t0.shift(-1) - t0) > pd.Timedelta(minutes=tf + GAP_MIN)).values
+    gap_after = ((t0.shift(-1) - t0) > pd.Timedelta(minutes=tf + GAP_MIN)).to_numpy(copy=True)
     gap_after[-1] = True
     nxt = np.empty(n, int); last = n - 1
     for i in range(n - 1, -1, -1):
