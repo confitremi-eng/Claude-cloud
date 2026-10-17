@@ -117,6 +117,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `mix_breakout.py` | MIX 區間突破（逐根判斷，跟指標一樣）：掛單 vs 收盤進場、有效時間；跟過濾快訊一起做（一次一筆）、每月 R 和相關係數 |
 | `mix_breakout_tf.py` | MIX 區間突破在 1 / 2 / 3 / 5 分 K（規則用分鐘換算），以及各週期跟該週期過濾快訊合起來 |
 | `param_compare.py` | 參數 (20,0,8,1)、(20,0,8,0) EMA 關閉、(30,0,13,1) 在 1 分和 2 分，各順勢層級、四象限、EMA 擋掉的訊號、逐月 |
+| `param_sweep_1m.py` | 1 分 K 參數搜尋（NQ 代替 QQQ）：階段 × EMA × EMA 開關 × 過濾（不過濾、門檻、離 EMA1130 距離）× 目標，前半年挑、後半年驗；`qqq` 只留美股盤 K 棒、指標都用這些 K 棒重算（像 QQQ 圖），`nq` 是 24 小時的 NQ |
 | `nqlab.py`、`nqlab_check.py` | NQ 研究用的快速回測（numba），以及跟 `rbs.py` 逐筆比對 |
 | `nq_stage1.py`、`nq_diag.py` | NQ 第一階段：一次只改一個參數；按時段、趨勢強度、效率比分組 |
 | `nq_stage2.py`、`nq_stage2_an.py` | NQ 第二階段：1,350 組全組合和分析 |
