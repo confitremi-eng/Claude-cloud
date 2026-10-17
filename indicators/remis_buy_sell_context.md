@@ -10,7 +10,7 @@
 | 指標 | 檔案 | 用途 |
 |------|------|------|
 | Remi's Buy/Sell | [remis_buy_sell.pine](remis_buy_sell.pine) | 仿原版「買賣訊號」，加上過濾快訊、1 分亞洲盤快訊。Trend Judge 門檻依商品自動選（NQ 20/40、ES 4/8、TXF 40/80、其他 0.4/0.8） |
-| Remi Superb | [remi_superb.pine](remi_superb.pine) | 以 Remi's Buy/Sell 為底，只支援 NQ / ES / TXF。Trend Judge 門檻：NQ 15 / 35、ES 4 / 8、TXF 30 / 60，預設值照你的設定 |
+| Remi Superb | [remi_superb.pine](remi_superb.pine) | 以 Remi's Buy/Sell 為底，只支援 NQ / ES / TXF。Trend Judge 門檻：NQ 10 / 35、ES 4 / 8、TXF 30 / 60，預設值照你的設定 |
 | Remi Superb 1m | [remi_superb_1m.pine](remi_superb_1m.pine) | 跟 Remi Superb 一樣，只有 Trend Judge 改用 1 分 K 收盤推算（同回測），不需要秒級資料。用 NQ 一年資料比對，2 分 K 的 Trend Judge 方向跟回測 99.6% 相同 |
 
 兩支都用離線 Pine 檢查器檢查過，沒有語法錯誤。Remi Superb 還沒在 TradingView 上編譯確認。
@@ -49,7 +49,7 @@
 | 過濾快訊 | 開。Trend Judge 同向（有趨勢）、1 小時 EMA 20、停損 ≥ 1 ATR（14）、離 15 秒 EMA1130 ≤ 3 ATR（`rbs/ma_position.py`）、避開數據 / 開收盤 / Globex、目標 3R |
 | 避開時段 | 亞洲盤**不避開**，現金盤也不避開 |
 | 過濾符號 | ⬆️ / ⬇️，大小「大」，離箭頭 0 |
-| Trend Judge | EMA 1130，快線 5 秒、慢線 15 秒；門檻 NQ 15 / 35、ES 4 / 8、TXF 30 / 60 |
+| Trend Judge | EMA 1130，快線 5 秒、慢線 15 秒；門檻 NQ 10 / 35、ES 4 / 8、TXF 30 / 60 |
 
 注意：你的預設不避開亞洲盤，跟 A 級回測的條件不同。15 / 35 這組門檻也還沒回測過。
 
@@ -67,7 +67,7 @@
 
 - Remi Superb 還沒在 TradingView 編譯確認，有紅字錯誤要貼回來。
 - 你的出場方式（固定 R、移動停損、反向訊號）還沒回答。
-- NQ 15 / 35 門檻和「不避開亞洲盤」這兩個設定都還沒回測；TXF 30 / 60 還沒回測；ES 4 / 8 只用一個月資料驗證過（2 分 K 一般門檻 4 最好，`rbs/es_check.py`）。可以用 `indicators/backtest/` 的程式和 Databento 資料重算。
+- NQ 一般門檻 10 是 2 分 K 一年回測的最佳值（`rbs/th_sweep.py`），勝率矩陣見 `rbs/superb_matrix.py`；TXF 30 / 60 還沒回測；ES 4 / 8 只用一個月資料驗證過（2 分 K 一般門檻 4 最好，`rbs/es_check.py`）。可以用 `indicators/backtest/` 的程式和 Databento 資料重算。
 
 ## 6. 工具和資料
 
