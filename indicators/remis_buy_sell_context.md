@@ -11,7 +11,7 @@
 |------|------|------|
 | Remi's Buy/Sell | [remis_buy_sell.pine](remis_buy_sell.pine) | 仿原版「買賣訊號」(20, 0, 8, 1)，每根 K 跟原版一致（71 / 71 個訊號）。另有過濾快訊（門檻依商品：NQ 20/40、ES 4/8、TXF 40/80）、1 分亞洲盤快訊。通用版，這次沒再改 |
 | **Remi Superb** | [remi_superb.pine](remi_superb.pine) | **主力**。NQ 2 分 K 優化完成：過濾快訊＋MIX 區間突破快訊，Trend Judge 用秒級資料（要 Premium） |
-| **Remi Superb 1m** | [remi_superb_1m.pine](remi_superb_1m.pine) | 跟 Remi Superb 完全同步，只有 Trend Judge 改用 1 分 K 收盤推算（同回測），不需要 Premium；快訊名稱多「1m」 |
+| **Remi Superb 1m** | [remi_superb_1m.pine](remi_superb_1m.pine) | 跟 Remi Superb 同步，只有 Trend Judge 改用 1 分 K 收盤推算（同回測），不需要 Premium；快訊名稱多「1m」。另外多了 **QQQ 1 分 K**（自動套用 QQQ 那組設定）和「收盤前 1 小時不進場」開關 |
 | **Remi Superb 策略** | [remi_superb_strategy.pine](remi_superb_strategy.pine) | `strategy()` 版，給 TradingView 策略測試器回測和 webhook 自動交易：過濾訊號收盤市價進場、MIX 突破掛停損單（OCO），一次一筆，60 根時間出場、17:00 休市前平倉。Trend Judge 用 1 分 K 推算。說明在 remi_superb.md 第 8 節 |
 
 ## 2. Remi Superb 的最終設定（兩個版本相同）
@@ -32,6 +32,8 @@
   - 圖上畫灰框和虛線，突破標 🔼 / 🔽
 - **1 分亞洲盤快訊**：關（1 分 K 用）。
 - **提示**：商品不是 NQ / ES / TXF 時紅色提示；週期不是 2 分 K 時橘色提示。
+- **QQQ（只有 Remi Superb 1m）**：在 QQQ 上自動改用 (35, 0, 8, 1)、Trend Judge 門檻 0.5 / 1、離 EMA1130 ≤ 7 ATR，MIX 突破預設關閉；以 QQQ 1 分 K、一般時段為準（週期不對、開了延長時段會出現橘色提示）。
+- **收盤前 1 小時不進場（美東 15:00–16:00）**：只有 Remi Superb 1m，只影響過濾快訊，預設關閉。
 - **快訊**：作多、做空分開。
   - `Remi Superb Buy / Sell`
   - `（過濾）`
@@ -57,17 +59,17 @@
 6. **MIX 期間**：不是窄區間，上下緣反向做、盤整段用原始指標都虧；做第一次突破有效，已加進指標。
 7. **週期**：1 / 3 / 5 分 K 整體都比 2 分 K 差（過濾快訊在其他週期弱很多）。
 8. **ES**：只有一個月資料。2 分 K 一般門檻 4 最好，已把 Remi Superb 的 ES 改回 4 / 8。
-9. **QQQ 1 分 K（用 NQ 代替）**：不過濾一定虧。QQQ 圖（只留美股盤 K 棒）最好是 (35, 0, 8, 1) ＋過濾（門檻 20，QQQ 約 0.5；距離 7 ATR；3R），每筆 +0.154R，前後半年都賺；起點 (30, 0, 13, 1) 是 +0.095R。細節在 remis_buy_sell.md 第 4 節。
+9. **QQQ 1 分 K（用 NQ 代替）**：不過濾一定虧。QQQ 圖（只留美股盤 K 棒）最好是 (35, 0, 8, 1) ＋過濾（門檻 20，QQQ 約 0.5；距離 7 ATR；3R），每筆 +0.154R，前後半年都賺；起點 (30, 0, 13, 1) 是 +0.095R。MIX 突破在 QQQ 是虧的。已加進 Remi Superb 1m，細節在 remis_buy_sell.md 第 4 節。
 
 ## 4. 待辦和還沒確認的
 
-- **TradingView 編譯**：Remi Superb / Remi Superb 1m / Remi Superb 策略 還沒在 TradingView 編譯確認，有紅字錯誤要貼回來。
+- **TradingView 編譯**：Remi Superb / Remi Superb 1m（含 QQQ）/ Remi Superb 策略 還沒在 TradingView 編譯確認，有紅字錯誤要貼回來。
 - **策略回測對照**：你會在 TradingView 跑策略回測，結果要跟 remi_superb.md 第 8 節的每月數字比。
 - **前瞻追蹤**：先用 MNQ 小口數或只開快訊觀察，再跟回測比。
 - **ES、TXF 門檻**：ES 要一年資料才能定；TXF 30 / 60 沒有回測。
 - **出場方式**：你的出場方式還沒回答（回測用固定 R ＋ 60 根 K 時間出場）。
 - **趨勢時間濾網**：「只做趨勢開始後 N 小時內」如果之後想要，可以做成選項（預設關）。
-- **QQQ**：Remi Superb 還沒有 QQQ 的門檻（會出現紅色提示、過濾快訊不會通過）；要用在 QQQ 1 分 K，得先加 QQQ 門檻。「15:00 後不進場」也還沒決定要不要加。
+- **QQQ**：只用 NQ 代替回測過，還沒用 QQQ 自己的資料驗證；Remi Superb（秒級版）和策略版還沒有 QQQ。
 
 ## 5. 工具和資料
 

@@ -7,11 +7,29 @@
 | 指標 | 檔案 | Trend Judge 怎麼算 | 適合 |
 |------|------|------------------|------|
 | Remi Superb | [remi_superb.pine](remi_superb.pine) | 5 秒 / 15 秒 EMA1130，用秒級資料（要 TradingView Premium），跟 Trend Judge 指標一樣 | 想跟 Trend Judge 指標完全一致 |
-| Remi Superb 1m | [remi_superb_1m.pine](remi_superb_1m.pine) | 用 1 分 K 收盤推算同樣的 EMA（跟回測同一套算法），不需要 Premium | 想跟回測完全一致、或沒有秒級資料 |
+| Remi Superb 1m | [remi_superb_1m.pine](remi_superb_1m.pine) | 用 1 分 K 收盤推算同樣的 EMA（跟回測同一套算法），不需要 Premium | 想跟回測完全一致、或沒有秒級資料；**QQQ 1 分 K** |
 
-兩個版本的訊號、過濾、MIX 突破、預設值都一樣，只有 Trend Judge 的算法和快訊名稱不同（1m 版的快訊名稱多了「1m」）。
+兩個版本在 NQ / ES / TXF 上的訊號、過濾、MIX 突破、預設值都一樣，只有 Trend Judge 的算法和快訊名稱不同（1m 版的快訊名稱多了「1m」）。1m 版另外多了 QQQ 和「收盤前 1 小時不進場」開關（見下面）。
 
-**提示**：圖上商品不是 NQ / ES / TXF 時，右上角會出現紅色提示。週期不是 2 分 K 時，會出現橘色提示。
+**提示**：圖上商品不是 NQ / ES / TXF（1m 版還有 QQQ）時，右上角會出現紅色提示。週期不是 2 分 K（QQQ 是 1 分 K）時，會出現橘色提示；QQQ 開了延長交易時段也會。
+
+### QQQ（只有 Remi Superb 1m，2026-10-17）
+
+在 QQQ 上自動改用「QQQ」那組設定，以 **QQQ 1 分 K、一般時段**（09:30–16:00，不開延長交易時段）為準：
+
+| 項目 | QQQ | NQ / ES / TXF |
+|------|-----|---------------|
+| 訊號參數 | (35, 0, 8, 1) | (20, 0, 8, 1) |
+| Trend Judge 門檻 | 一般 0.5、強勢 1 | NQ 10 / 35 等 |
+| 離 15 秒 EMA1130 | ≤ 7 ATR | ≤ 3 ATR |
+| MIX 區間突破 | 預設關閉 | 開 |
+
+其他過濾（1 小時、停損 ≥ 1 ATR、避開時段）和目標 3R 都一樣。
+
+- **回測**：用 NQ 只留美股盤的 K 棒、指標都用這些 K 棒重算，代替 QQQ 圖。423 筆，勝率 35.5%，每筆 +0.154R（前半年 +0.141、後半年 +0.176），一年 +65R，回撤 24R，每天約 1.7 筆。
+- **MIX 區間突破在 QQQ 是虧的**：每筆 −0.09R，前後半年都虧；跟過濾快訊一起做，一年 +65R → +53R。所以在 QQQ 上預設關閉。
+- **「收盤前 1 小時不進場（美東 15:00–16:00）」**：過濾快訊的新開關，預設關閉。QQQ 回測 15:00 以後進場每筆 −0.24R；打開後每筆 +0.154R → +0.224R。這條是看過資料才發現的。
+- 細節在 [remis_buy_sell.md](remis_buy_sell.md) 第 4 節「QQQ 1 分 K 的參數」。
 
 ## 2. 規則
 
@@ -102,6 +120,7 @@
 - **規則是看過整年資料才選的**：實際大概會比回測差。先用 MNQ 小口數前瞻追蹤。
 - **Trend Judge 的差異**：回測的 Trend Judge 是用 1 分 K 推算的（= Remi Superb 1m）。秒級版本（Remi Superb）放行的訊號可能有少數不同。
 - **ES、TXF 的門檻**：ES 4 / 8 只用一個月資料驗證過，TXF 30 / 60 沒有回測。
+- **QQQ**：用 NQ 代替回測，還沒用 QQQ 自己的資料驗證過；QQQ 的實際成本、開盤競價都沒模擬。
 - **出場**：回測用固定 R 目標加 60 根 K 時間出場。如果你有自己的出場方式，可以照它重算。
 
 ## 7. 重算
@@ -118,6 +137,8 @@ python3 rbs/ma_position.py 10                                    # 離均線的�
 python3 rbs/streak_study.py                                      # 連續虧損
 python3 rbs/trend_age.py                                         # 趨勢持續多久、原始指標做盤整
 python3 rbs/mix_range.py                                         # MIX 是不是區間、上下緣、突破
+python3 rbs/param_sweep_1m.py qqq                                # QQQ 1 分 K 參數搜尋（NQ 只留美股盤）
+python3 rbs/qqq_1m_check.py                                      # QQQ 設定細看、QQQ 的 MIX 突破
 ```
 
 更早的研究（門檻 20 / 40 時代的推薦設定、亞洲盤、停損方式等）在 [remis_buy_sell.md](remis_buy_sell.md) 第 4 節。

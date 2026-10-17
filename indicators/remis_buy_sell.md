@@ -678,12 +678,14 @@
   - 同一分鐘的差值相關 0.74，方向一致 80%。
   - 開盤缺口直接算進 EMA，差值比較大（中位數 47 點，NQ 全天 35 點）。
 - **其他**：QQQ 圖每天約 1.7 筆；停損中位數 24.5 點（QQQ 約每股 0.6 美元）。
+- **MIX 區間突破在 QQQ 圖是虧的**（`rbs/qqq_1m_check.py`）：同樣的規則（60 分鐘區間、60 分鐘內第一次突破 10%、停損中線），掛單 3R 每筆 −0.099R，前後半年都虧；跟過濾快訊一起做，一年 +65R → +53R。
+- **已加進 Remi Superb 1m**：在 QQQ 上自動改用 (35, 0, 8, 1)、門檻 0.5 / 1、距離 7 ATR，MIX 突破預設關閉；「收盤前 1 小時不進場」是新的開關，預設關閉。見 [remi_superb.md](remi_superb.md) 第 1 節。
 - **注意**：
   - 試了約 4,500 組，前後半年排名相關只有 +0.18。最好那組每筆 +0.154R，誤差約 ±0.08R。
   - NQ 不等於 QQQ：QQQ 的實際成本、延長時段、開盤競價都沒模擬。
   - 之前的結論是「1 分 K 賺不到錢」（門檻 10、距離 3 ATR）。這次不一樣，是因為門檻提高到 20、距離放寬、目標 3R。
 
-重算：在 `indicators/backtest` 底下執行 `NQ_DATA=data/NQ_1m_databento.csv python3 rbs/param_sweep_1m.py qqq`（或 `nq`）。
+重算：在 `indicators/backtest` 底下執行 `NQ_DATA=data/NQ_1m_databento.csv python3 rbs/param_sweep_1m.py qqq`（或 `nq`），細看和 MIX 突破用 `rbs/qqq_1m_check.py`。
 
 ## 5. 快訊
 
