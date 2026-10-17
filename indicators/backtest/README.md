@@ -106,6 +106,12 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `session_1m.py` | 1 分 K (40,0,13,1)、(50,0,15,1)：Trend Judge 強 / 一般 / 合計 + 1h，分現金盤、夜盤、亞洲盤；1 分亞洲盤快訊的依據 |
 | `superb_study.py` | Remi Superb 設定（2 分 K）：門檻 20/40 vs 15/35 × 亞洲盤、只做現金盤、現金盤多空分開、停損 ≥ 1 ATR 拿掉 |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
+| `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
+| `two_lots.py` | 每個訊號下兩口：都 2R、1R+2R、1R+3R、2R+3R、到 1R 保本、留一口跑，以及同時 2 筆 |
+| `es_check.py` | ES（Databento 檔）：多空分開 × 1/2/3/5 分、2 分 K 門檻掃描，成本 0.5 點 |
+| `ma_position.py` | 訊號 K 棒相對均線的位置（EMA8/20/50、5 秒 / 15 秒 EMA1130、日線 SMA5），五等分和單一條件 |
+| `superb_matrix.py` | Remi Superb 預設的勝率矩陣：週期 × 1R/1.5R/2R/3R，加不加 EMA1130 距離條件；可換資料檔、門檻、成本 |
+| `streak_study.py` | 連續虧損：跟隨機排列比較、連虧後勝率、進場狀態（TJ 持續時間 / MIX 比例 / 切換、ER、CHOP、ADX…）五等分、過濾條件和停損機制、TJ 轉向出場 |
 | `param_compare.py` | 參數 (20,0,8,1)、(20,0,8,0) EMA 關閉、(30,0,13,1) 在 1 分和 2 分，各順勢層級、四象限、EMA 擋掉的訊號、逐月 |
 | `nqlab.py`、`nqlab_check.py` | NQ 研究用的快速回測（numba），以及跟 `rbs.py` 逐筆比對 |
 | `nq_stage1.py`、`nq_diag.py` | NQ 第一階段：一次只改一個參數；按時段、趨勢強度、效率比分組 |
