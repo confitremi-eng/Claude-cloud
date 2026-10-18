@@ -48,7 +48,8 @@ def load(path):
     return df
 
 
-def load_sql(paths):
+def read_sql_1m(paths):
+    """1-minute TXFR1 bars (UTC index, bar start) from the COPY blocks of the .sql dumps; nothing is executed."""
     import io
     parts = []
     for f in paths:
@@ -60,7 +61,25 @@ def load_sql(paths):
     d = pd.concat(parts, ignore_index=True)
     d = d[d.syn != 't']
     d['datetime'] = pd.to_datetime(d.datetime).dt.tz_localize(TPE).dt.tz_convert('UTC')
-    one = d.drop_duplicates('datetime').set_index('datetime').sort_index()[['open', 'high', 'low', 'close', 'volume']]
+    return d.drop_duplicates('datetime').set_index('datetime').sort_index()[['open', 'high', 'low', 'close', 'volume']]
+
+
+def roll_mask(times):
+    """True from the expiry day's night session through the next day (both sessions): the front month changes after
+    the third-Wednesday expiry, so TXFR1 jumps across that session gap."""
+    loc = pd.Series(pd.DatetimeIndex(times)).dt.tz_convert(TPE)
+    day = loc.dt.normalize().dt.tz_localize(None)
+    sess = day.where(loc.dt.hour >= 8, day - pd.Timedelta(days=1))             # night session belongs to its start day
+    exp = pd.Series(pd.date_range(day.min() - pd.Timedelta(days=40), day.max(), freq='WOM-3WED'))
+    roll = np.zeros(len(loc), bool)
+    for e in exp:
+        nxt = e + pd.Timedelta(days=1)
+        roll |= ((sess == e) & (loc.dt.hour >= 15)).values | ((sess == e) & (loc.dt.hour < 8)).values | (sess == nxt).values
+    return roll
+
+
+def load_sql(paths):
+    one = read_sql_1m(paths)
     c = one.close.values
     aF = 1 - (1 - 2 / 1131) ** 12; aS = 1 - (1 - 2 / 1131) ** 4
     f = np.empty(len(c)); s = np.empty(len(c)); f[0] = s[0] = c[0]
@@ -73,17 +92,7 @@ def load_sql(paths):
     df['emaS'] = pd.Series(s, index=one.index).reindex(lm).values
     df['tj_diff'] = df.emaF - df.emaS
     df['tv_diff'] = np.nan
-    # front-month roll: skip from the expiry day's night session through the next day session
-    loc = df.datetime.dt.tz_convert(TPE)
-    day = loc.dt.normalize().dt.tz_localize(None)
-    sess = day.where(loc.dt.hour >= 8, day - pd.Timedelta(days=1))             # night session belongs to its start day
-    sess = sess.where(~((loc.dt.hour >= 15) | (loc.dt.hour < 8)), sess)
-    exp = pd.Series(pd.date_range(day.min() - pd.Timedelta(days=40), day.max(), freq='WOM-3WED'))
-    roll = np.zeros(len(df), bool)
-    for e in exp:
-        nxt = e + pd.Timedelta(days=1)
-        roll |= ((sess == e) & (loc.dt.hour >= 15)).values | ((sess == e) & (loc.dt.hour < 8)).values | (sess == nxt).values
-    df['tradable'] = (np.arange(len(df)) >= WARM_BARS) & ~roll
+    df['tradable'] = (np.arange(len(df)) >= WARM_BARS) & ~roll_mask(df.datetime)
     return df
 
 
