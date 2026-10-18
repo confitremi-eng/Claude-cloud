@@ -66,7 +66,7 @@
 - **TradingView 編譯**：Remi Superb / Remi Superb 1m（含 QQQ）/ Remi Superb 策略 還沒在 TradingView 編譯確認，有紅字錯誤要貼回來。
 - **策略回測對照**：你會在 TradingView 跑策略回測，結果要跟 remi_superb.md 第 8 節的每月數字比。
 - **前瞻追蹤**：先用 MNQ 小口數或只開快訊觀察，再跟回測比。
-- **ES、TXF**（2026-10-18，remi_superb.md 第 3 節）：ES 一年 Databento 回測，過濾快訊每個門檻都虧（不扣成本也只有約 +0.02R），不建議用。TXF 只有兩個月的 TradingView 2 分 K 匯出（`rbs/txf_check.py`），30–120 筆看不出結論，30 / 60 先不改，要更長的資料。
+- **ES、TXF**（2026-10-18，remi_superb.md 第 3 節）：ES 一年 Databento 回測，過濾快訊每個門檻都虧（不扣成本也只有約 +0.02R），不建議用。TXF 用使用者上傳的 1 分 K SQL 檔（2024-01 .. 2026-09，`rbs/txf_check.py`）：只有 2026 年賺錢，2024、2025 年都虧，也不建議用；30 / 60 先不改。
 - **出場方式**：你的出場方式還沒回答（回測用固定 R ＋ 60 根 K 時間出場）。
 - **趨勢時間濾網**：「只做趨勢開始後 N 小時內」如果之後想要，可以做成選項（預設關）。
 - **QQQ**：只用 NQ 代替回測過，還沒用 QQQ 自己的資料驗證；Remi Superb（秒級版）和策略版還沒有 QQQ。
