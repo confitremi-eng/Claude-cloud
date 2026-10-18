@@ -107,6 +107,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `superb_study.py` | Remi Superb 設定（2 分 K）：門檻 20/40 vs 15/35 × 亞洲盤、只做現金盤、現金盤多空分開、停損 ≥ 1 ATR 拿掉 |
 | `superb_sweep.py` | Remi Superb 過濾快訊的 Trend Judge 門檻掃描，任何 Databento 1 分 K 檔（NQ、ES），有 / 沒有 EMA1130 距離 |
 | `txf_check.py` | TXF：TradingView 2 分 K 匯出或 TXFR1 1 分 K 的 SQL 檔（只讀 COPY 資料，不執行 SQL）→ Remi Superb 過濾快訊門檻掃描、萬分比門檻、逐年；換月前後排除 |
+| `limit_entry.py` | 進場改用限價單（掛在停損點或一半、新停損、等幾分鐘、碰價或穿價成交）跟市價進場比較，全部在 1 分 K 上模擬；`DATA 門檻 成本`，ES、NQ 都能跑 |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
 | `two_lots.py` | 每個訊號下兩口：都 2R、1R+2R、1R+3R、2R+3R、到 1R 保本、留一口跑，以及同時 2 筆 |
