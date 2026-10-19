@@ -127,6 +127,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `gex_trend.py` | 順勢訊號（QQQ 1m 原版且 Trend Judge 同向、QQQ 1m v3、NQ 2m v3 美股盤）× GEX：SPY / QQQ gamma 正負、買賣 × gamma、離 QQQ gamma flip 多遠（朝 flip 走 / 離開，再依趨勢時間）、到 call / put wall 的空間（幾倍停損）、等級相關 |
 | `qqq_3008.py` | QQQ 1m 原版 (30, 0, 8, 1)：QQQ Trend Judge 順勢、NQ 2m 同向 / MIX / 逆勢，買賣分開，逐一加上 v3 的條件、依趨勢時間；一次一筆對照 v3 的 QQQ；NQ 代替一年 + ZeroGEX 的 QQQ 實際 K 棒 |
 | `qqq_3008_when.py` | QQQ 1m 原版 (30, 0, 8, 1) 不過濾，依開盤後幾分鐘、跳空、當天已走、開盤 15 / 30 分區間（假突破收回等）、QQQ / NQ 2m Trend Judge 分組，買賣分開；`--check` 加 (25 / 35, 0, 8, 1) 和 QQQ 實際 K 棒；`--gex` 依 gamma flip 方向和到牆空間 |
+| `gex_params.py` | v3 GEX setup（NQ RTH 1m，Trend Judge 順勢 + 朝 QQQ gamma flip 走）的階段 15–50 × EMA 5 / 8 / 13 / 21：筆數、1R 勝率、2R / 3R 每筆、一次一筆合計和回撤，細看幾組 |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
 | `two_lots.py` | 每個訊號下兩口：都 2R、1R+2R、1R+3R、2R+3R、到 1R 保本、留一口跑，以及同時 2 筆 |
