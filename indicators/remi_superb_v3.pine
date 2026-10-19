@@ -25,7 +25,7 @@ indicator("Remi Superb v3", overlay=true, max_labels_count=500, max_boxes_count=
 
 // ═════════════════ 商品設定 ═════════════════
 grpP      = "商品設定"
-profSel   = input.string("自動", "商品", options=["自動", "NQ", "NQ RTH（代替 QQQ）", "ES", "TXF", "QQQ", "SPY"], group=grpP, tooltip="自動：依圖上的商品選設定（NQ / MNQ、ES / MES、TXF / MXF / TMF、QQQ、SPY）。NQ / MNQ 圖如果只開美股盤（RTH，設定是一般交易時段、而且圖上沒有夜盤 K 棒），自動改用「NQ RTH（代替 QQQ）」：同 QQQ 的做法，建議 1 分 K。也可以手動指定")
+profSel   = input.string("自動", "商品", options=["自動", "NQ", "NQ RTH（代替 QQQ）", "ES", "TXF", "QQQ", "SPY"], group=grpP, tooltip="自動：依圖上的商品選設定（NQ / MNQ、ES / MES、TXF / MXF / TMF、QQQ、SPY）。NQ / MNQ 圖如果只開美股盤（RTH：最近 1500 根 K 都在美東 09:30–16:15 之內），自動改用「NQ RTH（代替 QQQ）」：同 QQQ 的做法，建議 1 分 K。也可以手動指定")
 otherTf   = input.bool(false, "不是建議週期也發訊號", group=grpP, tooltip="建議週期：NQ 是 2、3 或 5 分 K，TXF 是 2 或 3 分 K，SPY、QQQ、NQ RTH 是 1 分 K。關閉時，其他週期只顯示表格、不發訊號；打開的話用最接近的設定發（沒有回測過）")
 qNqOn     = input.bool(true, "QQQ / NQ RTH：NQ 2 分 K 不反向", group=grpP, inline="qnq")
 nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpP, inline="qnq", tooltip="只影響 QQQ 和 NQ RTH：上一根已收完的 NQ 2 分 K（固定讀 24 小時盤），Trend Judge 跟訊號反向（買訊時是 DOWN / 強Down，賣訊時是 UP / 強Up）就不做，MIX 照做。回測：NQ 2m 反向時 QQQ 訊號是虧的（3R −0.05R）；去掉後每年一樣 +66R，回撤 24R → 17R。讀不到 NQ 資料時不擋")
@@ -102,12 +102,14 @@ tjSlowS   = input.int(15, "慢線秒數", minval=1, group=grpT, inline="tjs")
 // ═════════════════ 商品和週期 → 做法 ═════════════════
 string root     = syminfo.root != "" ? syminfo.root : syminfo.ticker
 bool   autoTX   = str.contains(root, "TXF") or str.contains(root, "MXF") or str.contains(root, "TMF")
-// NQ 圖是不是只開美股盤（RTH）：設定是一般交易時段，而且最近 1500 根 K 都沒有美東 09:30–16:15 以外的 K 棒
+// NQ 圖是不是只開美股盤（RTH）
 int  barEtMin  = hour(time, "America/New_York") * 60 + minute(time, "America/New_York")
 var int lastNight = na
 if barEtMin < 570 or barEtMin >= 975
     lastNight := bar_index
-bool   chartRth = syminfo.session == session.regular and (na(lastNight) or bar_index - lastNight > 1500)
+// 只看 K 棒（不看 syminfo.session：期貨切 RTH 時 TradingView 回報的時段類型不一定是 regular）：
+// 已經有 1500 根 K，而且最近 1500 根都沒有美東 09:30–16:15 以外的 K 棒（24 小時盤的 NQ 每天都有夜盤 K）
+bool   chartRth = timeframe.isintraday and bar_index >= 1500 and (na(lastNight) or bar_index - lastNight > 1500)
 string autoProf = str.contains(root, "NQ") ? (chartRth ? "NQ RTH" : "NQ") : autoTX ? "TXF" : root == "QQQ" ? "QQQ" : root == "SPY" ? "SPY" : str.contains(root, "ES") ? "ES" : "無"
 string prof     = profSel == "自動" ? autoProf : profSel == "NQ RTH（代替 QQQ）" ? "NQ RTH" : profSel
 bool   isNqR    = prof == "NQ RTH"
@@ -599,6 +601,8 @@ if barstate.islast and showTbl
         warn := compact ? "週五 " + str.format("{0,number,00}:{1,number,00}", friCutH, friCutM) + " 後不交易" : "週五 " + str.format("{0,number,00}:{1,number,00}", friCutH, friCutM) + " 以後不發新訊號（交易規則設定）"
     else if isES and not esOn
         warn := compact ? "ES 預設不發" : "ES 回測每種做法都虧，預設不發訊號"
+    else if isNQ and tfp == "1" and profSel == "自動"
+        warn := compact ? "1m 請開 RTH 或選 NQ RTH" : "NQ 1 分 K 要用 NQ RTH：圖表時段切 RTH（" + (na(lastNight) ? "已經 " + str.tostring(bar_index) + " 根 K，要 1500 根才會自動切換" : "最近一根美股盤外的 K 在 " + str.tostring(bar_index - lastNight) + " 根前，要超過 1500 根") + "），或在「商品」選「NQ RTH（代替 QQQ）」"
     else if not okTf
         warn := compact ? "建議 " + (isETF ? "1" : isNQ ? "2、3 或 5" : "2 或 3") + " 分 K" : "建議週期：" + (isETF ? "1 分 K" : isNQ ? "2、3 或 5 分 K" : "2 或 3 分 K") + "，目前 " + tfp + (otherTf ? "（照設定仍發訊號，沒有回測過）" : "（不發訊號）")
     else if (isQQ or isSP) and syminfo.session == session.extended

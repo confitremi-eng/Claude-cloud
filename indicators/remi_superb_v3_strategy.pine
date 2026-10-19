@@ -73,7 +73,9 @@ int  barEtMin  = hour(time, "America/New_York") * 60 + minute(time, "America/New
 var int lastNight = na
 if barEtMin < 570 or barEtMin >= 975
     lastNight := bar_index
-bool   chartRth = syminfo.session == session.regular and (na(lastNight) or bar_index - lastNight > 1500)
+// 只看 K 棒（不看 syminfo.session：期貨切 RTH 時 TradingView 回報的時段類型不一定是 regular）：
+// 已經有 1500 根 K，而且最近 1500 根都沒有美東 09:30–16:15 以外的 K 棒（24 小時盤的 NQ 每天都有夜盤 K）
+bool   chartRth = timeframe.isintraday and bar_index >= 1500 and (na(lastNight) or bar_index - lastNight > 1500)
 string autoProf = str.contains(root, "NQ") ? (chartRth ? "NQ RTH" : "NQ") : autoTX ? "TXF" : root == "QQQ" ? "QQQ" : root == "SPY" ? "SPY" : str.contains(root, "ES") ? "ES" : "無"
 string prof     = profSel == "自動" ? autoProf : profSel == "NQ RTH（代替 QQQ）" ? "NQ RTH" : profSel
 bool   isNqR    = prof == "NQ RTH"
@@ -402,6 +404,6 @@ if barstate.islast and showTbl
     color  tjCol = not tjLinked ? color.gray : tjDirI == 2 ? color.lime : tjDirI == 1 ? color.green : tjDirI == -2 ? color.maroon : tjDirI == -1 ? color.red : color.orange
     addRow(1, "趨勢", tjTxt + (trendDir != 0 ? " " + str.tostring(trendMin, "#") + "分" + (useWin and inWin ? " ✅" : "") : ""), tjCol)
     addRow(2, "下單", (isStock ? str.tostring(qtyEtf) + " 股" : str.tostring(qtyFut) + " 口") + (mixUse and useMix ? "，趨勢 + MIX" + (mixClose ? "（收線 2R）" : "") : "，趨勢"), color.new(color.black, 20))
-    string warn = prof == "無" ? "只支援 NQ / ES / TXF / QQQ / SPY" : isES and not esOn ? "ES 預設不交易" : not okTf ? (otherTf ? "不是建議週期（沒回測過）" : "不是建議週期，不交易") : isStock and syminfo.session == session.extended ? "請關延長交易時段" : isStock ? "手續費請改每股約 0.005" : ""
+    string warn = prof == "無" ? "只支援 NQ / ES / TXF / QQQ / SPY" : isES and not esOn ? "ES 預設不交易" : isNQ and tfp == "1" and profSel == "自動" ? "1m 請開 RTH 或選 NQ RTH" : not okTf ? (otherTf ? "不是建議週期（沒回測過）" : "不是建議週期，不交易") : isStock and syminfo.session == session.extended ? "請關延長交易時段" : isStock ? "手續費請改每股約 0.005" : ""
     if warn != ""
         addRow(3, "提示", warn, color.new(color.orange, 20))
