@@ -408,12 +408,13 @@ tblTxt   = tblSize == "極小" ? size.tiny : tblSize == "小" ? size.small : tbl
 var table st = table.new(tblWhere, 2, tblPad + 7, border_width=1)
 fmtP(float v) =>
     str.tostring(v, format.mintick)
-addRow(int r, string lbl, string val, color vb) =>
+addRow(int r, string lbl, string val, color vb, string ha) =>
     table.cell(st, 0, r, lbl, text_color=color.white, bgcolor=color.new(color.black, 20), text_size=tblTxt)
-    table.cell(st, 1, r, val, text_color=color.white, bgcolor=vb, text_size=tblTxt, text_halign=text.align_left)
+    table.cell(st, 1, r, val, text_color=color.white, bgcolor=vb, text_size=tblTxt, text_halign=ha)
 if barstate.islast and showTbl
     table.clear(st, 0, 0, 1, tblPad + 6)
     bool  compact = tblStyle == "精簡"
+    string ha     = compact ? text.align_center : text.align_left    // 精簡置中，完整靠左
     color bg      = color.new(color.black, 20)
     color blank   = color.new(color.black, 100)
     int padUse = tblPos == "左上" or tblPos == "右上" ? tblPad : 0
@@ -425,37 +426,37 @@ if barstate.islast and showTbl
     // 設定
     color  setCol = gradeTxt == "主力" ? color.new(#2962FF, 30) : gradeTxt == "可做" ? color.new(#2962FF, 55) : gradeTxt == "邊緣" ? color.new(color.orange, 40) : color.new(color.red, 30)
     string setTxt = prof == "無" ? "不支援 " + syminfo.ticker : compact ? prof + " " + tfp + "m " + gradeTxt : prof + " " + tfp + " 分 K（" + gradeTxt + "）\n" + ruleTxt
-    addRow(row, "設定", setTxt, setCol)
+    addRow(row, "設定", setTxt, setCol, ha)
     row += 1
     // Trend Judge 和趨勢已持續
     string tjTxt = not tjLinked ? "沒有資料" : tjDirI == 2 ? "強UP" : tjDirI == 1 ? "UP" : tjDirI == -2 ? "強Down" : tjDirI == -1 ? "DOWN" : "MIX"
     color  tjCol = not tjLinked ? color.gray : tjDirI == 2 ? color.lime : tjDirI == 1 ? color.green : tjDirI == -2 ? color.maroon : tjDirI == -1 ? color.red : color.orange
     if compact
         string tjShort = tjTxt + (trendDir != 0 ? " " + str.tostring(trendMin, "#") + "分" + (useWin and inWin ? " ✅" : "") : "")
-        addRow(row, "趨勢", tjShort, tjCol)
+        addRow(row, "趨勢", tjShort, tjCol, ha)
         row += 1
     else
-        addRow(row, "Trend Judge", tjTxt, tjCol)
+        addRow(row, "Trend Judge", tjTxt, tjCol, ha)
         row += 1
         string ageTxt = trendDir == 0 ? "MIX（沒有趨勢）" : str.tostring(trendMin, "#") + " 分" + (not useWin ? "" : inWin ? "　✅ 在 " + str.tostring(winLo) + "–" + str.tostring(winHi) + " 分內" : trendMin < winLo ? "　再 " + str.tostring(winLo - trendMin, "#") + " 分進入範圍" : "　已超過 " + str.tostring(winHi) + " 分")
-        addRow(row, "趨勢已持續", ageTxt, trendDir != 0 and useWin and inWin ? color.new(#2962FF, 30) : bg)
+        addRow(row, "趨勢已持續", ageTxt, trendDir != 0 and useWin and inWin ? color.new(#2962FF, 30) : bg, ha)
         row += 1
     // 持倉
     color  posCol = vPos == 1 ? color.new(color.green, 40) : vPos == -1 ? color.new(color.red, 40) : bg
     string posTxt = compact ? (not active ? "不發訊號" : vPos == 0 ? "空手" : (vPos == 1 ? "多" : "空") + " 停 " + fmtP(vStop) + " 標 " + fmtP(vTgt)) : not active ? "這個商品 / 週期不發訊號" : vPos == 0 ? "空手，可以接訊號" : (vPos == 1 ? "多單" : "空單") + (vKind == 2 ? "（MIX 突破）" : "（趨勢）") + "　進 " + fmtP(vEntry) + "　停 " + fmtP(vStop) + "　標 " + fmtP(vTgt) + "　已 " + str.tostring(bar_index - vBar) + " 根"
-    addRow(row, compact ? "持倉" : "持倉（虛擬）", posTxt, posCol)
+    addRow(row, compact ? "持倉" : "持倉（虛擬）", posTxt, posCol, ha)
     row += 1
     // NQ 2m（QQQ、NQ RTH）
     if qNqUse
         string nqState = not nqHas ? "讀不到" : nqDir == 2 ? "強UP" : nqDir == 1 ? "UP" : nqDir == -2 ? "強Down" : nqDir == -1 ? "DOWN" : "MIX"
         string nqTxt   = compact ? nqState + (nqHas and nqDir != 0 ? " " + str.tostring(nqMin, "#") + "分" : "") + (nqHas ? (nqDir > 0 ? " 只做買" : nqDir < 0 ? " 只做賣" : " 都可以") : "") : not nqHas ? "讀不到 " + nqSym + "（不擋訊號）" : nqState + (nqDir != 0 ? "　趨勢 " + str.tostring(nqMin, "#") + " 分" : "") + "　→ " + (nqDir > 0 ? "只做買" : nqDir < 0 ? "只做賣" : "買賣都可以")
         color  nqCol   = not nqHas ? color.gray : nqDir == 2 ? color.lime : nqDir == 1 ? color.green : nqDir == -2 ? color.maroon : nqDir == -1 ? color.red : color.orange
-        addRow(row, "NQ 2m", nqTxt, nqCol)
+        addRow(row, "NQ 2m", nqTxt, nqCol, ha)
         row += 1
     // MIX 區間（精簡時只在 NQ 2 分 K 顯示）
     if mixUse or not compact
         string mixTxt = not mixUse ? "這個商品 / 週期不做" : bxLive and bar_index <= bxEnd ? (compact ? "上 " + fmtP(bxUpL) + " 下 " + fmtP(bxDnL) : "等突破　上 " + fmtP(bxUpL) + "　下 " + fmtP(bxDnL) + "　剩 " + str.tostring((bxEnd - bar_index) * tfMin, "#") + " 分") : not na(mbStart) ? (compact ? "成形中 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + "分" : "MIX 已 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + " 分（滿 60 分成形）") : (compact ? "無" : "沒有區間")
-        addRow(row, compact ? "MIX" : "MIX 區間", mixTxt, bg)
+        addRow(row, compact ? "MIX" : "MIX 區間", mixTxt, bg, ha)
         row += 1
     // 提示
     string warn = ""
@@ -472,7 +473,7 @@ if barstate.islast and showTbl
     else if isTX
         warn := compact ? "邊緣，成本高" : "回測只小賺，成本 4 點時接近打平；結算日夜盤到隔天不要做"
     if warn != ""
-        addRow(row, "提示", warn, color.new(color.orange, 20))
+        addRow(row, "提示", warn, color.new(color.orange, 20), ha)
 
 // ═════════════════ 快訊：只有兩個，所有商品共用 ═════════════════
 // 觸發選「每根 K 線一次」：NQ 2 分 K 的 MIX 突破碰到突破價就通知（盤中），其他訊號在 K 棒收盤時通知
