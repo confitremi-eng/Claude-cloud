@@ -78,6 +78,7 @@ ssh -i ~/.ssh/remi_vultr root@64.176.198.47
 在主機上常用的指令：
 
 - 填 / 改 IBKR 登入資料，並啟動 Gateway：`remi-set-ibkr`。帳密只存在主機的 `/home/trader/ibc/config.ini`。
+- 填 / 改 Discord 通知網址：`remi-set-discord`（重啟 autotrade，頻道會收到「🚀 autotrade 啟動」）。
 - 看狀態：`systemctl status ibgateway autotrade`
 - 看即時記錄：`journalctl -u autotrade -f`
 - 看今天的快訊和下單：`tail /home/trader/autotrade/logs/events-$(date +%F).jsonl`
@@ -139,6 +140,17 @@ curl -s -X POST http://127.0.0.1:8081/flatten
 - `logs/events-日期.jsonl`：每一筆快訊、進場、出場、拒絕的原因。
 - 進場記錄裡的 `tv_delay_sec` 是「快訊觸發 → 程式收到」的秒數。TradingView 的 `{{timenow}}` 只到秒，所以誤差大約 ±1 秒。
 - `fill` 是 IBKR 的成交價，可以跟 `price`（策略預期的進場價）比，看滑價多少。
+
+## Discord 通知
+
+config 的 `discord_webhook_url` 有填就會送（[notify.py](notify.py)），送不出去只記 log，不影響下單：
+
+- 🟢 / 🔴 進場：方向、口數、合約、成交價、停損 / 目標距離、滑價（跟策略價比）、快訊延遲
+- ✅ / ❌ 出場（停損、目標、市價）：出場價、這筆點數和美元（未扣手續費）、今天累計。損益用 IBKR 的成交回報算；程式重開時有部位，就用 IBKR 的平均成本接著算
+- ⛔ 沒下單的快訊和原因；⚠️ 安全網平倉；🛑 當日虧損上限
+- ⚠️ IBKR 斷線超過 `disconnect_alert_min`（5）分鐘，恢復時再通知一次
+- 📊 平日美東 `summary_time_et`（17:00）盤後總結：筆數、勝敗、點數、美元
+- 🚀 程式啟動（每天 Gateway 重啟不會觸發；autotrade 本身重開才會）
 
 ## 測試
 

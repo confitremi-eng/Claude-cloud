@@ -9,6 +9,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from broker import DryRunBroker
 from engine import ET, Engine, trading_day
 from main import DEFAULTS, webhook_app
+from notify import Notifier, Tracker
 from signals import parse_contract, parse_payload, round_tick, ticker_root
 
 SECRET = "test-secret-1234567890"
@@ -154,6 +155,60 @@ class TestEngine(unittest.IsolatedAsyncioTestCase):
     def test_trading_day(self):
         self.assertEqual(trading_day(et(2026, 10, 19, 17, 59)), "2026-10-19")
         self.assertEqual(trading_day(et(2026, 10, 19, 18, 0)), "2026-10-20")
+
+
+class TestNotify(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.clock = Clock(et(2026, 10, 19, 10, 0))
+        self.sent = []
+        self.n = Notifier(cfg(discord_webhook_url="https://discord.example/x"), clock=self.clock)
+        self.n.send = self.sent.append
+        self.b = DryRunBroker(cfg())
+        self.b.on_fill = self.n.on_fill
+        self.e = Engine(self.b, cfg(), clock=self.clock, events=self.n.on_event)
+
+    def test_tracker_pnl(self):
+        t = Tracker(2.0)
+        self.assertIsNone(t.on_fill({"side": "BOT", "qty": 2, "price": 25000.0, "kind": "市價", "day": "d"}))
+        r = t.on_fill({"side": "SLD", "qty": 2, "price": 25010.5, "kind": "目標", "day": "d"})
+        self.assertEqual((r["pts"], r["usd"]), (10.5, 42.0))
+        t.on_fill({"side": "SLD", "qty": 2, "price": 25000.0, "kind": "市價", "day": "d"})
+        r = t.on_fill({"side": "BOT", "qty": 2, "price": 25004.0, "kind": "停損", "day": "d"})
+        self.assertEqual((r["pts"], r["usd"]), (-4.0, -16.0))
+        self.assertEqual(t.day_stats("d"), {"n": 2, "wins": 1, "usd": 26.0, "pts": 6.5})
+
+    async def test_entry_exit_messages(self):
+        await self.e.handle(parse_payload(msg(stop=24990, target=25030, price=25000), self.clock()))
+        await self.e.handle(parse_payload(msg("exit"), self.clock()))
+        self.assertEqual(len(self.sent), 2)
+        self.assertIn("進場 買 2 口", self.sent[0])
+        self.assertIn("滑價 +10.00 點", self.sent[0])        # 假成交價 25010
+        self.assertIn("出場（市價）賣 2 口", self.sent[1])
+
+    async def test_reject_message(self):
+        self.e.paused = True
+        await self.e.handle(parse_payload(msg(), self.clock()))
+        self.assertTrue(self.sent[0].startswith("⛔ 沒下單（買 趨勢）"))
+
+    def test_disconnect_and_summary(self):
+        self.n.tick(False)
+        self.clock.t += timedelta(minutes=6)
+        self.n.tick(False)
+        self.n.tick(False)
+        self.n.tick(True)
+        self.assertEqual(len(self.sent), 2)
+        self.assertIn("斷線 6 分鐘", self.sent[0])
+        self.assertIn("重新連線", self.sent[1])
+        self.clock.t = et(2026, 10, 19, 17, 0)
+        self.n.tick(True)
+        self.n.tick(True)
+        self.assertEqual(len(self.sent), 3)
+        self.assertIn("今天沒有交易", self.sent[2])
+
+    def test_off_without_url(self):
+        n = Notifier(cfg())
+        n.send("x")
+        self.assertEqual(n.q.qsize(), 0)
 
 
 class TestWebhook(unittest.IsolatedAsyncioTestCase):

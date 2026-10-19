@@ -29,6 +29,9 @@ class IBBroker:
         self.account: Optional[str] = None
         self._pnl = None
         self._front = None            # (到期日, Contract)
+        self.on_fill = None           # 自動下單的單整張成交時呼叫：dict(side, qty, price, kind)
+        self._seen = set()
+        self.ib.execDetailsEvent += self._exec
 
     # ── 連線 ──
     async def run(self):
@@ -62,6 +65,24 @@ class IBBroker:
 
     def connected(self) -> bool:
         return self.ib.isConnected() and self.account is not None
+
+    def _exec(self, trade, fill):
+        e = fill.execution
+        if trade.order.orderRef != ORDER_REF or fill.contract.symbol != self.cfg["symbol"] or e.execId in self._seen:
+            return
+        self._seen.add(e.execId)
+        if e.cumQty < trade.order.totalQuantity or not self.on_fill:
+            return                    # 分批成交：等整張成交完再通知
+        kind = {"MKT": "市價", "LMT": "目標", "STP": "停損"}.get(trade.order.orderType, trade.order.orderType)
+        self.on_fill({"side": e.side, "qty": int(trade.order.totalQuantity), "price": e.avgPrice, "kind": kind})
+
+    def position_avg(self):
+        """(口數, 平均成本價)；重開程式時接續算損益用。"""
+        for p in self.ib.positions(self.account) if self.connected() else []:
+            if p.contract.symbol == self.cfg["symbol"] and p.contract.secType == "FUT" and p.position:
+                mult = float(p.contract.multiplier or self.cfg.get("point_value", 2))
+                return int(p.position), p.avgCost / mult
+        return 0, None
 
     # ── 狀態 ──
     def _ours(self):
@@ -167,6 +188,11 @@ class DryRunBroker:
         self.orders = 0
         self.pnl: Optional[float] = 0.0
         self.log: list = []
+        self.on_fill = None
+        self.last_px: Optional[float] = None
+
+    def position_avg(self):
+        return self.pos, self.last_px
 
     async def run(self):
         while True:
@@ -188,10 +214,15 @@ class DryRunBroker:
         self.pos = qty if side == "BUY" else -qty
         self.orders = 2
         self.log.append(("bracket", side, qty, stop, target, month))
-        return {"dry_run": True, "contract": f"{self.cfg['symbol']} {month or '近月'}"}
+        self.last_px = round((stop + target) / 2, 2)   # 假的成交價
+        if self.on_fill:
+            self.on_fill({"side": "BOT" if side == "BUY" else "SLD", "qty": qty, "price": self.last_px, "kind": "市價"})
+        return {"dry_run": True, "contract": f"{self.cfg['symbol']} {month or '近月'}", "fill": self.last_px}
 
     async def flatten(self, why: str) -> dict:
         self.log.append(("flatten", why, self.pos))
         r = {"dry_run": True, "cancelled": self.orders, "closed": self.pos}
+        if self.pos and self.on_fill:
+            self.on_fill({"side": "SLD" if self.pos > 0 else "BOT", "qty": abs(self.pos), "price": self.last_px, "kind": "市價"})
         self.pos, self.orders = 0, 0
         return r

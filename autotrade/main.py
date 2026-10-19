@@ -22,6 +22,7 @@ from aiohttp import web
 
 from broker import DryRunBroker, IBBroker, LiveAccountRefused
 from engine import Engine
+from notify import Notifier
 from signals import parse_payload
 
 HERE = Path(__file__).resolve().parent
@@ -36,6 +37,7 @@ DEFAULTS = {
     "max_entry_delay_sec": 15, "max_alert_age_sec": 30, "max_stop_points": 120,
     "max_trades_per_day": 20, "max_daily_loss_usd": 600, "max_hold_minutes": 125,
     "flat_time_et": "16:58", "reopen_time_et": "18:00", "roll_days": 8, "tradingview_ips_only": False, "client_ip_header": "",
+    "discord_webhook_url": "", "point_value": 2.0, "disconnect_alert_min": 5, "summary_time_et": "17:00",
 }
 
 log = logging.getLogger("main")
@@ -149,18 +151,38 @@ async def worker(engine: Engine, queue: asyncio.Queue):
             log.exception("處理快訊出錯：%s", sig.raw)
 
 
-async def safety(engine: Engine):
+async def safety(engine: Engine, notifier: Notifier):
+    seeded = False
     while True:
         await asyncio.sleep(5)
         try:
             await engine.tick()
+            connected = engine.b.connected()
+            if connected and not seeded:
+                # 重開程式時已經有部位：從 IBKR 的平均成本接著算這筆的損益
+                pos, avg = engine.b.position_avg()
+                if pos and notifier.tracker.pos == 0:
+                    notifier.tracker.pos, notifier.tracker.entry = pos, avg
+                seeded = True
+            notifier.tick(connected)
         except Exception:  # noqa: BLE001
             log.exception("安全網出錯")
 
 
 async def main_async(cfg: dict, dry: bool):
     broker = DryRunBroker(cfg) if dry else IBBroker(cfg)
-    engine = Engine(broker, cfg, events=write_event)
+    notifier = Notifier(cfg)
+
+    def events(e: dict):
+        write_event(e)
+        notifier.on_event(e)
+
+    def fills(f: dict):
+        write_event({"time": datetime.now(timezone.utc).isoformat(), "event": "fill", **f})
+        notifier.on_fill(f)
+
+    broker.on_fill = fills
+    engine = Engine(broker, cfg, events=events)
     queue: asyncio.Queue = asyncio.Queue()
 
     runners = []
@@ -172,10 +194,11 @@ async def main_async(cfg: dict, dry: bool):
         runners.append(r)
     log.info("webhook 在 %s:%d，管理在 127.0.0.1:%d，%s", cfg["listen_host"], cfg["webhook_port"],
              cfg["admin_port"], "DRY RUN（不下單）" if dry else f"IBKR {cfg['ib_host']}:{cfg['ib_port']}")
-    write_event({"time": datetime.now(timezone.utc).isoformat(), "event": "start", "dry_run": dry,
-                 "qty": cfg["qty"], "symbol": cfg["symbol"], "ib_port": cfg["ib_port"]})
+    events({"time": datetime.now(timezone.utc).isoformat(), "event": "start", "dry_run": dry,
+            "qty": cfg["qty"], "symbol": cfg["symbol"], "ib_port": cfg["ib_port"]})
+    log.info("Discord 通知：%s", "開" if notifier.on else "關（config 沒填 discord_webhook_url）")
     try:
-        await asyncio.gather(broker.run(), worker(engine, queue), safety(engine))
+        await asyncio.gather(broker.run(), worker(engine, queue), safety(engine, notifier), notifier.run())
     finally:
         for r in runners:
             await r.cleanup()
