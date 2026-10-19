@@ -124,9 +124,10 @@ def main():
     api = Api(sys.argv[1])
     what = set(sys.argv[2:]) or {'range', 'frames', 'regime'}
     os.makedirs(OUT, exist_ok=True)
-    today = datetime.now(NY).strftime('%Y-%m-%d')
+    now = datetime.now(NY); today = now.strftime('%Y-%m-%d')
+    done_today = now.hour * 60 + now.minute >= 16 * 60 + 5                     # today's session is over after 16:05 ET
     for sym in SYMS:
-        days = [d for d in sessions(api, sym) if d < today]                  # finished sessions only
+        days = [d for d in sessions(api, sym) if d < today or (d == today and done_today)]   # finished sessions only
         if 'regime' in what: fetch_regime(api, sym)
         if 'range' in what: fetch_range(api, sym, days)
         if 'frames' in what: fetch_frames(api, sym, days)

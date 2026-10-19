@@ -2,7 +2,7 @@
 
   cd indicators/backtest
   python3 -I rbs/qqq_3008_when.py [--check]      # --check: also (25 / 35, 0, 8, 1) and the real QQQ candles
-  python3 -I rbs/qqq_3008_when.py --gex           # the ZeroGEX months: direction against the gamma flip, room to the wall
+  python3 -I rbs/qqq_3008_when.py --gex [8,13]    # the ZeroGEX months: direction against the gamma flip, room to the wall (EMA list)
 
 Prompted by 2026-10-19: QQQ gapped up ~1.3%, dipped under the opening range low in the first half hour, and the
 buy triangle there ran ~3R. Every original signal (no filter), each on its own (signal close entry, two-bar stop,
@@ -114,26 +114,44 @@ def run(name, one, cost, th, st, nd, start, end, stages=(30,)):
             report(s[s.side == side], cost, split, f'({stage}, 0, 8, 1) {nm}：{d[0]} .. {d[-1]}，每筆扣 {cost:g}')
 
 
-def gex_check(cost=1.0):
-    """The ZeroGEX months: (30, 0, 8, 1) by the trade's direction against QQQ's gamma flip and the room to the wall."""
-    one = mm.load_market('qqq', []); tdm = mm.minute_trend(one); H = mm.hourly(one, True)
-    df = mm.chart(one, tdm, 1, 20.0, 40.0)
-    s = mm.trend_signals(df, H, 1, 30, 8); s = s[(s.date >= '2026-06-29') & (s.date <= '2026-10-14')].copy()
-    s = pd.concat([s, gt.feats(df, s)], axis=1); s = s[s.QQQ_flip.notna()]
-    d = sorted(s.date.unique()); split = d[len(d) // 2]
-    R = lambda y, nm: print(f'   {nm:<26} ' + mm.row_ind(y, cost, split))
-    print(f'\n################ (30, 0, 8, 1) × QQQ gamma flip（ZeroGEX，{d[0]} .. {d[-1]}，NQ 代替）')
-    for side, sn in ((1, '買'), (-1, '賣')):
-        z = s[s.side == side]; tr = np.sign(z.dir) * z.side > 0
-        print(f'  ## {sn}（朝 flip 走 = {"買在 flip 下面" if side == 1 else "賣在 flip 上面"}）')
-        R(z, '全部'); R(z[z.flip_d < 0], '朝 flip 走'); R(z[z.flip_d >= 0], '離開 flip')
-        R(z[tr], 'QQQ 順勢'); R(z[tr & (z.flip_d < 0)], 'QQQ 順勢 + 朝 flip 走'); R(z[tr & (z.flip_d >= 0)], 'QQQ 順勢 + 離開 flip')
-        R(z[z.room_R < 1], '到牆不到 1 倍停損'); R(z[(z.flip_d < 0) & (z.room_R >= 1)], '朝 flip 走 + 到牆 ≥ 1 倍')
+def gex_check(emas=(8,), cost_nq=1.0):
+    """The ZeroGEX months: (30, 0, EMA, 1) by the trade's direction against QQQ's gamma flip and the room to the wall,
+    on NQ cash-session bars and on ZeroGEX's real QQQ candles; then the setup (QQQ 順勢 + 朝 flip 走) one at a time."""
+    one_nq = mm.load_market('qqq', []); one_q = gq.real_qqq()
+    days = sorted(set(one_q.index.tz_convert(ss.NY).date))
+    srcs = (('NQ 代替', one_nq, 1.0, 20.0, 40.0, '2026-06-29', '2026-10-14'),
+            ('QQQ 實際 K 棒', one_q, 0.024, 0.5, 1.0, str(days[3]), str(days[-1])))
+    for nm, one, cost, th, st, start, end in srcs:
+        tdm = mm.minute_trend(one); H = mm.hourly(one, True); df = mm.chart(one, tdm, 1, th, st)
+        for ema in emas:
+            s = mm.trend_signals(df, H, 1, 30, ema); s = s[(s.date >= start) & (s.date <= end)].copy()
+            s = pd.concat([s, gt.feats(df, s)], axis=1); s = s[s.QQQ_flip.notna()]
+            d = sorted(s.date.unique()); split = d[len(d) // 2]
+            R = lambda y, lab: print(f'   {lab:<26} ' + mm.row_ind(y, cost, split))
+            print(f'\n################ (30, 0, {ema}, 1) × QQQ gamma flip（{nm}，{d[0]} .. {d[-1]}，{len(d)} 天，每筆扣 {cost:g}）')
+            print(f'   {"":<26}   筆數   1R 勝率 每筆   2R 勝率 每筆   3R 勝率 每筆')
+            tr = np.sign(s.dir) * s.side > 0; tw = s.flip_d < 0
+            for side, sn in ((1, '買'), (-1, '賣')):
+                z = s.side == side
+                print(f'  ## {sn}（朝 flip 走 = {"買在 flip 下面" if side == 1 else "賣在 flip 上面"}）')
+                R(s[z], '全部'); R(s[z & tw], '朝 flip 走'); R(s[z & ~tw], '離開 flip')
+                R(s[z & tr], 'QQQ 順勢'); R(s[z & tr & tw], 'QQQ 順勢 + 朝 flip 走'); R(s[z & tr & ~tw], 'QQQ 順勢 + 離開 flip')
+                R(s[z & (s.room_R < 1)], '到牆不到 1 倍停損'); R(s[z & tw & (s.room_R >= 1)], '朝 flip 走 + 到牆 ≥ 1 倍')
+            print('  ## 買賣合起來')
+            R(s[tr & tw], 'QQQ 順勢 + 朝 flip 走')
+            yrs = len(d) / 252
+            for Rr in (1.0, 2.0, 3.0):
+                t = ss.seq(s[tr & tw].sort_values('i'), Rr)
+                n = t[f'r{Rr:g}'].values - cost / t.risk.values; eq = np.cumsum(n)
+                dd = np.max(np.maximum.accumulate(np.r_[0, eq])[1:] - eq) if len(eq) else 0
+                print(f'   一次一筆 {Rr:g}R：{len(t)} 筆  勝率 {100 * (n > 0).mean():4.1f}%  每筆 {n.mean():+.3f}R  合計 {n.sum():+5.1f}R  回撤 {dd:4.1f}R')
 
 
 def main():
     if '--gex' in sys.argv:
-        gex_check()
+        k = sys.argv.index('--gex')
+        emas = tuple(int(x) for x in sys.argv[k + 1].split(',')) if len(sys.argv) > k + 1 else (8,)
+        gex_check(emas)
         return
     nd = sg.nq2m_dir()
     run('QQQ 1 分 K（NQ 美股盤代替，一年）', mm.load_market('qqq', []), 1.0, 20.0, 40.0, nd, '2025-10-20', '2026-10-14')
