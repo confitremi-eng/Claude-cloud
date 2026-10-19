@@ -837,10 +837,10 @@ python3 -I rbs/gex_trend.py                                       # 順勢訊號
 
 **自動交易（webhook）**
 
-1. 在策略上建立快訊，條件選這個策略，訊息只填 `{{strategy.order.alert_message}}`，webhook 網址填你的下單橋接服務（例如 TradersPost、PickMyTrade 等）。
+1. 在策略上建立快訊，條件選這個策略，訊息只填 `{{strategy.order.alert_message}}`，webhook 網址填你的下單橋接服務。自架的 IBKR 自動下單（MNQ 2 口）見 [autotrade/README.md](../autotrade/README.md)。
 2. 每筆成交都會送一段 JSON：
-   - **進場**：`{"strategy":"Remi Superb v3","ticker":"NQ1!","action":"buy","qty":1,"signal":"趨勢","stop":…,"target":…}`（賣是 `"sell"`，MIX 是 `"signal":"MIX 突破"`；舊版策略的 strategy 是 `"Remi Superb"`、趨勢訊號叫 `"過濾"`）。
-   - **出場**（停損、目標、時間、休市、收盤）：`{"strategy":"Remi Superb v3","ticker":"NQ1!","action":"exit"}`。
+   - **進場**：`{"strategy":"Remi Superb v3","ticker":"NQ1!","contract":"NQZ2026","action":"buy","tv_time":"…","qty":1,"signal":"趨勢","price":…,"stop":…,"target":…}`（2026-10-19 加了 `contract`：NQ1! 當下對應的合約；`price`：預期進場價；`tv_time`：快訊觸發時間）（賣是 `"sell"`，MIX 是 `"signal":"MIX 突破"`；舊版策略的 strategy 是 `"Remi Superb"`、趨勢訊號叫 `"過濾"`）。
+   - **出場**（停損、目標、時間、休市、收盤）：`{"strategy":"Remi Superb v3","ticker":"NQ1!","contract":"NQZ2026","action":"exit","tv_time":"…"}`。
 3. 不同橋接服務要的欄位名稱不一樣，接之前先看它的格式，再改策略最下面的 `entryMsg` / `exitMsg`。
 4. **MIX 突破的注意事項**：進場是停損單。快訊在 TradingView 判斷成交時才送，所以實際是市價追進，會比回測多一點滑價。也可以只用指標版的「MIX 區間成形」快訊，自己在券商掛停損單。
 5. **建議先模擬**：先用模擬帳戶或 MNQ 1 口跑一段時間，確認下單、停損、平倉都正確。

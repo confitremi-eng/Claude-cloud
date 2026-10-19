@@ -303,9 +303,13 @@ if active and mixUse and useMix and mbForm and bxLive and showBox and not na(bxT
     bxDnLine := line.new(bar_index, bxDnL, lineEnd, bxDnL, color=boxLnCol, style=line.style_dashed)
 
 // ═════════════════ 下單 ═════════════════
-entryMsg(string act, string why, float stp, float tgt) =>
-    '{"strategy":"Remi Superb v3","ticker":"' + syminfo.ticker + '","action":"' + act + '","qty":' + str.tostring(qtyUse) + ',"signal":"' + why + '","stop":' + str.tostring(stp, format.mintick) + ',"target":' + str.tostring(tgt, format.mintick) + '}'
-string exitMsg = '{"strategy":"Remi Superb v3","ticker":"' + syminfo.ticker + '","action":"exit"}'
+// 快訊訊息（JSON），自動下單（autotrade/）讀這個：contract 是連續合約（NQ1!）目前對應的合約月份，price 是預期進場價，tv_time 是快訊觸發時間（量延遲用）
+string ccTxt = na(syminfo.current_contract) ? syminfo.ticker : syminfo.current_contract
+msgHead(string act) =>
+    '{"strategy":"Remi Superb v3","ticker":"' + syminfo.ticker + '","contract":"' + ccTxt + '","action":"' + act + '","tv_time":"{{timenow}}"'
+entryMsg(string act, string why, float px, float stp, float tgt) =>
+    msgHead(act) + ',"qty":' + str.tostring(qtyUse) + ',"signal":"' + why + '","price":' + str.tostring(px, format.mintick) + ',"stop":' + str.tostring(stp, format.mintick) + ',"target":' + str.tostring(tgt, format.mintick) + '}'
+string exitMsg = msgHead("exit") + '}'
 
 var float posStop = na
 var float posTgt  = na
@@ -336,13 +340,13 @@ bool goMixL = mixClose and active and mixUse and useMix and canEnter and mxUpC a
 bool goMixS = mixClose and active and mixUse and useMix and canEnter and mxDnC and not friLate and not goMixL
 if goMixL
     float tgtML = close + mixTgtR * (close - bxMid)
-    strategy.entry("MC L", strategy.long, qty=qtyUse, comment="MIX 上破（收線）", alert_message=entryMsg("buy", "MIX 突破", bxMid, tgtML))
+    strategy.entry("MC L", strategy.long, qty=qtyUse, comment="MIX 上破（收線）", alert_message=entryMsg("buy", "MIX 突破", close, bxMid, tgtML))
     strategy.exit("MC L x", "MC L", stop=bxMid, limit=tgtML, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
     posStop := bxMid
     posTgt  := tgtML
 if goMixS
     float tgtMS = close - mixTgtR * (bxMid - close)
-    strategy.entry("MC S", strategy.short, qty=qtyUse, comment="MIX 下破（收線）", alert_message=entryMsg("sell", "MIX 突破", bxMid, tgtMS))
+    strategy.entry("MC S", strategy.short, qty=qtyUse, comment="MIX 下破（收線）", alert_message=entryMsg("sell", "MIX 突破", close, bxMid, tgtMS))
     strategy.exit("MC S x", "MC S", stop=bxMid, limit=tgtMS, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
     posStop := bxMid
     posTgt  := tgtMS
@@ -354,7 +358,7 @@ if goLong
     float tgtL = close + tgtR * (close - buyStop)
     strategy.cancel("M L")
     strategy.cancel("M S")
-    strategy.entry("T L", strategy.long, qty=qtyUse, comment="趨勢買", alert_message=entryMsg("buy", "趨勢", buyStop, tgtL))
+    strategy.entry("T L", strategy.long, qty=qtyUse, comment="趨勢買", alert_message=entryMsg("buy", "趨勢", close, buyStop, tgtL))
     strategy.exit("T L x", "T L", stop=buyStop, limit=tgtL, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
     posStop := buyStop
     posTgt  := tgtL
@@ -362,7 +366,7 @@ if goShort
     float tgtS = close - tgtR * (sellStop - close)
     strategy.cancel("M L")
     strategy.cancel("M S")
-    strategy.entry("T S", strategy.short, qty=qtyUse, comment="趨勢賣", alert_message=entryMsg("sell", "趨勢", sellStop, tgtS))
+    strategy.entry("T S", strategy.short, qty=qtyUse, comment="趨勢賣", alert_message=entryMsg("sell", "趨勢", close, sellStop, tgtS))
     strategy.exit("T S x", "T S", stop=sellStop, limit=tgtS, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
     posStop := sellStop
     posTgt  := tgtS
@@ -370,8 +374,8 @@ if goShort
 // MIX 突破：區間有效、空手，而且下一根不在事件時段、美東 16–20、休市那根、週五截止後，才在上下突破價掛停損單
 bool mixArm = not mixClose and active and mixUse and useMix and canEnter and not goLong and not goShort and bxLive and bar_index >= bxForm and bar_index < bxEnd and not evtNext and not pmNext and not haltNxt and not friNext and not friLate
 if mixArm
-    strategy.entry("M L", strategy.long, qty=qtyUse, stop=bxUpL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 上破", alert_message=entryMsg("buy", "MIX 突破", bxMid, bxUpT))
-    strategy.entry("M S", strategy.short, qty=qtyUse, stop=bxDnL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 下破", alert_message=entryMsg("sell", "MIX 突破", bxMid, bxDnT))
+    strategy.entry("M L", strategy.long, qty=qtyUse, stop=bxUpL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 上破", alert_message=entryMsg("buy", "MIX 突破", bxUpL, bxMid, bxUpT))
+    strategy.entry("M S", strategy.short, qty=qtyUse, stop=bxDnL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 下破", alert_message=entryMsg("sell", "MIX 突破", bxDnL, bxMid, bxDnT))
     strategy.exit("M L x", "M L", stop=bxMid, limit=bxUpT, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
     strategy.exit("M S x", "M S", stop=bxMid, limit=bxDnT, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
 else
