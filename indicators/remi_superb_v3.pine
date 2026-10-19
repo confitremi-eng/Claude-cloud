@@ -10,7 +10,7 @@
 //   ES / MES：回測每種做法都虧，預設不發訊號
 // 趨勢訊號 = 原版買賣訊號 + Trend Judge 有趨勢 + 1 小時 EMA20 同向 + 停損 ≥ 1 ATR + 離 15 秒 EMA1130 不太遠 + 避開數據 / 開收盤 / Globex / FOMC
 //   訊號 K 收盤進場，停損在訊號 K 和前一根的極值
-// MIX 區間突破（只有 NQ 2 分 K）：Trend Judge 連續 MIX 60 分鐘 → 區間；形成後 60 分鐘內第一次突破 10% 就在突破價進場，停損在中線
+// MIX 區間突破（只有 NQ 2、5 分 K）：Trend Judge 連續 MIX 60 分鐘 → 區間；形成後 60 分鐘內第一次突破 10% 就在突破價進場，停損在中線
 // 一次一筆：指標自己記一筆虛擬持倉，碰到停損 / 目標、持有 60 根 K、美東 17:00 休市前（NQ / ES）或資料中斷才算出場
 // 回測：NQ / ES / TXF 用各自的 1 分 K；SPY / QQQ 用 ES / NQ 只留美股盤的 K 棒代替。說明見 indicators/remi_superb.md
 // 訊號參數：v3 的交易訊號預設依商品自動（回測過），可以改成自訂；橙黃色原版小三角另有自己的參數（預設 35, 0, 8, 1）
@@ -50,7 +50,7 @@ mSellTxt  = input.string("🔽", "賣", group=grpA, inline="mb")
 txtCol    = input.color(#FFB300, "文字顏色", group=grpA, tooltip="符號填一般文字時的顏色，Emoji 用它自己的顏色")
 showBox   = input.bool(true, "畫出 MIX 區間", group=grpA, inline="bx")
 boxCol    = input.color(color.new(#9598A1, 85), "", group=grpA, inline="bx")
-boxLnCol  = input.color(#9598A1, "線", group=grpA, inline="bx", tooltip="灰框是用來算區間的那段 MIX，虛線是上下突破價（只有 NQ 2 分 K）")
+boxLnCol  = input.color(#9598A1, "線", group=grpA, inline="bx", tooltip="灰框是用來算區間的那段 MIX，虛線是上下突破價（只有 NQ 2、5 分 K）")
 showPos   = input.bool(true, "畫出持倉的停損和目標", group=grpA, inline="ps")
 stopCol   = input.color(#F23645, "", group=grpA, inline="ps")
 tgtCol    = input.color(#36FE02, "", group=grpA, inline="ps")
@@ -248,7 +248,7 @@ float sellStop = math.max(high, high[1])
 bool trBuy  = active and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate
 bool trSell = active and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate
 
-// ═════════════════ MIX 區間（只有 NQ 2 分 K）═════════════════
+// ═════════════════ MIX 區間（只有 NQ 2、5 分 K）═════════════════
 float tfMin   = tfSec / 60.0
 int   mbNeed  = math.max(1, math.round(60 / tfMin))
 int   mbGrace = math.max(0, math.round(4 / tfMin))
@@ -455,7 +455,7 @@ if barstate.islast and showTbl
         color  nqCol   = not nqHas ? color.gray : nqDir == 2 ? color.lime : nqDir == 1 ? color.green : nqDir == -2 ? color.maroon : nqDir == -1 ? color.red : color.orange
         addRow(row, "NQ 2m", nqTxt, nqCol, ha)
         row += 1
-    // MIX 區間（精簡時只在 NQ 2 分 K 顯示）
+    // MIX 區間（精簡時只在 NQ 2、5 分 K 顯示）
     if mixUse or not compact
         string mixTxt = not mixUse ? "這個商品 / 週期不做" : bxLive and bar_index <= bxEnd ? (compact ? "上 " + fmtP(bxUpL) + " 下 " + fmtP(bxDnL) : "等突破　上 " + fmtP(bxUpL) + "　下 " + fmtP(bxDnL) + "　剩 " + str.tostring((bxEnd - bar_index) * tfMin, "#") + " 分") : not na(mbStart) ? (compact ? "成形中 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + "分" : "MIX 已 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + " 分（滿 60 分成形）") : (compact ? "無" : "沒有區間")
         addRow(row, compact ? "MIX" : "MIX 區間", mixTxt, bg, ha)
@@ -478,6 +478,6 @@ if barstate.islast and showTbl
         addRow(row, "提示", warn, color.new(color.orange, 20), ha)
 
 // ═════════════════ 快訊：只有兩個，所有商品共用 ═════════════════
-// 觸發選「每根 K 線一次」：NQ 2 分 K 的 MIX 突破碰到突破價就通知（盤中），其他訊號在 K 棒收盤時通知
+// 觸發選「每根 K 線一次」：NQ 2、5 分 K 的 MIX 突破碰到突破價就通知（盤中），其他訊號在 K 棒收盤時通知
 alertcondition(tradeBuy, "Remi Superb v3 Buy", '{{ticker}} Remi Superb v3 Buy｜進場 {{plot("v3 進場")}}｜停損 {{plot("v3 停損")}}｜目標 {{plot("v3 目標")}}')
 alertcondition(tradeSell, "Remi Superb v3 Sell", '{{ticker}} Remi Superb v3 Sell｜進場 {{plot("v3 進場")}}｜停損 {{plot("v3 停損")}}｜目標 {{plot("v3 目標")}}')
