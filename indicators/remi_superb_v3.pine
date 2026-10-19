@@ -59,7 +59,7 @@ gsStage   = input.int(35, "GEX setup　階段", minval=2, group=grpG, inline="gs
 gsEma     = input.int(8, "Ema number", minval=1, group=grpG, inline="gs", tooltip="預設 (35, 0, 8, 1)。回測（NQ RTH，2026-07 .. 10）：階段 35–50 × EMA 5–13 都好，EMA 21 不行；(35, 0, 8, 1) 77 筆、1R 勝率 66%、3R 每筆 +0.75R；(40, 0, 8, 1) 70%、+0.99R；(35, 0, 13, 1) 每筆差不多但訊號少四成")
 gsBuyTxt  = input.string("🧲", "GEX setup　買", group=grpG, inline="gm")
 gsSellTxt = input.string("🧲", "賣", group=grpG, inline="gm")
-gsSize    = input.string("小", "大小", options=["小", "中", "大"], group=grpG, inline="gm", tooltip="GEX setup 自己的記號（價格被 flip 吸過去，所以用磁鐵）：紫色小標籤（flip 線的顏色），箭頭直接指著訊號那根 K 的低點（買）/ 高點（賣）。可以換成任何 Emoji 或文字")
+gsSize    = input.string("小", "大小", options=["小", "中", "大"], group=grpG, inline="gm", tooltip="GEX setup 自己的記號（價格被 flip 吸過去，所以用磁鐵）：沒有底色，緊貼在訊號那根 K 的低點下方（買）/ 高點上方（賣）。可以換成任何 Emoji 或文字（文字用 flip 線的顏色）")
 gsLunch   = input.bool(true, "GEX setup：台灣時間", group=grpG, inline="glt")
 gsLH1     = input.int(0, "", minval=0, maxval=23, group=grpG, inline="glt")
 gsLM1     = input.int(0, ":", minval=0, maxval=59, group=grpG, inline="glt")
@@ -475,11 +475,11 @@ if goTrBuy
     drawBuyMark(tBuyTxt)
 if goTrSell
     drawSellMark(tSellTxt)
-// GEX setup 的記號：紫色小標籤，箭頭直接指著那根 K 的低點（買）/ 高點（賣），不會跟 v3 的記號混在一起
+// GEX setup 的記號：沒有底色，緊貼在那根 K 的低點下方（買）/ 高點上方（賣），不會跟 v3 的記號混在一起
 if gsGoBuy
-    label.new(bar_index, low, gsBuyTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_up, color=color.new(gexCol, 25), textcolor=color.white, size=gsSz)
+    label.new(bar_index, low, gsBuyTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_up, color=color.new(color.white, 100), textcolor=gexCol, size=gsSz)
 if gsGoSell
-    label.new(bar_index, high, gsSellTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color.new(gexCol, 25), textcolor=color.white, size=gsSz)
+    label.new(bar_index, high, gsSellTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color.new(color.white, 100), textcolor=gexCol, size=gsSz)
 plot(showPos and gsPos != 0 ? gsStop : na, "GEX 持倉停損", color=color.new(stopCol, 40), style=plot.style_linebr)
 plot(showPos and gsPos != 0 ? gsTgt : na, "GEX 持倉目標", color=color.new(tgtCol, 40), style=plot.style_linebr)
 bool inPos = vPos != 0
