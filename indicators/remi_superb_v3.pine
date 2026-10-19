@@ -18,6 +18,7 @@
 // 回測：NQ / ES / TXF 用各自的 1 分 K；SPY / QQQ 用 ES / NQ 只留美股盤的 K 棒代替。說明見 indicators/remi_superb.md
 // 訊號參數：v3 的交易訊號預設依商品自動（回測過），可以改成自訂；橙黃色原版小三角另有自己的參數（預設 35, 0, 8, 1）
 // Trend Judge 用 1 分 K 收盤推算（同回測，不需要秒級資料）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
+// GEX（預設關）：手動輸入 QQQ 的 gamma flip，表格顯示現在買 / 賣是「朝 flip 走」還是「離開 flip」，只顯示、不擋訊號
 indicator("Remi Superb v3", overlay=true, max_labels_count=500, max_boxes_count=500, max_lines_count=500)
 
 // ═════════════════ 商品設定 ═════════════════
@@ -43,6 +44,14 @@ avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=g
 mixPmOff  = input.bool(true, "MIX 突破不做美東 16–20（收盤後）", group=grpR, tooltip="只影響 NQ 2、5 分 K 的 MIX 突破：K 棒收盤時間在美東 16:00–20:00（台灣時間夏令 04:00–08:00、冬令 05:00–09:00）碰到突破價就不做，這個區間作廢（跟事件時段一樣）。趨勢訊號照常。回測一年：2 分 K 每年 +162R → +168R、回撤 16R → 12.5R；5 分 K +82R → +94R、回撤 14R → 11R，前後半年都一樣")
 mixClose  = input.bool(false, "MIX 突破等收線才進場（目標 2R）", group=grpR, tooltip="預設關：價格碰到突破價就進場（掛停損單），目標同週期（2 分 K 3R、5 分 K 2R）。打開：要等 K 棒收在突破價外，才在那根收盤進場，目標 2R，停損一樣在中線；只碰到、沒收出去不算，區間繼續有效。回測一年（v3 預設規則，一次一筆）：2 分 K 每年 +166R → +146R、回撤 12.5R → 12.6R；5 分 K +90R → +83R、回撤 10.7R → 13.6R。單獨看 MIX 時等收線的回撤比較小，放進 v3 後就沒有了")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpR, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
+
+// ═════════════════ GEX（手動輸入）═════════════════
+grpG      = "GEX（手動輸入，只顯示、不擋訊號）"
+gexOn     = input.bool(false, "顯示 QQQ gamma flip 方向", group=grpG, tooltip="打開後，表格多一列「Flip」：QQQ 現價在 gamma flip 下面時，買是「朝 flip 走」、賣是「離開 flip」；在上面時相反。回測（ZeroGEX 2026-06-29 .. 10-14，76 天，QQQ 1 分 K）：順勢訊號朝 flip 走的 3R 每筆約 +0.75R，離開 flip 的約 0 或虧；v3 在 QQQ 的獲利幾乎都來自朝 flip 走的訊號。樣本小，先只顯示、不擋訊號")
+gexFlip   = input.float(0.0, "QQQ gamma flip", minval=0, step=0.01, group=grpG, tooltip="從 ZeroGEX 抄 QQQ 的 gamma flip 價位（QQQ 價格，不是 NQ）。flip 每天會變、盤中也會移動，要自己更新；0 = 還沒輸入")
+qqqSym    = input.symbol("NASDAQ:QQQ", "QQQ 代號", group=grpG, tooltip="不是 QQQ 圖（例如 NQ、NQ RTH）時，用這個代號讀 QQQ 現價來跟 flip 比；美股盤以外的時間是 QQQ 最後的價格")
+gexLine   = input.bool(true, "QQQ 圖上畫 flip 線", group=grpG, inline="gl")
+gexCol    = input.color(#E040FB, "", group=grpG, inline="gl", tooltip="只有在 QQQ 圖上才畫（flip 是 QQQ 的價格）")
 
 // ═════════════════ 外觀 ═════════════════
 grpA      = "外觀"
@@ -254,6 +263,12 @@ float sellStop = math.max(high, high[1])
 bool trBuy  = active and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate
 bool trSell = active and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate
 
+// ═════════════════ GEX：QQQ 現價跟手動輸入的 gamma flip 比（只顯示）═════════════════
+float qqqPx   = isQQ ? close : request.security(qqqSym, timeframe.period, close)
+bool  gexHas  = gexOn and gexFlip > 0 and not na(qqqPx)
+float gexDiff = gexHas ? qqqPx - gexFlip : na
+plot(gexOn and gexLine and isQQ and gexFlip > 0 ? gexFlip : na, "QQQ gamma flip", color=gexCol, linewidth=1, style=plot.style_linebr)
+
 // ═════════════════ MIX 區間（只有 NQ 2、5 分 K；美東 16–20 的突破不做）═════════════════
 float tfMin   = tfSec / 60.0
 int   mbNeed  = math.max(1, math.round(60 / tfMin))
@@ -414,14 +429,14 @@ plot(nqMin, "NQ 2m 趨勢已持續（分鐘）", display=display.data_window)
 // ═════════════════ 狀態表格（配色同原始 Trend Judge）═════════════════
 tblWhere = tblPos == "左上" ? position.top_left : tblPos == "右上" ? position.top_right : tblPos == "左下" ? position.bottom_left : position.bottom_right
 tblTxt   = tblSize == "極小" ? size.tiny : tblSize == "小" ? size.small : tblSize == "大" ? size.large : size.normal
-var table st = table.new(tblWhere, 2, tblPad + 7, border_width=1)
+var table st = table.new(tblWhere, 2, tblPad + 8, border_width=1)
 fmtP(float v) =>
     str.tostring(v, format.mintick)
 addRow(int r, string lbl, string val, color vb, string ha) =>
     table.cell(st, 0, r, lbl, text_color=color.white, bgcolor=color.new(color.black, 20), text_size=tblTxt)
     table.cell(st, 1, r, val, text_color=color.white, bgcolor=vb, text_size=tblTxt, text_halign=ha)
 if barstate.islast and showTbl
-    table.clear(st, 0, 0, 1, tblPad + 6)
+    table.clear(st, 0, 0, 1, tblPad + 7)
     bool  compact = tblStyle == "精簡"
     string ha     = compact ? text.align_center : text.align_left    // 精簡置中，完整靠左
     color bg      = color.new(color.black, 20)
@@ -461,6 +476,18 @@ if barstate.islast and showTbl
         string nqTxt   = compact ? nqState + (nqHas and nqDir != 0 ? " " + str.tostring(nqMin, "#") + "分" : "") + (nqHas ? (nqDir > 0 ? " 只做買" : nqDir < 0 ? " 只做賣" : " 都可以") : "") : not nqHas ? "讀不到 " + nqSym + "（不擋訊號）" : nqState + (nqDir != 0 ? "　趨勢 " + str.tostring(nqMin, "#") + " 分" : "") + "　→ " + (nqDir > 0 ? "只做買" : nqDir < 0 ? "只做賣" : "買賣都可以")
         color  nqCol   = not nqHas ? color.gray : nqDir == 2 ? color.lime : nqDir == 1 ? color.green : nqDir == -2 ? color.maroon : nqDir == -1 ? color.red : color.orange
         addRow(row, "NQ 2m", nqTxt, nqCol, ha)
+        row += 1
+    // GEX：朝 flip 走 / 離開 flip（只顯示）
+    if gexOn
+        string gexTxt = ""
+        if not gexHas
+            gexTxt := compact ? "請輸入 flip" : "請在設定輸入 QQQ 的 gamma flip 價位"
+        else
+            bool below = gexDiff < 0
+            string dist = str.tostring(math.abs(gexDiff), "#.##")
+            string pct  = str.tostring(math.abs(gexDiff) / gexFlip * 100, "#.##")
+            gexTxt := compact ? (below ? "下 " + dist + "　買朝 flip ✅" : "上 " + dist + "　賣朝 flip ✅") : "QQQ " + str.tostring(qqqPx, "#.##") + " 在 flip " + str.tostring(gexFlip, "#.##") + (below ? " 下面 " : " 上面 ") + dist + "（" + pct + "%）→ " + (below ? "買：朝 flip 走 ✅　賣：離開 flip" : "賣：朝 flip 走 ✅　買：離開 flip")
+        addRow(row, "Flip", gexTxt, color.new(#9C27B0, 40), ha)
         row += 1
     // MIX 區間（精簡時只在 NQ 2、5 分 K 顯示）
     if mixUse or not compact
