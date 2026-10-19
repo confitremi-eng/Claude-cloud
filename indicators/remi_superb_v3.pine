@@ -12,6 +12,7 @@
 // MIX 區間突破（只有 NQ 2 分 K）：Trend Judge 連續 MIX 60 分鐘 → 區間；形成後 60 分鐘內第一次突破 10% 就在突破價進場，停損在中線
 // 一次一筆：指標自己記一筆虛擬持倉，碰到停損 / 目標、持有 60 根 K、美東 17:00 休市前（NQ / ES）或資料中斷才算出場
 // 回測：NQ / ES / TXF 用各自的 1 分 K；SPY / QQQ 用 ES / NQ 只留美股盤的 K 棒代替。說明見 indicators/remi_superb.md
+// 訊號參數：v3 的交易訊號預設依商品自動（回測過），可以改成自訂；橙黃色原版小三角另有自己的參數（預設 20, 0, 8, 1）
 // Trend Judge 用 1 分 K 收盤推算（同回測，不需要秒級資料）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
 indicator("Remi Superb v3", overlay=true, max_labels_count=500, max_boxes_count=500, max_lines_count=500)
 
@@ -57,7 +58,16 @@ tblPos    = input.string("左上", "", options=["左上", "右上", "左下", "�
 tblSize   = input.string("小", "", options=["小", "中", "大"], group=grpA, inline="tbl")
 tblPad    = input.int(2, "表格上方留白（列）", minval=0, maxval=6, group=grpA, tooltip="表格放左上時，空幾列避開圖表左上角的商品名稱和指標名稱")
 showRaw   = input.bool(false, "也標出原版買賣訊號（小三角）", group=grpA, inline="raw")
-rawCol    = input.color(#FFB300, "", group=grpA, inline="raw", tooltip="沒經過過濾的原版訊號（買在 K 棒下方、賣在上方），預設橙黃色。用的是這個商品套用的訊號參數：NQ / ES / TXF 是 (20, 0, 8, 1)，QQQ / SPY / NQ RTH 是 (35, 0, 8, 1)。只是標出來看，不發快訊")
+rawCol    = input.color(#FFB300, "", group=grpA, inline="raw", tooltip="沒經過過濾的原版訊號（買在 K 棒下方、賣在上方），預設橙黃色。參數在「訊號參數」的「原版小三角」那一列，跟 v3 的訊號分開算。只是標出來看，不發快訊")
+
+// ═════════════════ 訊號參數 ═════════════════
+grpS      = "訊號參數（階段、Ema number、Ema enable）"
+sigMode   = input.string("自動（依商品）", "v3 訊號", options=["自動（依商品）", "自訂"], group=grpS, tooltip="v3 交易訊號用的原版訊號參數。自動：NQ / ES / TXF 用 (20, 0, 8, 1)，QQQ / SPY / NQ RTH 用 (35, 0, 8, 1)，都是回測過的。自訂：所有商品都改用下面這一列（沒有回測過）")
+v3Stage   = input.int(20, "自訂　階段", minval=2, group=grpS, inline="v3s")
+v3Ema     = input.int(8, "Ema number", minval=1, group=grpS, inline="v3s", tooltip="只有選「自訂」時才用。v3 的訊號一定要通過 EMA 確認（Ema enable 固定開），回測都是這樣")
+rawStage  = input.int(20, "原版小三角　階段", minval=2, group=grpS, inline="raws")
+rawEma    = input.int(8, "Ema number", minval=1, group=grpS, inline="raws")
+rawEmaOn  = input.bool(true, "Ema enable", group=grpS, inline="raws", tooltip="橙黃色小三角用的參數，預設 (20, 0, 8, 1) 同原版 Remi's Buy/Sell。想看 v3 在這個商品實際用的訊號，就改成跟 v3 一樣（QQQ / SPY / NQ RTH 是 35、8）")
 
 // ═════════════════ Trend Judge ═════════════════
 grpT      = "Trend Judge（門檻依商品自動）"
@@ -90,7 +100,10 @@ bool   okTf     = (isNQ or isTX or isES) ? (tfp == "2" or tfp == "3") : isETF ? 
 bool   profOn   = isES ? esOn : (isNQ or isTX or isETF)
 bool   active   = profOn and (okTf or otherTf)
 bool   nq3      = isNQ and tfp == "3"
-int    stageUse = isETF ? 35 : 20
+bool   sigCust  = sigMode == "自訂"
+int    stageUse = sigCust ? v3Stage : isETF ? 35 : 20
+int    emaUse   = sigCust ? v3Ema : 8
+string sigTxt   = "(" + str.tostring(stageUse) + ", 0, " + str.tostring(emaUse) + ", 1)" + (sigCust ? " 自訂" : "")
 float  thU      = isNQ ? 10.0 : isES ? 4.0 : isTX ? 30.0 : isQQ ? 0.5 : isSP ? 0.8 : isNqR ? 20.0 : na
 float  stU      = isNQ ? 35.0 : isES ? 8.0 : isTX ? 60.0 : isQQ ? 1.0 : isSP ? 1.6 : isNqR ? 40.0 : na
 float  distU    = isETF ? 7.0 : 3.0
@@ -99,7 +112,7 @@ int    winLo    = nq3 ? 90 : isTX ? 60 : 0
 int    winHi    = nq3 ? 120 : isTX ? 120 : 180
 bool   mixUse   = isNQ and not nq3
 float  tgtR     = nq3 ? 1.0 : 3.0
-string ruleTxt  = isETF ? "ETF 設定 (35, 0, 8, 1)，" + str.tostring(tgtR) + "R" + ((isQQ or isNqR) and qNqOn ? "，NQ 2m 不反向" : "") + (isNqR ? "（代替 QQQ）" : "") : "趨勢 " + str.tostring(winLo) + "–" + str.tostring(winHi) + " 分" + (mixUse ? " + MIX 突破" : "") + "，" + str.tostring(tgtR) + "R"
+string ruleTxt  = isETF ? "ETF 設定 " + sigTxt + "，" + str.tostring(tgtR) + "R" + ((isQQ or isNqR) and qNqOn ? "，NQ 2m 不反向" : "") + (isNqR ? "（代替 QQQ）" : "") : "趨勢 " + str.tostring(winLo) + "–" + str.tostring(winHi) + " 分" + (mixUse ? " + MIX 突破" : "") + "，" + str.tostring(tgtR) + "R，訊號 " + sigTxt
 string gradeTxt = not profOn and isES ? "不建議（回測都虧）" : prof == "無" ? "不支援" : not okTf ? "不是建議週期" : isNQ and tfp == "2" ? "主力" : isTX ? "邊緣" : "可做"
 
 // ═════════════════ 原版買賣訊號 ═════════════════
@@ -109,7 +122,7 @@ var float refHigh = na
 var float refLow  = na
 var bool  armBuy  = false
 var bool  armSell = false
-float sigEma  = ta.ema(close, 8)
+float sigEma  = ta.ema(close, emaUse)
 bool trigBuy  = armBuy and close > refHigh
 bool trigSell = armSell and close < refLow
 if trigBuy
@@ -124,8 +137,30 @@ else if newHigh
     armSell := true
 bool buySig  = trigBuy and close > sigEma and barstate.isconfirmed
 bool sellSig = trigSell and close < sigEma and barstate.isconfirmed
-plotshape(showRaw and buySig, "原版買訊", shape.triangleup, location.belowbar, color=rawCol, size=size.tiny)
-plotshape(showRaw and sellSig, "原版賣訊", shape.triangledown, location.abovebar, color=rawCol, size=size.tiny)
+// 橙黃色小三角：原版買賣訊號，用自己的參數另外算（不影響 v3 的訊號）
+bool rNewLow  = low < ta.lowest(low, rawStage)[1]
+bool rNewHigh = high > ta.highest(high, rawStage)[1]
+var float rRefHigh = na
+var float rRefLow  = na
+var bool  rArmBuy  = false
+var bool  rArmSell = false
+float rEma      = ta.ema(close, rawEma)
+bool  rTrigBuy  = rArmBuy and close > rRefHigh
+bool  rTrigSell = rArmSell and close < rRefLow
+if rTrigBuy
+    rArmBuy := false
+else if rNewLow
+    rRefHigh := high
+    rArmBuy  := true
+if rTrigSell
+    rArmSell := false
+else if rNewHigh
+    rRefLow  := low
+    rArmSell := true
+bool rawBuy  = rTrigBuy and (not rawEmaOn or close > rEma) and barstate.isconfirmed
+bool rawSell = rTrigSell and (not rawEmaOn or close < rEma) and barstate.isconfirmed
+plotshape(showRaw and rawBuy, "原版買訊", shape.triangleup, location.belowbar, color=rawCol, size=size.tiny)
+plotshape(showRaw and rawSell, "原版賣訊", shape.triangledown, location.abovebar, color=rawCol, size=size.tiny)
 
 // ═════════════════ Trend Judge（1 分 K 推算）═════════════════
 float tfSec    = timeframe.in_seconds()
