@@ -19,7 +19,7 @@
 // 訊號參數：v3 的交易訊號預設依商品自動（回測過），可以改成自訂；橙黃色原版小三角另有自己的參數（預設 35, 0, 8, 1）
 // Trend Judge 用 1 分 K 收盤推算（同回測，不需要秒級資料）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
 // GEX（預設關）：手動輸入 QQQ 的 gamma flip，表格顯示現在買 / 賣是「朝 flip 走」還是「離開 flip」，只顯示、不擋訊號
-// GEX setup（預設關，只有 NQ RTH 1 分 K）：原版 (30, 0, 8, 1) + Trend Judge 順勢 + 朝 QQQ gamma flip 走，目標 3R；
+// GEX setup（預設關，只有 NQ RTH 1 分 K）：原版 (35, 0, 8, 1) + Trend Judge 順勢 + 朝 QQQ gamma flip 走，目標 3R；記號 🧲
 //   另外標記、另外兩個快訊、自己一次一筆，不影響上面 v3 的訊號和虛擬持倉
 indicator("Remi Superb v3", overlay=true, max_labels_count=500, max_boxes_count=500, max_lines_count=500)
 
@@ -54,11 +54,11 @@ gexFlip   = input.float(0.0, "QQQ gamma flip", minval=0, step=0.01, group=grpG, 
 qqqSym    = input.symbol("NASDAQ:QQQ", "QQQ 代號", group=grpG, tooltip="不是 QQQ 圖（例如 NQ、NQ RTH）時，用這個代號讀 QQQ 現價來跟 flip 比；美股盤以外的時間是 QQQ 最後的價格")
 gexLine   = input.bool(true, "QQQ 圖上畫 flip 線", group=grpG, inline="gl")
 gexCol    = input.color(#E040FB, "", group=grpG, inline="gl", tooltip="只有在 QQQ 圖上才畫（flip 是 QQQ 的價格）")
-gsOn      = input.bool(false, "NQ RTH：GEX setup 訊號（目標 3R）", group=grpG, tooltip="只在 NQ RTH（NQ 1 分 K、圖表只開美股盤）用：原版訊號（下面的階段、EMA，預設 30、8）出現時，Trend Judge 同向（門檻 20 點），而且朝 QQQ gamma flip 走（QQQ 在 flip 下面時買、在上面時賣，用上面輸入的 flip），就標記並發「GEX Buy / Sell」快訊。訊號 K 收盤進場、停損在訊號 K 和前一根的極值、目標 3R、持有 60 根或美東 16:00 收盤出場，自己一次一筆；週五截止後不發。不影響 v3 原本的訊號和虛擬持倉。回測（NQ 美股盤，2026-07-02 .. 10-16，ZeroGEX 的 flip）：89 筆，1R 勝率 63%，3R 每筆 +0.63R，一次一筆合計 +54R、回撤 7R；只有 3 個多月，先小口數追蹤")
-gsStage   = input.int(30, "GEX setup　階段", minval=2, group=grpG, inline="gs")
-gsEma     = input.int(8, "Ema number", minval=1, group=grpG, inline="gs", tooltip="回測用 (30, 0, 8, 1)；EMA 13 勝率差不多但訊號少四成")
-gsBuyTxt  = input.string("G▲", "標記　買", group=grpG, inline="gm")
-gsSellTxt = input.string("G▼", "賣", group=grpG, inline="gm", tooltip="顏色用上面 flip 線的顏色")
+gsOn      = input.bool(false, "NQ RTH：GEX setup 訊號（目標 3R）", group=grpG, tooltip="只在 NQ RTH（NQ 1 分 K、圖表只開美股盤）用：原版訊號（下面的階段、EMA，預設 35、8）出現時，Trend Judge 同向（門檻 20 點），而且朝 QQQ gamma flip 走（QQQ 在 flip 下面時買、在上面時賣，用上面輸入的 flip），就標記並發「GEX Buy / Sell」快訊。訊號 K 收盤進場、停損在訊號 K 和前一根的極值、目標 3R、持有 60 根或美東 16:00 收盤出場，自己一次一筆；週五截止後不發。不影響 v3 原本的訊號和虛擬持倉。回測（NQ 美股盤，2026-07 .. 10-14，ZeroGEX 的 flip，(35, 0, 8, 1)）：77 筆，1R 勝率 66%，3R 每筆 +0.75R，一次一筆合計 +56R、回撤 7R；只有 3 個多月，先小口數追蹤")
+gsStage   = input.int(35, "GEX setup　階段", minval=2, group=grpG, inline="gs")
+gsEma     = input.int(8, "Ema number", minval=1, group=grpG, inline="gs", tooltip="預設 (35, 0, 8, 1)。回測（NQ RTH，2026-07 .. 10）：階段 35–50 × EMA 5–13 都好，EMA 21 不行；(35, 0, 8, 1) 77 筆、1R 勝率 66%、3R 每筆 +0.75R；(40, 0, 8, 1) 70%、+0.99R；(35, 0, 13, 1) 每筆差不多但訊號少四成")
+gsBuyTxt  = input.string("🧲", "GEX setup　買", group=grpG, inline="gm")
+gsSellTxt = input.string("🧲", "賣", group=grpG, inline="gm", tooltip="GEX setup 自己的記號（價格被 flip 吸過去，所以用磁鐵）：買標在 K 棒下方、賣標在上方，大小和離 K 棒的距離同 v3 的記號（外觀）。可以換成任何 Emoji 或文字，文字用 flip 線的顏色。同一根 K 也有 v3 的記號時，會再往外推一格，不會疊在一起")
 
 // ═════════════════ 外觀 ═════════════════
 grpA      = "外觀"
@@ -276,7 +276,7 @@ bool  gexHas  = gexOn and gexFlip > 0 and not na(qqqPx)
 float gexDiff = gexHas ? qqqPx - gexFlip : na
 plot(gexOn and gexLine and isQQ and gexFlip > 0 ? gexFlip : na, "QQQ gamma flip", color=gexCol, linewidth=1, style=plot.style_linebr)
 
-// ═════════════════ GEX setup（NQ RTH）：(30, 0, 8, 1) + Trend Judge 順勢 + 朝 QQQ gamma flip 走 ═════════════════
+// ═════════════════ GEX setup（NQ RTH）：(35, 0, 8, 1) + Trend Judge 順勢 + 朝 QQQ gamma flip 走 ═════════════════
 bool gsActive = gsOn and isNqR and (tfp == "1" or otherTf)
 bool gsReady  = gexFlip > 0 and not na(qqqPx)
 bool gNewLow  = low < ta.lowest(low, gsStage)[1]
@@ -462,10 +462,13 @@ if goTrBuy
     drawBuyMark(tBuyTxt)
 if goTrSell
     drawSellMark(tSellTxt)
+// GEX setup 的記號：同一根 K 也有 v3 的記號時，再往外推一格
 if gsGoBuy
-    label.new(bar_index, low, markPad + gsBuyTxt, xloc=xloc.bar_index, yloc=yloc.belowbar, style=label.style_none, textcolor=gexCol, size=markSz)
+    string gPadB = goTrBuy or goMixBuy ? "\n\n" : ""
+    label.new(bar_index, low, markPad + gPadB + gsBuyTxt, xloc=xloc.bar_index, yloc=yloc.belowbar, style=label.style_none, textcolor=gexCol, size=markSz)
 if gsGoSell
-    label.new(bar_index, high, gsSellTxt + markPad, xloc=xloc.bar_index, yloc=yloc.abovebar, style=label.style_none, textcolor=gexCol, size=markSz)
+    string gPadS = goTrSell or goMixSell ? "\n\n" : ""
+    label.new(bar_index, high, gsSellTxt + gPadS + markPad, xloc=xloc.bar_index, yloc=yloc.abovebar, style=label.style_none, textcolor=gexCol, size=markSz)
 plot(showPos and gsPos != 0 ? gsStop : na, "GEX 持倉停損", color=color.new(stopCol, 40), style=plot.style_linebr)
 plot(showPos and gsPos != 0 ? gsTgt : na, "GEX 持倉目標", color=color.new(tgtCol, 40), style=plot.style_linebr)
 bool inPos = vPos != 0
@@ -551,7 +554,7 @@ if barstate.islast and showTbl
         row += 1
     // GEX setup 的持倉（只有 NQ RTH）
     if gsOn and isNqR
-        string gsTxt = not gsActive ? (compact ? "建議 1 分 K" : "GEX setup 用 NQ RTH 1 分 K") : not gsReady ? (compact ? "請輸入 flip" : "請輸入 QQQ 的 gamma flip") : gsPos == 0 ? (compact ? "空手" : "空手，等 G▲ / G▼") : (gsPos == 1 ? "多" : "空") + " 停 " + fmtP(gsStop) + " 標 " + fmtP(gsTgt)
+        string gsTxt = not gsActive ? (compact ? "建議 1 分 K" : "GEX setup 用 NQ RTH 1 分 K") : not gsReady ? (compact ? "請輸入 flip" : "請輸入 QQQ 的 gamma flip") : gsPos == 0 ? (compact ? "空手" : "空手，等 " + gsBuyTxt + " 買 / 賣訊號") : (gsPos == 1 ? "多" : "空") + " 停 " + fmtP(gsStop) + " 標 " + fmtP(gsTgt)
         color  gsCol = gsPos == 1 ? color.new(color.green, 40) : gsPos == -1 ? color.new(color.red, 40) : color.new(#9C27B0, 40)
         addRow(row, compact ? "GEX" : "GEX setup", gsTxt, gsCol, ha)
         row += 1
