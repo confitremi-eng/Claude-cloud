@@ -1,21 +1,21 @@
 //@version=6
 // Remi Superb v2（NQ 2 分 K）：把回測驗證過的做法合在一起，只發「可交易的 Buy」和「可交易的 Sell」兩個快訊
 //   1. 趨勢訊號：原版買賣訊號 (20, 0, 8, 1) + Trend Judge 有趨勢（NQ 門檻 10）+ 1 小時 EMA20 同向 + 停損 ≥ 1 ATR
-//      + 離 15 秒 EMA1130 ≤ 3 ATR + 避開數據 / 開收盤 / Globex / FOMC + 趨勢已持續 30–120 分鐘
+//      + 離 15 秒 EMA1130 ≤ 3 ATR + 避開數據 / 開收盤 / Globex / FOMC + 趨勢已持續 0–180 分鐘
 //      訊號 K 收盤進場，停損在訊號 K 和前一根的極值，目標 3R
 //   2. MIX 區間突破：Trend Judge 連續 MIX 60 分鐘 → 這段的高低點是區間；形成後 60 分鐘內第一次突破區間高度 10%
 //      就在突破價進場（不用等收盤），停損在區間中線，目標 3R
 //   一次一筆：指標自己記一筆虛擬持倉，碰到停損 / 目標、持有 60 根 K、或美東 17:00 休市前才算出場，持倉中不發新訊號
 // 回測（NQ 2 分 K，Databento 2025-10-16 .. 2026-10-14，一次一筆，每筆扣 1 點）：
-//   530 筆，勝率 42.1%，每筆 +0.262R，一年 +139R，最大回撤 14R，13 個月都賺錢，前後半年 +0.28R / +0.23R
-//   對照：趨勢訊號不限 30–120 分鐘 + MIX 突破：每筆 +0.198R，一年 +205R，最大回撤 35R，11 / 13 個月賺錢
+//   627 筆，勝率 41.5%，每筆 +0.268R，一年 +168R，最大回撤 18.6R，12 / 13 個月賺錢，前後半年 +0.28R / +0.24R
+//   對照：趨勢只做 30–120 分鐘：一年 +140R，回撤 13R，13 / 13 個月；不限趨勢時間：一年 +204R，回撤 35R，11 / 13 個月
 // Trend Judge 用 1 分 K 收盤推算（同回測，不需要秒級資料）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
 // 說明見 indicators/remi_superb.md
 indicator("Remi Superb v2", overlay=true, max_labels_count=500, max_boxes_count=500, max_lines_count=500)
 
 // ═════════════════ 交易規則 ═════════════════
 grpR      = "交易規則"
-tgtR      = input.float(3.0, "目標（R）", minval=0.1, step=0.5, group=grpR, tooltip="趨勢訊號和 MIX 突破共用。回測 3R 最好（2R：每筆 +0.218R，一年 +116R，回撤 13R）")
+tgtR      = input.float(3.0, "目標（R）", minval=0.1, step=0.5, group=grpR, tooltip="趨勢訊號和 MIX 突破共用。回測 3R 最好（2R：每筆 +0.199R，一年 +126R，回撤 17R）")
 holdBars  = input.int(60, "最多持有幾根 K", minval=1, group=grpR, tooltip="停損和目標都沒碰到，持有這麼多根 K 後收盤出場（回測 60 根 = 2 小時）")
 onlyOne   = input.bool(true, "一次一筆（持倉中不發新訊號）", group=grpR, tooltip="指標自己記一筆虛擬持倉：進場後要等碰到停損、目標、持有時間到或休市前出場，才會發下一個訊號。回測都是一次一筆")
 flatHalt  = input.bool(true, "美東 17:00 休市前出場", group=grpR, tooltip="虛擬持倉在美東 17:00 收盤那根 K 出場。假日提早收盤不會自動處理")
@@ -24,8 +24,8 @@ flatHalt  = input.bool(true, "美東 17:00 休市前出場", group=grpR, tooltip
 grpF      = "趨勢訊號"
 trendOn   = input.bool(true, "做趨勢訊號", group=grpF)
 ageOnly   = input.bool(true, "只做趨勢已持續", group=grpF, inline="ag")
-ageMin    = input.int(30, "", minval=0, group=grpF, inline="ag")
-ageMax    = input.int(120, "到（分鐘）", minval=1, group=grpF, inline="ag", tooltip="Trend Judge 這段趨勢（UP / 強UP 或 DOWN / 強Down）已經持續的分鐘數，MIX 或轉向就歸零，表格裡看得到。回測：30–120 分鐘的訊號每筆 +0.33R，全部是 +0.19R；2 / 3 / 5 分 K 都一樣。關掉就做全部趨勢訊號，範圍外的用另一個符號標")
+ageMin    = input.int(0, "", minval=0, group=grpF, inline="ag")
+ageMax    = input.int(180, "到（分鐘）", minval=1, group=grpF, inline="ag", tooltip="Trend Judge 這段趨勢（UP / 強UP 或 DOWN / 強Down）已經持續的分鐘數，MIX 或轉向就歸零，表格裡看得到。回測（3R，含下限、不含上限）：0–180 分鐘的訊號每筆 +0.34R，180 分鐘以上只剩 +0.09R，全部是 +0.19R。改成 30–120 分鐘回撤最小（13R，每個月都賺），但一年少賺約 2 成；0–30 分鐘的訊號一年只有十幾個。關掉就做全部趨勢訊號，範圍外的用另一個符號標")
 h1Len     = input.int(20, "1 小時 EMA 長度", minval=1, group=grpF, tooltip="看上一根已收完的 1 小時 K：買要收盤在 1 小時 EMA 之上，賣要在之下")
 riskMult  = input.float(1.0, "停損至少幾個 ATR", minval=0, step=0.1, group=grpF, inline="rk")
 atrLen    = input.int(14, "ATR 長度", minval=1, group=grpF, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）。停損距離小於「倍數 × 上一根的 ATR」就不做，停損太小的訊號回測是虧的")

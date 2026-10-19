@@ -4,10 +4,10 @@
   NQ_DATA=data/NQ_1m_databento.csv python3 rbs/v2_port.py
 
 A Python copy of remi_superb_v2.pine's state machine on the research data: trend signals (the filtered alerts with
-the indicator's trend-minute count, 30-120 minutes), MIX-box breakouts (mix_breakout.py boxes), and the one-at-a-time
+the indicator's trend-minute count, 0-180 minutes by default), MIX-box breakouts (mix_breakout.py boxes), and the one-at-a-time
 virtual position (stop first, target, 60 bars, the 17:00 ET halt bar, data holes). Trade results use the same
 prices the indicator records: stop, target, or the close on a time exit; 1 point cost per trade.
-Prints the trades with and without the 30-120 minute limit, so they can be compared with the research numbers
+Prints the trades with the 0-180 (default) and 30-120 minute limits and without one, so they can be compared with the research numbers
 (rbs/one_minute.py, trend_mix_matrix.py) and with the indicator's marks on TradingView.
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -23,7 +23,7 @@ import mix_breakout as mb
 TH, ST, TGT, HOLD, COST = 10.0, 35.0, 3.0, 60, 1.0
 
 
-def run(age_only, tgt=TGT, lo=30, hi=120, mix_on=True):
+def run(age_only, tgt=TGT, lo=0, hi=180, mix_on=True):
     df = rbs.prepared('NQ', 2)
     h, l, c, o = df.high.values, df.low.values, df.close.values, df.open.values
     n = len(c)
@@ -96,7 +96,7 @@ def show(t, nm):
           f'  | 趨勢 {(t.kind == "趨勢").sum()} 筆 {t.net[t.kind == "趨勢"].mean():+.3f}R  MIX {(t.kind == "MIX").sum()} 筆 {t.net[t.kind == "MIX"].mean():+.3f}R')
 
 
-WINDOWS = [('0–30 分', 0, 30), ('30–120 分（v2 預設）', 30, 120), ('120–180 分', 120, 180), ('0–180 分', 0, 180),
+WINDOWS = [('0–30 分', 0, 30), ('30–120 分', 30, 120), ('120–180 分', 120, 180), ('0–180 分（v2 預設）', 0, 180),
            ('180 分以上（到趨勢結束）', 180, 10 ** 9), ('不限', 0, 10 ** 9)]
 
 
@@ -125,6 +125,7 @@ if __name__ == '__main__':
     if '--windows' in sys.argv:
         windows(); sys.exit()
     print('######## Remi Superb v2 逐根重算（一次一筆、3R、每筆扣 1 點）')
-    show(run(True), '預設（趨勢只做 30–120 分）')
+    show(run(True), '預設（趨勢只做 0–180 分）')
+    show(run(True, lo=30, hi=120), '趨勢只做 30–120 分')
     show(run(False), '趨勢不限時間')
     show(run(True, 2.0), '預設，目標 2R')
