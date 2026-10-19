@@ -13,6 +13,7 @@
 //   訊號 K 收盤進場，停損在訊號 K 和前一根的極值
 // MIX 區間突破（只有 NQ 2、5 分 K）：Trend Judge 連續 MIX 60 分鐘 → 區間；形成後 60 分鐘內第一次突破 10% 就在突破價進場，停損在中線
 //   美東 16:00–20:00（收盤後）碰到突破價就不做，這個區間作廢（預設開，可關）
+//   選項「MIX 等收線才進場」：等 K 棒收在突破價外才在收盤進場，目標 2R（預設關＝碰到突破價就進場）
 // 一次一筆：指標自己記一筆虛擬持倉，碰到停損 / 目標、持有 60 根 K、美東 17:00 休市前（NQ / ES）或資料中斷才算出場
 // 回測：NQ / ES / TXF 用各自的 1 分 K；SPY / QQQ 用 ES / NQ 只留美股盤的 K 棒代替。說明見 indicators/remi_superb.md
 // 訊號參數：v3 的交易訊號預設依商品自動（回測過），可以改成自訂；橙黃色原版小三角另有自己的參數（預設 35, 0, 8, 1）
@@ -40,6 +41,7 @@ riskMult  = input.float(1.0, "停損至少幾個 ATR", minval=0, step=0.1, group
 atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）。停損距離小於「倍數 × 上一根的 ATR」就不做")
 avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpR, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00。所有商品都一樣（回測也是）")
 mixPmOff  = input.bool(true, "MIX 突破不做美東 16–20（收盤後）", group=grpR, tooltip="只影響 NQ 2、5 分 K 的 MIX 突破：K 棒收盤時間在美東 16:00–20:00（台灣時間夏令 04:00–08:00、冬令 05:00–09:00）碰到突破價就不做，這個區間作廢（跟事件時段一樣）。趨勢訊號照常。回測一年：2 分 K 每年 +162R → +168R、回撤 16R → 12.5R；5 分 K +82R → +94R、回撤 14R → 11R，前後半年都一樣")
+mixClose  = input.bool(false, "MIX 突破等收線才進場（目標 2R）", group=grpR, tooltip="預設關：價格碰到突破價就進場（掛停損單），目標同週期（2 分 K 3R、5 分 K 2R）。打開：要等 K 棒收在突破價外，才在那根收盤進場，目標 2R，停損一樣在中線；只碰到、沒收出去不算，區間繼續有效。回測一年（v3 預設規則，一次一筆）：2 分 K 每年 +166R → +146R、回撤 12.5R → 12.6R；5 分 K +90R → +83R、回撤 10.7R → 13.6R。單獨看 MIX 時等收線的回撤比較小，放進 v3 後就沒有了")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpR, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
 
 // ═════════════════ 外觀 ═════════════════
@@ -118,7 +120,7 @@ int    winLo    = nq3 ? 90 : isTX ? 60 : 0
 int    winHi    = nq3 ? 120 : isTX ? 120 : 180
 bool   mixUse   = isNQ and not nq3
 float  tgtR     = nq3 ? 1.0 : nq5 ? 2.0 : 3.0
-string ruleTxt  = isETF ? "ETF 設定 " + sigTxt + "，" + str.tostring(tgtR) + "R" + ((isQQ or isNqR) and qNqOn ? "，NQ 2m 不反向" : "") + (isNqR ? "（代替 QQQ）" : "") : "趨勢 " + str.tostring(winLo) + "–" + str.tostring(winHi) + " 分" + (mixUse ? " + MIX 突破" : "") + "，" + str.tostring(tgtR) + "R，訊號 " + sigTxt
+string ruleTxt  = isETF ? "ETF 設定 " + sigTxt + "，" + str.tostring(tgtR) + "R" + ((isQQ or isNqR) and qNqOn ? "，NQ 2m 不反向" : "") + (isNqR ? "（代替 QQQ）" : "") : "趨勢 " + str.tostring(winLo) + "–" + str.tostring(winHi) + " 分" + (mixUse ? " + MIX 突破" + (mixClose ? "（收線 2R）" : "") : "") + "，" + str.tostring(tgtR) + "R，訊號 " + sigTxt
 string gradeTxt = not profOn and isES ? "不建議（回測都虧）" : prof == "無" ? "不支援" : not okTf ? "不是建議週期" : isNQ and tfp == "2" ? "主力" : isTX ? "邊緣" : "可做"
 
 // ═════════════════ 原版買賣訊號 ═════════════════
@@ -309,14 +311,15 @@ float bxH   = bxTop - bxBot
 float bxUpL = bxTop + 0.1 * bxH
 float bxDnL = bxBot - 0.1 * bxH
 float bxMid = (bxTop + bxBot) / 2
+float mixTgtR = mixClose ? 2.0 : tgtR
 bool mxBuy  = false
 bool mxSell = false
 if bxLive and not mbForm and bar_index > bxForm
     if bar_index > bxEnd or mbHole
         bxLive := false
     else
-        bool upHit = high >= bxUpL
-        bool dnHit = low <= bxDnL
+        bool upHit = mixClose ? close > bxUpL and barstate.isconfirmed : high >= bxUpL      // 等收線：收盤在突破價外才算
+        bool dnHit = mixClose ? close < bxDnL and barstate.isconfirmed : low <= bxDnL
         if upHit or dnHit
             bxLive := false
             if not (upHit and dnHit) and not evtNow and not mixPm
@@ -348,15 +351,15 @@ if vPos != 0 and bar_index > vBar
 bool flatNow = not onlyOne or vPos == 0
 bool goMixBuy  = mxBuy and flatNow and not haltBar and not friLate
 bool goMixSell = mxSell and flatNow and not haltBar and not friLate and not goMixBuy
-float mxEntry = goMixBuy ? math.max(open, bxUpL) : goMixSell ? math.min(open, bxDnL) : na
+float mxEntry = goMixBuy ? (mixClose ? close : math.max(open, bxUpL)) : goMixSell ? (mixClose ? close : math.min(open, bxDnL)) : na
 if goMixBuy or goMixSell
     vPos   := goMixBuy ? 1 : -1
     vEntry := mxEntry
     vStop  := bxMid
-    vTgt   := mxEntry + tgtR * (mxEntry - bxMid)
+    vTgt   := mxEntry + mixTgtR * (mxEntry - bxMid)
     vBar   := bar_index
     vKind  := 2
-    if (vPos == 1 and low <= vStop) or (vPos == -1 and high >= vStop)
+    if not mixClose and ((vPos == 1 and low <= vStop) or (vPos == -1 and high >= vStop))     // 掛單進場：同一根碰到停損就出場
         vPos := 0
 bool flatClose = not onlyOne or vPos == 0
 bool goTrBuy  = trBuy and flatClose and not haltBar
@@ -373,7 +376,7 @@ bool tradeBuy  = goMixBuy or goTrBuy
 bool tradeSell = goMixSell or goTrSell
 float sigEntry = goTrBuy or goTrSell ? close : mxEntry
 float sigStop  = goTrBuy ? buyStop : goTrSell ? sellStop : (goMixBuy or goMixSell) ? bxMid : na
-float sigTgt   = na(sigEntry) or na(sigStop) ? na : sigEntry + tgtR * (sigEntry - sigStop)
+float sigTgt   = na(sigEntry) or na(sigStop) ? na : sigEntry + ((goMixBuy or goMixSell) ? mixTgtR : tgtR) * (sigEntry - sigStop)
 
 // ═════════════════ 圖上標記 ═════════════════
 markSz = markSize == "小" ? size.small : markSize == "大" ? size.large : size.normal
@@ -461,7 +464,7 @@ if barstate.islast and showTbl
         row += 1
     // MIX 區間（精簡時只在 NQ 2、5 分 K 顯示）
     if mixUse or not compact
-        string mixTxt = not mixUse ? "這個商品 / 週期不做" : bxLive and bar_index <= bxEnd ? (compact ? "上 " + fmtP(bxUpL) + " 下 " + fmtP(bxDnL) : "等突破　上 " + fmtP(bxUpL) + "　下 " + fmtP(bxDnL) + "　剩 " + str.tostring((bxEnd - bar_index) * tfMin, "#") + " 分") : not na(mbStart) ? (compact ? "成形中 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + "分" : "MIX 已 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + " 分（滿 60 分成形）") : (compact ? "無" : "沒有區間")
+        string mixTxt = not mixUse ? "這個商品 / 週期不做" : bxLive and bar_index <= bxEnd ? (compact ? (mixClose ? "收 " : "") + "上 " + fmtP(bxUpL) + " 下 " + fmtP(bxDnL) : (mixClose ? "等收線突破　上 " : "等突破　上 ") + fmtP(bxUpL) + "　下 " + fmtP(bxDnL) + "　剩 " + str.tostring((bxEnd - bar_index) * tfMin, "#") + " 分") : not na(mbStart) ? (compact ? "成形中 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + "分" : "MIX 已 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + " 分（滿 60 分成形）") : (compact ? "無" : "沒有區間")
         addRow(row, compact ? "MIX" : "MIX 區間", mixTxt, bg, ha)
         row += 1
     // 提示
@@ -485,5 +488,6 @@ if barstate.islast and showTbl
 
 // ═════════════════ 快訊：只有兩個，所有商品共用 ═════════════════
 // 觸發選「每根 K 線一次」：NQ 2、5 分 K 的 MIX 突破碰到突破價就通知（盤中），其他訊號在 K 棒收盤時通知
+// 選了「MIX 等收線才進場」：MIX 突破也在 K 棒收盤時通知，訊息的進場價是收盤價、目標 2R
 alertcondition(tradeBuy, "Remi Superb v3 Buy", '{{ticker}} Remi Superb v3 Buy｜進場 {{plot("v3 進場")}}｜停損 {{plot("v3 停損")}}｜目標 {{plot("v3 目標")}}')
 alertcondition(tradeSell, "Remi Superb v3 Sell", '{{ticker}} Remi Superb v3 Sell｜進場 {{plot("v3 進場")}}｜停損 {{plot("v3 停損")}}｜目標 {{plot("v3 目標")}}')

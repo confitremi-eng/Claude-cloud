@@ -2,6 +2,7 @@
 
   cd indicators/backtest
   python3 -I rbs/mix_opt.py [2 5]
+  python3 -I rbs/mix_opt.py 2 5 --close   # v3 defaults: MIX at the break vs at the close (section 7 only)
 
 Baseline = Remi Superb v3: Trend Judge MIX (spread within +-10) for 60 minutes (trend blips up to 4 minutes
 ignored) -> box; within 60 minutes the first bar reaching 10% of the box height beyond it is the breakout, a stop
@@ -252,12 +253,82 @@ def run(C, R_main):
     C.trend = keep
 
 
+def close_breaks(C, bx, valid_min=60):
+    """MIX breakout entered at the close of the first bar that closes beyond the breakout price (a touch alone does
+    not end the box); a bar in an event window or New York 16-20 ends the box without a trade. Stop at the middle."""
+    B = C.B; evt, sess = B['evt'], B['sess']; c, hole = C.c, C.hole; age = C.bars(valid_min); out = []
+    for s0, fm, top, bot in bx:
+        H = top - bot
+        if H <= 0: continue
+        bu, bd, mid = top + 0.1 * H, bot - 0.1 * H, (top + bot) / 2
+        for j in range(fm + 1, min(fm + age, C.n - 1) + 1):
+            if hole[j]: break
+            up, dn = c[j] > bu, c[j] < bd
+            if not (up or dn): continue
+            if evt[j] or sess[j] == '收盤後 16-20': break
+            out.append((j, 1 if up else -1, c[j], mid))
+            break
+    return out
+
+
+def sim2(C, trend, mix_stop, mix_close, R_trend, R_mix, late):
+    """One position at a time. trend / mix_close: entered at the close; mix_stop: stop orders (entry at the price,
+    stop checked on the same bar). Each kind has its own target R. No new entries on late (Friday) bars."""
+    h, l, c, date = C.h, C.l, C.c, C.date
+    holeb = np.r_[False, (C.df.datetime.diff() > pd.Timedelta(minutes=30)).values[1:]]
+    trad = C.df.tradable.values; trades = []; pos = 0
+    ms = {j: (k, px, st) for j, k, px, st, _ in mix_stop}
+    mc = {j: (k, px, st) for j, k, px, st in mix_close}
+    for j in range(len(c)):
+        if pos != 0 and j > vb:
+            hs = (l[j] <= vs) if pos == 1 else (h[j] >= vs)
+            ht = (h[j] >= vt) if pos == 1 else (l[j] <= vt)
+            if hs or ht or j - vb >= 60 or C.halt[j] or holeb[j]:
+                px = vs if hs else vt if ht else (c[j - 1] if holeb[j] else c[j])
+                trades.append((kind, pos, ve, px, abs(ve - vs), d0)); pos = 0
+        if not trad[j] or late[j] or C.halt[j]: continue
+        if pos == 0 and j in ms:
+            k, px, st = ms[j]
+            pos, ve, vs, vt, vb, kind, d0 = k, px, st, px + R_mix * (px - st), j, 'MIX', date[j]
+            if (pos == 1 and l[j] <= vs) or (pos == -1 and h[j] >= vs):
+                trades.append((kind, pos, ve, vs, abs(ve - vs), d0)); pos = 0
+        if pos == 0 and j in mc:
+            k, px, st = mc[j]
+            pos, ve, vs, vt, vb, kind, d0 = k, px, st, px + R_mix * (px - st), j, 'MIX', date[j]
+        if pos == 0 and j in trend:
+            k, st, kd = trend[j]
+            pos, ve, vs, vt, vb, kind, d0 = k, c[j], st, c[j] + R_trend * (c[j] - st), j, kd, date[j]
+    t = pd.DataFrame(trades, columns=['kind', 'side', 'entry', 'exit', 'risk', 'date'])
+    t['R'] = (t.exit - t.entry) * t.side / t.risk
+    t['net'] = t.R - COST / t.risk
+    a = t.date.values < C.split
+    part = '  '.join(f'{k} {(t.kind == k).sum() / C.years:.0f} 筆 {t.net[t.kind == k].sum() / C.years:+.0f}R' for k in ('趨勢', 'MIX'))
+    return mm.combo_line(t, C.years) + f'  前/後 {t.net[a].mean():+.3f}/{t.net[~a].mean():+.3f}（{part}）'
+
+
+def v3_close_option(C, R_main):
+    """v3 with all defaults (Friday cut-off, no MIX 16-20): MIX entered at the break vs at the close (2R)."""
+    tw = (C.df.datetime + pd.Timedelta(minutes=C.tf)).dt.tz_convert('Asia/Taipei')
+    late = ((tw.dt.weekday == 5) & (tw.dt.hour * 60 + tw.dt.minute >= 120)).values
+    bx = boxes(C)
+    stop_mix = [x for x in breaks(C, bx) if x[4]['sess'] != '收盤後 16-20']
+    close_mix = close_breaks(C, bx)
+    print(f'\n######## 7. v3 預設規則下，MIX 突破就進場 vs 等收線進場（趨勢訊號 {R_main:g}R）')
+    print(f'   {"MIX 突破就進場 " + format(R_main, "g") + "R（v3 預設）":<30} ' + sim2(C, C.trend, stop_mix, [], R_main, R_main, late))
+    for Rm in (2.0, 3.0):
+        print(f'   {"MIX 等收線進場 " + format(Rm, "g") + "R":<30} ' + sim2(C, C.trend, [], close_mix, R_main, Rm, late))
+
+
 def main():
-    tfs = [int(a) for a in sys.argv[1:]] or [2]
+    tfs = [int(a) for a in sys.argv[1:] if a.isdigit()] or [2]
     one = mm.load_market('nq', [])
     tdm = mm.minute_trend(one); H = mm.hourly(one, False)
     for tf in tfs:
-        run(Ctx(tf, one, tdm, H), 3.0 if tf == 2 else 2.0)
+        C = Ctx(tf, one, tdm, H)
+        if '--close' in sys.argv:
+            v3_close_option(C, 3.0 if tf == 2 else 2.0)
+        else:
+            run(C, 3.0 if tf == 2 else 2.0)
 
 
 if __name__ == '__main__':

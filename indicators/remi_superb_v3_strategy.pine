@@ -9,6 +9,7 @@
 //   趨勢訊號：訊號 K 收盤市價進場，停損在訊號 K 和前一根的極值
 //   MIX 突破：區間形成後 60 分鐘內，在上下突破價（區間高度 10%）掛停損單，一邊成交就取消另一邊，停損在中線；
 //             下一根 K 在事件時段、美東 16:00–20:00、休市那根、週五截止後就不掛；第一次碰到突破價（不論有沒有成交）區間就作廢
+//             選項「MIX 等收線才進場」：改成 K 棒收在突破價外才在收盤市價進場，目標 2R（預設關）
 //   一次一筆；持有 60 根 K 還沒出場就收盤平倉；NQ / ES 美東 17:00 休市前平倉；TXF、QQQ、SPY、NQ RTH 在每段交易時間最後一根平倉
 //   週五美股盤：台灣時間週六 02:00 以後不開新倉
 // Trend Judge 用 1 分 K 收盤推算（同回測）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
@@ -49,6 +50,7 @@ riskMult  = input.float(1.0, "停損至少幾個 ATR", minval=0, step=0.1, group
 atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk")
 avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpR, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00")
 mixPmOff  = input.bool(true, "MIX 突破不做美東 16–20（收盤後）", group=grpR, tooltip="K 棒收盤時間在美東 16:00–20:00（台灣時間夏令 04:00–08:00、冬令 05:00–09:00）不掛 MIX 突破單；碰到突破價區間照樣作廢")
+mixClose  = input.bool(false, "MIX 突破等收線才進場（目標 2R）", group=grpR, tooltip="預設關：在突破價掛停損單，碰到就成交，目標同週期（2 分 K 3R、5 分 K 2R）。打開：K 棒收在突破價外才在那根收盤市價進場，目標 2R，停損一樣在中線；只碰到、沒收出去不算，區間繼續有效；那根在事件時段或美東 16–20 就不做、區間作廢。回測一年（v3 預設規則）：2 分 K 每年 +166R → +146R、回撤差不多；5 分 K +90R → +83R、回撤 10.7R → 13.6R")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpR, tooltip="利率決議公布日（美東），逗號分開。回測更早的期間，要把那段時間的 FOMC 日期加進來")
 
 // ═════════════════ 訊號參數 ═════════════════
@@ -183,6 +185,7 @@ bool evtNext = avoidEvt and evtAt(tNext)
 bool haltBar = flatHalt and isCME and etMin == 1020
 bool haltNxt = flatHalt and isCME and etMinN == 1020
 bool pmNext  = mixPmOff and etMinN >= 960 and etMinN < 1200
+bool pmNow   = mixPmOff and etMin >= 960 and etMin < 1200
 bool friLate = friAt(tClose)
 bool friNext = friAt(tNext)
 // 每段交易時間的最後一根：TXF 日盤 13:45、夜盤 05:00（台灣時間）；QQQ / SPY / NQ RTH 美東 16:00
@@ -273,11 +276,23 @@ float bxH   = bxTop - bxBot
 float bxUpL = bxTop + 0.1 * bxH
 float bxDnL = bxBot - 0.1 * bxH
 float bxMid = (bxTop + bxBot) / 2
-float bxUpT = bxUpL + tgtR * (bxUpL - bxMid)
-float bxDnT = bxDnL - tgtR * (bxMid - bxDnL)
-// 第一次碰到突破價（不論有沒有成交）區間就作廢
+float mixTgtR = mixClose ? 2.0 : tgtR
+float bxUpT = bxUpL + mixTgtR * (bxUpL - bxMid)
+float bxDnT = bxDnL - mixTgtR * (bxMid - bxDnL)
+// 掛單進場：第一次碰到突破價（不論有沒有成交）區間就作廢
+// 等收線進場：K 棒收在突破價外才算突破（不在事件時段、美東 16–20 才做），區間作廢；只碰到不算
+bool mxUpC = false
+bool mxDnC = false
 if bxLive and not mbForm and bar_index > bxForm
-    if bar_index > bxEnd or mbHole or high >= bxUpL or low <= bxDnL
+    if bar_index > bxEnd or mbHole
+        bxLive := false
+    else if mixClose
+        if close > bxUpL or close < bxDnL
+            bxLive := false
+            if not evtNow and not pmNow
+                mxUpC := close > bxUpL
+                mxDnC := close < bxDnL
+    else if high >= bxUpL or low <= bxDnL
         bxLive := false
 var line bxUpLine = na
 var line bxDnLine = na
@@ -297,7 +312,7 @@ var float posTgt  = na
 bool flat = strategy.position_size == 0
 
 // 剛成交的 MIX 突破單：記下它的停損和目標（畫線用）
-if not flat and nz(strategy.position_size[1]) == 0
+if not flat and nz(strategy.position_size[1]) == 0 and not mixClose
     string eid = strategy.opentrades.entry_id(0)
     if eid == "M L"
         posStop := bxMid
@@ -314,10 +329,27 @@ if not flat
     if timeUp
         strategy.close_all(comment=held >= holdBars ? "時間出場" : haltBar ? "休市前平倉" : sessEnd ? "收盤平倉" : "資料中斷", alert_message=exitMsg)
 
-// 趨勢訊號：這根收盤市價進場
 bool canEnter = flat and not haltBar and not sessEnd
-bool goLong   = canEnter and trBuy
-bool goShort  = canEnter and trSell and not goLong
+
+// MIX 等收線進場：K 棒收在突破價外，這根收盤市價進場，目標 2R（訂單代號跟掛單版分開，下面取消掛單時不會取消到）
+bool goMixL = mixClose and active and mixUse and useMix and canEnter and mxUpC and not friLate
+bool goMixS = mixClose and active and mixUse and useMix and canEnter and mxDnC and not friLate and not goMixL
+if goMixL
+    float tgtML = close + mixTgtR * (close - bxMid)
+    strategy.entry("MC L", strategy.long, qty=qtyUse, comment="MIX 上破（收線）", alert_message=entryMsg("buy", "MIX 突破", bxMid, tgtML))
+    strategy.exit("MC L x", "MC L", stop=bxMid, limit=tgtML, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
+    posStop := bxMid
+    posTgt  := tgtML
+if goMixS
+    float tgtMS = close - mixTgtR * (bxMid - close)
+    strategy.entry("MC S", strategy.short, qty=qtyUse, comment="MIX 下破（收線）", alert_message=entryMsg("sell", "MIX 突破", bxMid, tgtMS))
+    strategy.exit("MC S x", "MC S", stop=bxMid, limit=tgtMS, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
+    posStop := bxMid
+    posTgt  := tgtMS
+
+// 趨勢訊號：這根收盤市價進場
+bool goLong   = canEnter and trBuy and not goMixL and not goMixS
+bool goShort  = canEnter and trSell and not goLong and not goMixL and not goMixS
 if goLong
     float tgtL = close + tgtR * (close - buyStop)
     strategy.cancel("M L")
@@ -336,7 +368,7 @@ if goShort
     posTgt  := tgtS
 
 // MIX 突破：區間有效、空手，而且下一根不在事件時段、美東 16–20、休市那根、週五截止後，才在上下突破價掛停損單
-bool mixArm = active and mixUse and useMix and canEnter and not goLong and not goShort and bxLive and bar_index >= bxForm and bar_index < bxEnd and not evtNext and not pmNext and not haltNxt and not friNext and not friLate
+bool mixArm = not mixClose and active and mixUse and useMix and canEnter and not goLong and not goShort and bxLive and bar_index >= bxForm and bar_index < bxEnd and not evtNext and not pmNext and not haltNxt and not friNext and not friLate
 if mixArm
     strategy.entry("M L", strategy.long, qty=qtyUse, stop=bxUpL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 上破", alert_message=entryMsg("buy", "MIX 突破", bxMid, bxUpT))
     strategy.entry("M S", strategy.short, qty=qtyUse, stop=bxDnL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 下破", alert_message=entryMsg("sell", "MIX 突破", bxMid, bxDnT))
@@ -365,7 +397,7 @@ if barstate.islast and showTbl
     string tjTxt = not tjLinked ? "沒有資料" : tjDirI == 2 ? "強UP" : tjDirI == 1 ? "UP" : tjDirI == -2 ? "強Down" : tjDirI == -1 ? "DOWN" : "MIX"
     color  tjCol = not tjLinked ? color.gray : tjDirI == 2 ? color.lime : tjDirI == 1 ? color.green : tjDirI == -2 ? color.maroon : tjDirI == -1 ? color.red : color.orange
     addRow(1, "趨勢", tjTxt + (trendDir != 0 ? " " + str.tostring(trendMin, "#") + "分" + (useWin and inWin ? " ✅" : "") : ""), tjCol)
-    addRow(2, "下單", (isStock ? str.tostring(qtyEtf) + " 股" : str.tostring(qtyFut) + " 口") + (mixUse and useMix ? "，趨勢 + MIX" : "，趨勢"), color.new(color.black, 20))
+    addRow(2, "下單", (isStock ? str.tostring(qtyEtf) + " 股" : str.tostring(qtyFut) + " 口") + (mixUse and useMix ? "，趨勢 + MIX" + (mixClose ? "（收線 2R）" : "") : "，趨勢"), color.new(color.black, 20))
     string warn = prof == "無" ? "只支援 NQ / ES / TXF / QQQ / SPY" : isES and not esOn ? "ES 預設不交易" : not okTf ? (otherTf ? "不是建議週期（沒回測過）" : "不是建議週期，不交易") : isStock and syminfo.session == session.extended ? "請關延長交易時段" : isStock ? "手續費請改每股約 0.005" : ""
     if warn != ""
         addRow(3, "提示", warn, color.new(color.orange, 20))

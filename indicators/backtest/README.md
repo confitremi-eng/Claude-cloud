@@ -119,7 +119,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `raw_vs_filter.py` | 沒過濾的原版訊號（灰色三角）全部 / 逆勢 / 順勢，每拿掉一個條件的結果，只被某個條件擋掉的訊號；週五台灣週六 02:00 以後不交易對 v3 的影響 |
 | `nq5m.py` | NQ 5 / 10 / 15 分 K（`python3 -I rbs/nq5m.py 10 15`）：趨勢訊號依趨勢時間、時段、多空、Trend Judge 強弱、目標；MIX 突破（區間 60 / 120 分、持有 2 小時 / 60 根）；一次一筆的組合；`--stages` 試短一點的「階段」 |
 | `txf_tf.py` | TXF 3 / 5 分 K（SQL 1 分 K）：過濾訊號依趨勢時間、日盤 / 夜盤、多空、強弱、年份，(20, 0, 8, 1) 和 (35, 0, 8, 1)；MIX 突破；一次一筆（成本 2 / 4 點）；`--candidates` 三組候選逐年 |
-| `mix_opt.py` | MIX 突破的改法（NQ 2 / 5 分 K）：一轉 MIX 就進場（反向 / 順勢、停損）、區間要多長、突破距離、有效時間、停損位置、各種條件、目標，放回 v3 一次一筆 |
+| `mix_opt.py` | MIX 突破的改法（NQ 2 / 5 分 K）：一轉 MIX 就進場（反向 / 順勢、停損）、區間要多長、突破距離、有效時間、停損位置、各種條件、目標，放回 v3 一次一筆；`--close` 只算 v3 預設規則下 MIX 突破就進場 vs 等收線進場（2R / 3R） |
 | `strong_stage.py` | 趨勢拉開（Trend Judge 差值是「強」門檻的幾倍）時把「階段」改短：QQQ / SPY 1m 35 → 30 / 25 / 20 / 15、NQ 2m 20 → 15 / 12 / 10；各自獨立依拉開程度、短階段多出來的訊號、放回 v3 一次一筆 |
 | `oneside_3013.py` | 原版 (30, 0, 13, 1)（單邊日用）在 QQQ / SPY 1m：Trend Judge 順勢 / MIX / 反向、趨勢時間、拉開程度、單邊日（強 + 趨勢已久、NQ 2m 也強、當天已走幾 %）、v3 過濾；附近參數（階段 20–40 × EMA 8 / 13 / 21）；一次一筆和加進 v3 |
 | `zerogex_fetch.py` | 下載 ZeroGEX（Pro API）SPY / QQQ 的歷史到 `data/zerogex/`：每分鐘 gamma flip、call / put wall 和 QQQ / SPY 的 1 分 K（`range`）、每 30 分鐘 net GEX（`frames`，很慢）、每天的狀態（`regime`）。金鑰從檔案讀，不要放進 repo；已下載的日子會跳過 |
