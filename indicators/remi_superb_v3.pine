@@ -54,9 +54,9 @@ showPos   = input.bool(true, "畫出持倉的停損和目標", group=grpA, inlin
 stopCol   = input.color(#F23645, "", group=grpA, inline="ps")
 tgtCol    = input.color(#36FE02, "", group=grpA, inline="ps")
 showTbl   = input.bool(true, "顯示狀態表格", group=grpA, inline="tbl")
-tblPos    = input.string("左上", "", options=["左上", "右上", "左下", "右下"], group=grpA, inline="tbl")
-tblSize   = input.string("小", "", options=["小", "中", "大"], group=grpA, inline="tbl")
-tblPad    = input.int(2, "表格上方留白（列）", minval=0, maxval=6, group=grpA, tooltip="表格放左上時，空幾列避開圖表左上角的商品名稱和指標名稱")
+tblSize   = input.string("小", "字的大小", options=["小", "中", "大"], group=grpA, inline="tbl")
+tblPos    = input.string("左下", "表格位置", options=["左下", "右下", "左上", "右上"], group=grpA, tooltip="表格放在圖表的哪個角落")
+tblPad    = input.int(2, "表格放上面時，上方留白（列）", minval=0, maxval=6, group=grpA, tooltip="表格放左上或右上時，空幾列避開圖表上方的商品名稱和指標名稱；放下面時不留白")
 showRaw   = input.bool(false, "也標出原版買賣訊號（小三角）", group=grpA, inline="raw")
 rawCol    = input.color(#FFB300, "", group=grpA, inline="raw", tooltip="沒經過過濾的原版訊號（買在 K 棒下方、賣在上方），預設橙黃色。參數在「訊號參數」的「原版小三角」那一列，跟 v3 的訊號分開算。只是標出來看，不發快訊")
 
@@ -411,11 +411,12 @@ if barstate.islast and showTbl
     color bg    = color.new(color.black, 20)
     color fg    = color.white
     color blank = color.new(color.black, 100)
-    if tblPad > 0
-        for r = 0 to tblPad - 1
+    int padUse = tblPos == "左上" or tblPos == "右上" ? tblPad : 0
+    if padUse > 0
+        for r = 0 to padUse - 1
             table.cell(st, 0, r, " ", text_color=blank, bgcolor=blank, text_size=tblTxt)
             table.cell(st, 1, r, " ", text_color=blank, bgcolor=blank, text_size=tblTxt)
-    int r0 = tblPad
+    int r0 = padUse
     string setTxt = prof == "無" ? "不支援 " + syminfo.ticker : prof + " " + tfp + " 分 K（" + gradeTxt + "）" + (prof != "無" ? "\n" + ruleTxt : "")
     color  setCol = gradeTxt == "主力" ? color.new(#2962FF, 30) : gradeTxt == "可做" ? color.new(#2962FF, 55) : gradeTxt == "邊緣" ? color.new(color.orange, 40) : color.new(color.red, 30)
     table.cell(st, 0, r0, "設定", text_color=fg, bgcolor=bg, text_size=tblTxt)
