@@ -166,16 +166,17 @@ def mix_breaks(df, tf, th, cost):
     return B, boxes, out
 
 
-def v2_combo(df, s, th, B, boxes, R, cost, lo=0, hi=180):
-    """Remi Superb v2 one at a time (v2_port.py logic) on this chart."""
+def v2_combo(df, s, th, B, boxes, R, cost, lo=0, hi=180, F=None, mix_on=True):
+    """Remi Superb v2 one at a time (v2_port.py logic) on this chart. F: the trend signals to use (else the
+    filtered alerts inside lo-hi); mix_on=False leaves the MIX breakouts out."""
     h, l, c, o = df.high.values, df.low.values, df.close.values, df.open.values
     n = len(c)
-    f = s[filt(s, th) & (s.tm >= lo) & (s.tm < hi)]
+    f = s[filt(s, th) & (s.tm >= lo) & (s.tm < hi)] if F is None else F
     trend = {int(i): int(k) for i, k in zip(f.i.values, f.side.values)}
     mix = {}
     hb, lb, ob, hole, evt = B['h'], B['l'], B['o'], B['hole'], B['evt']
     W = max(1, round(60 / mr.TF))
-    for s0, fm, top, bot in boxes:
+    for s0, fm, top, bot in (boxes if mix_on else []):
         Hh = top - bot
         if Hh <= 0: continue
         bu, bd, mid = top + 0.1 * Hh, bot - 0.1 * Hh, (top + bot) / 2
@@ -275,8 +276,46 @@ def run_market(key, txf_paths):
         rbs._cache.pop(('NQ', tf), None)
 
 
+V3 = {  # (market, tf): (stage, ema, threshold multiple, distance, window lo, hi, MIX, target R, label)
+    ('nq', 2): (20, 8, 1, 3.0, 0, 180, True, 3.0, '趨勢 0–180 分 + MIX 突破，3R'),
+    ('nq', 3): (20, 8, 1, 3.0, 90, 120, False, 1.0, '趨勢 90–120 分，1R'),
+    ('txf', 2): (20, 8, 1, 3.0, 60, 120, False, 3.0, '趨勢 60–120 分，3R'),
+    ('txf', 3): (20, 8, 1, 3.0, 60, 120, False, 3.0, '趨勢 60–120 分，3R'),
+    ('qqq', 1): (35, 8, 2, 7.0, 0, 10 ** 9, False, 3.0, 'ETF 設定 (35, 0, 8, 1)，門檻 ×2，距離 7 ATR，3R'),
+    ('spy', 1): (35, 8, 2, 7.0, 0, 10 ** 9, False, 3.0, 'ETF 設定 (35, 0, 8, 1)，門檻 ×2，距離 7 ATR，3R'),
+}
+
+
+def v3(keys, txf_paths):
+    """Remi Superb v3's rule set for each market and timeframe, one position at a time."""
+    print('\n################ Remi Superb v3：每個商品 / 週期自動套用的做法，一次一筆')
+    for key in keys:
+        name, th, st, cost, tfs, etf = MARKETS[key]
+        mine = [tf for (k, tf) in V3 if k == key]
+        if not mine: continue
+        one = load_market(key, txf_paths); tdm = minute_trend(one); H = hourly(one, etf)
+        years = (one.index[-1] - one.index[0]).days / 365.25
+        for tf in mine:
+            stage, ema, mult, dist, lo, hi, mix_on, R, label = V3[(key, tf)]
+            df = chart(one, tdm, tf, th * mult, st * mult)
+            s = trend_signals(df, H, tf, stage, ema)
+            F = s[filt(s, th * mult, dist) & (s.tm >= lo) & (s.tm < hi)]
+            B, boxes, _ = mix_breaks(df, tf, th * mult, cost)
+            t = v2_combo(df, s, th * mult, B, boxes, R, cost, F=F, mix_on=mix_on)
+            a = t.date.values < sorted(t.date.unique())[len(t.date.unique()) // 2]
+            print(f'   {name} {tf}m（{label}）\n      ' + combo_line(t, years) + f'  前 / 後 {t.net[a].mean():+.3f} / {t.net[~a].mean():+.3f}')
+            rbs._cache.pop(('NQ', tf), None)
+
+
 def main():
     args = sys.argv[1:]
+    if '--v3' in args:
+        args.remove('--v3')
+        tp = []
+        if '--txf' in args:
+            k = args.index('--txf'); tp = args[k + 1].split(','); del args[k:k + 2]
+        v3(args or ['nq', 'qqq', 'spy'] + (['txf'] if tp else []), tp)
+        return
     txf_paths = []
     if '--txf' in args:
         k = args.index('--txf'); txf_paths = args[k + 1].split(','); del args[k:k + 2]

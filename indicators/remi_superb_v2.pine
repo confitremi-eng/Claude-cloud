@@ -70,8 +70,9 @@ showPos   = input.bool(true, "畫出持倉的停損和目標", group=grpA, inlin
 stopCol   = input.color(#F23645, "", group=grpA, inline="ps")
 tgtCol    = input.color(#36FE02, "", group=grpA, inline="ps")
 showTbl   = input.bool(true, "顯示狀態表格", group=grpA, inline="tbl")
-tblPos    = input.string("右上", "", options=["右上", "右下", "左上", "左下"], group=grpA, inline="tbl")
+tblPos    = input.string("左上", "", options=["左上", "右上", "左下", "右下"], group=grpA, inline="tbl")
 tblSize   = input.string("小", "", options=["小", "中", "大"], group=grpA, inline="tbl", tooltip="表格顯示 Trend Judge、趨勢已持續幾分鐘、持倉、MIX 區間")
+tblPad    = input.int(2, "表格上方留白（列）", minval=0, maxval=6, group=grpA, tooltip="表格放左上時，空幾列避開圖表左上角的商品名稱和指標名稱")
 showRaw   = input.bool(false, "也標出原版買賣訊號（灰色小三角）", group=grpA)
 
 // ═════════════════ Trend Judge ═════════════════
@@ -355,35 +356,39 @@ plot(tjDiff, "TJ 差值", display=display.data_window)
 // ═════════════════ 狀態表格 ═════════════════
 tblWhere = tblPos == "右上" ? position.top_right : tblPos == "右下" ? position.bottom_right : tblPos == "左上" ? position.top_left : position.bottom_left
 tblTxt   = tblSize == "小" ? size.small : tblSize == "大" ? size.large : size.normal
-var table st = table.new(tblWhere, 2, 6, border_width=1, frame_color=color.new(color.gray, 60), frame_width=1)
+var table st = table.new(tblWhere, 2, tblPad + 6, border_width=1)
 fmtP(float v) =>
     str.tostring(v, format.mintick)
 if barstate.islast and showTbl
+    if tblPad > 0
+        for r = 0 to tblPad - 1
+            table.cell(st, 0, r, " ", text_color=color.new(color.black, 100), bgcolor=color.new(color.black, 100), text_size=tblTxt)
+            table.cell(st, 1, r, " ", text_color=color.new(color.black, 100), bgcolor=color.new(color.black, 100), text_size=tblTxt)
     // 配色同原始 Trend Judge 指標：標題黑底，強UP 亮綠、UP 綠、MIX 橘、DOWN 紅、強Down 深紅，白字
     color bg  = color.new(color.black, 20)
     color fg  = color.white
     string tjTxt = not tjLinked ? "沒有資料" : tjDirI == 2 ? "強UP" : tjDirI == 1 ? "UP" : tjDirI == -2 ? "強Down" : tjDirI == -1 ? "DOWN" : "MIX"
     color  tjCol = not tjLinked ? color.gray : tjDirI == 2 ? color.lime : tjDirI == 1 ? color.green : tjDirI == -2 ? color.maroon : tjDirI == -1 ? color.red : color.orange
-    table.cell(st, 0, 0, "Trend Judge", text_color=fg, bgcolor=bg, text_size=tblTxt)
-    table.cell(st, 1, 0, tjTxt, text_color=color.white, bgcolor=tjCol, text_size=tblTxt)
+    table.cell(st, 0, tblPad + 0, "Trend Judge", text_color=fg, bgcolor=bg, text_size=tblTxt)
+    table.cell(st, 1, tblPad + 0, tjTxt, text_color=color.white, bgcolor=tjCol, text_size=tblTxt)
     int  aMin = is3m ? m3Min : ageMin
     int  aMax = is3m ? m3Max : ageMax
     bool aIn  = is3m ? in3Age : inAge
     string ageTxt = trendDir == 0 ? "MIX（沒有趨勢）" : str.tostring(trendMin, "#") + " 分" + (aIn ? "　✅ 在 " + str.tostring(aMin) + "–" + str.tostring(aMax) + " 分內" : trendMin < aMin ? "　再 " + str.tostring(aMin - trendMin, "#") + " 分進入範圍" : "　已超過 " + str.tostring(aMax) + " 分")
-    table.cell(st, 0, 1, "趨勢已持續", text_color=fg, bgcolor=bg, text_size=tblTxt)
-    table.cell(st, 1, 1, ageTxt, text_color=fg, bgcolor=trendDir != 0 and aIn ? color.new(#2962FF, 30) : bg, text_size=tblTxt)
+    table.cell(st, 0, tblPad + 1, "趨勢已持續", text_color=fg, bgcolor=bg, text_size=tblTxt)
+    table.cell(st, 1, tblPad + 1, ageTxt, text_color=fg, bgcolor=trendDir != 0 and aIn ? color.new(#2962FF, 30) : bg, text_size=tblTxt)
     string posTxt = is3m ? "3 分 K 圖：只發 3m 快訊（趨勢 " + str.tostring(m3Min) + "–" + str.tostring(m3Max) + " 分、" + str.tostring(m3Tgt) + "R），" + (in3Age and trendDir != 0 ? "現在在範圍內" : "現在不在範圍內") : vPos == 0 ? "空手，可以接訊號" : (vPos == 1 ? "多單" : "空單") + (vKind == 2 ? "（MIX 突破）" : "（趨勢）") + "　進 " + fmtP(vEntry) + "　停 " + fmtP(vStop) + "　標 " + fmtP(vTgt) + "　已 " + str.tostring(bar_index - vBar) + " 根"
-    table.cell(st, 0, 2, is3m ? "3 分 K 快訊" : "持倉（虛擬）", text_color=fg, bgcolor=bg, text_size=tblTxt)
-    table.cell(st, 1, 2, posTxt, text_color=fg, bgcolor=vPos == 1 ? color.new(#36FE02, 60) : vPos == -1 ? color.new(#F23645, 60) : bg, text_size=tblTxt)
+    table.cell(st, 0, tblPad + 2, is3m ? "3 分 K 快訊" : "持倉（虛擬）", text_color=fg, bgcolor=bg, text_size=tblTxt)
+    table.cell(st, 1, tblPad + 2, posTxt, text_color=fg, bgcolor=vPos == 1 ? color.new(#36FE02, 60) : vPos == -1 ? color.new(#F23645, 60) : bg, text_size=tblTxt)
     string mixTxt = not mixOn or not is2m ? "只在 2 分 K 圖上做" : bxLive and bar_index <= bxEnd ? "等突破　上 " + fmtP(bxUpL) + "　下 " + fmtP(bxDnL) + "　剩 " + str.tostring((bxEnd - bar_index) * tfMin, "#") + " 分" : not na(mbStart) ? "MIX 已 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + " 分（滿 " + str.tostring(mbMin) + " 分成形）" : "沒有區間"
-    table.cell(st, 0, 3, "MIX 區間", text_color=fg, bgcolor=bg, text_size=tblTxt)
-    table.cell(st, 1, 3, mixTxt, text_color=fg, bgcolor=bg, text_size=tblTxt)
+    table.cell(st, 0, tblPad + 3, "MIX 區間", text_color=fg, bgcolor=bg, text_size=tblTxt)
+    table.cell(st, 1, tblPad + 3, mixTxt, text_color=fg, bgcolor=bg, text_size=tblTxt)
     if not tjIsNQ
-        table.cell(st, 0, 4, "提示", text_color=color.white, bgcolor=color.new(color.red, 15), text_size=tblTxt)
-        table.cell(st, 1, 4, "只支援 NQ / MNQ，目前：" + syminfo.ticker, text_color=color.white, bgcolor=color.new(color.red, 15), text_size=tblTxt)
+        table.cell(st, 0, tblPad + 4, "提示", text_color=color.white, bgcolor=color.new(color.red, 15), text_size=tblTxt)
+        table.cell(st, 1, tblPad + 4, "只支援 NQ / MNQ，目前：" + syminfo.ticker, text_color=color.white, bgcolor=color.new(color.red, 15), text_size=tblTxt)
     if not is2m and not is3m
-        table.cell(st, 0, 5, "提示", text_color=color.white, bgcolor=color.new(color.orange, 20), text_size=tblTxt)
-        table.cell(st, 1, 5, "主訊號只在 2 分 K、3m 快訊只在 3 分 K 發，目前：" + timeframe.period, text_color=color.white, bgcolor=color.new(color.orange, 20), text_size=tblTxt)
+        table.cell(st, 0, tblPad + 5, "提示", text_color=color.white, bgcolor=color.new(color.orange, 20), text_size=tblTxt)
+        table.cell(st, 1, tblPad + 5, "主訊號只在 2 分 K、3m 快訊只在 3 分 K 發，目前：" + timeframe.period, text_color=color.white, bgcolor=color.new(color.orange, 20), text_size=tblTxt)
 
 // ═════════════════ 快訊 ═════════════════
 // 主訊號（2 分 K 圖）：觸發選「每根 K 線一次」，MIX 突破碰到突破價就通知（盤中），趨勢訊號在 K 棒收盤時通知
