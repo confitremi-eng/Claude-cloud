@@ -114,6 +114,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `v2_port.py` | Remi Superb v2 照指標逐根重算：趨勢訊號（30–120 分）、MIX 突破、一次一筆虛擬持倉（停損、目標、60 根、17:00 休市、資料中斷），3R / 2R、不限趨勢時間 |
 | `trend_time_tf.py` | 3 / 5 分 K（2 分 K 參考）的過濾訊號依指標的趨勢已持續分鐘數：30 分鐘分段、範圍掃描（前後半年都賺）、一次一筆 |
 | `market_matrix.py` | 同一套規則套到 NQ / ES / TXF（2m、3m）和 SPY / QQQ（1m、2m，用 ES / NQ 美股盤代替）：趨勢全部、0–180、60–120、90–120 分、ETF 設定、MIX 突破、v2 組合 |
+| `qqq_vs_nq.py` | QQQ 1m 訊號（ETF 設定、趨勢 0–180）依進場當下 NQ 2m（24 小時圖）的 Trend Judge 同向 / MIX / 反向、NQ 趨勢時間、NQ 近期訊號分組，加一次一筆 |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
 | `two_lots.py` | 每個訊號下兩口：都 2R、1R+2R、1R+3R、2R+3R、到 1R 保本、留一口跑，以及同時 2 筆 |
