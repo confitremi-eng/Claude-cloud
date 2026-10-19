@@ -1,5 +1,5 @@
 //@version=6
-// Remi Superb v2（NQ 2 分 K）：把回測驗證過的做法合在一起，只發「可交易的 Buy」和「可交易的 Sell」兩個快訊
+// Remi Superb v2（NQ 2 分 K）：把回測驗證過的做法合在一起，主訊號只發「可交易的 Buy」和「可交易的 Sell」兩個快訊（3 分 K 圖另有 3m Buy / Sell）
 //   1. 趨勢訊號：原版買賣訊號 (20, 0, 8, 1) + Trend Judge 有趨勢（NQ 門檻 10）+ 1 小時 EMA20 同向 + 停損 ≥ 1 ATR
 //      + 離 15 秒 EMA1130 ≤ 3 ATR + 避開數據 / 開收盤 / Globex / FOMC + 趨勢已持續 0–180 分鐘
 //      訊號 K 收盤進場，停損在訊號 K 和前一根的極值，目標 3R
@@ -9,6 +9,9 @@
 // 回測（NQ 2 分 K，Databento 2025-10-16 .. 2026-10-14，一次一筆，每筆扣 1 點）：
 //   627 筆，勝率 41.5%，每筆 +0.268R，一年 +168R，最大回撤 18.6R，12 / 13 個月賺錢，前後半年 +0.28R / +0.24R
 //   對照：趨勢只做 30–120 分鐘：一年 +140R，回撤 13R，13 / 13 個月；不限趨勢時間：一年 +204R，回撤 35R，11 / 13 個月
+// 3 分 K 快訊（只在 3 分 K 圖上）：趨勢訊號的條件不變，限定趨勢已持續 90–120 分鐘，目標 1R，各自獨立（不算一次一筆）
+//   回測（NQ 3 分 K 一年）：49 筆，勝率 71.4%，每筆 +0.39R，前後半年 +0.35R / +0.45R，回撤 2.2R
+//   主訊號（上面 1、2）只在 2 分 K 圖上發，3 分 K 圖上只發 3 分 K 快訊
 // Trend Judge 用 1 分 K 收盤推算（同回測，不需要秒級資料）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
 // 說明見 indicators/remi_superb.md
 indicator("Remi Superb v2", overlay=true, max_labels_count=500, max_boxes_count=500, max_lines_count=500)
@@ -39,6 +42,15 @@ mixOn     = input.bool(true, "做 MIX 區間突破", group=grpM)
 mbMin     = input.int(60, "區間觀察時間（分鐘）", minval=4, group=grpM, tooltip="Trend Judge 連續 MIX 這麼久之後，用這段時間的最高 / 最低價當區間（中間最多容許 4 分鐘的趨勢，資料中斷超過 30 分鐘就重算）")
 mbValid   = input.int(60, "區間形成後有效時間（分鐘）", minval=2, group=grpM, tooltip="區間形成後這段時間內第一次突破才算，之後區間作廢")
 mbBufPct  = input.float(10.0, "突破距離（區間高度 %）", minval=0, step=5, group=grpM, tooltip="價格超過區間上緣（下緣）這個比例的區間高度才算突破，這個價位就是進場價。同一根 K 上下都突破、或在避開的時段突破，這個區間就不做")
+
+// ═════════════════ 3 分 K 快訊 ═════════════════
+grpT3     = "3 分 K 快訊（只在 3 分 K 圖上）"
+m3On      = input.bool(true, "啟用 3 分 K 快訊", group=grpT3, tooltip="把指標放在 NQ 3 分 K 圖上才會發「Remi Superb v2 3m Buy / Sell」。條件同趨勢訊號（Trend Judge、1 小時 EMA、停損 ≥ 1 ATR、離慢線 ≤ 3 ATR、避開時段），再限定趨勢已持續下面的範圍。3 分 K 圖上不發 2 分 K 的主訊號")
+m3Min     = input.int(90, "趨勢已持續", minval=0, group=grpT3, inline="m3")
+m3Max     = input.int(120, "到（分鐘）", minval=1, group=grpT3, inline="m3", tooltip="NQ 3 分 K 一年回測：90–120 分鐘的趨勢訊號 1R 勝率 71.4%，是各段最高；60–120 分鐘 64.2%；超過 120 分鐘約 50%")
+m3Tgt     = input.float(1.0, "目標（R）", minval=0.1, step=0.5, group=grpT3, tooltip="回測 1R 最穩：49 筆，每筆 +0.39R，前後半年都賺，回撤 2.2R。2R / 3R 每筆差不多，但錢幾乎都在前半年")
+m3BuyTxt  = input.string("🟢", "買訊符號", group=grpT3, inline="m3s")
+m3SellTxt = input.string("🔴", "賣訊符號", group=grpT3, inline="m3s")
 
 // ═════════════════ 外觀 ═════════════════
 grpA      = "外觀"
@@ -157,10 +169,20 @@ float atrPrev  = ta.atr(atrLen)[1]
 float atrNow   = ta.atr(atrLen)
 float buyStop  = math.min(low, low[1])
 float sellStop = math.max(high, high[1])
-bool trBuy  = trendOn and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= slowMult * atrNow and not evtNow
-bool trSell = trendOn and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= slowMult * atrNow and not evtNow
+bool baseBuy  = buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= slowMult * atrNow and not evtNow
+bool baseSell = sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= slowMult * atrNow and not evtNow
+bool is2m     = timeframe.period == "2"
+bool is3m     = timeframe.period == "3"
+bool trBuy    = trendOn and is2m and baseBuy
+bool trSell   = trendOn and is2m and baseSell
 bool trBuyIn  = trBuy and inAge
 bool trSellIn = trSell and inAge
+// 3 分 K 快訊：同樣的條件，限定趨勢已持續 m3Min–m3Max 分鐘，目標 m3Tgt R
+bool in3Age  = trendMin >= m3Min and trendMin < m3Max
+bool t3Buy   = m3On and is3m and baseBuy and in3Age
+bool t3Sell  = m3On and is3m and baseSell and in3Age and not t3Buy
+float t3Stop = t3Buy ? buyStop : t3Sell ? sellStop : na
+float t3Tgt  = na(t3Stop) ? na : close + m3Tgt * (close - t3Stop)
 
 // ═════════════════ MIX 區間 ═════════════════
 float tfMin   = tfSec / 60.0
@@ -231,11 +253,11 @@ if bxLive and not mbForm and bar_index > bxForm
         if upHit or dnHit
             bxLive := false
             if not (upHit and dnHit) and not evtNow
-                mxBuy  := mixOn and upHit
-                mxSell := mixOn and dnHit
+                mxBuy  := mixOn and is2m and upHit
+                mxSell := mixOn and is2m and dnHit
 var line bxUpLine = na
 var line bxDnLine = na
-if mixOn and mbForm and bxLive and showBox and not na(bxTop) and not na(bxBot)
+if mixOn and is2m and mbForm and bxLive and showBox and not na(bxTop) and not na(bxBot)
     box.new(bxLeft, bxTop, bar_index, bxBot, border_color=boxLnCol, bgcolor=boxCol)
     int lineEnd = bar_index + math.min(mbLife, 500)
     bxUpLine := line.new(bar_index, bxUpL, lineEnd, bxUpL, color=boxLnCol, style=line.style_dashed)
@@ -308,6 +330,10 @@ if goTrBuy
     drawBuyMark(inAge ? tBuyTxt : oBuyTxt)
 if goTrSell
     drawSellMark(inAge ? tSellTxt : oSellTxt)
+if t3Buy
+    drawBuyMark(m3BuyTxt)
+if t3Sell
+    drawSellMark(m3SellTxt)
 bool inPos = vPos != 0
 plot(showPos and inPos ? vStop : na, "持倉停損", color=stopCol, style=plot.style_linebr)
 plot(showPos and inPos ? vTgt : na, "持倉目標", color=tgtCol, style=plot.style_linebr)
@@ -318,6 +344,11 @@ plot(tradeSell ? 1 : 0, "可交易 Sell", display=display.data_window)
 plot(sigEntry, "v2 進場", display=display.data_window)
 plot(sigStop, "v2 停損", display=display.data_window)
 plot(sigTgt, "v2 目標", display=display.data_window)
+plot(t3Buy ? 1 : 0, "3m Buy", display=display.data_window)
+plot(t3Sell ? 1 : 0, "3m Sell", display=display.data_window)
+plot(t3Buy or t3Sell ? close : na, "3m 進場", display=display.data_window)
+plot(t3Stop, "3m 停損", display=display.data_window)
+plot(t3Tgt, "3m 目標", display=display.data_window)
 plot(trendMin, "趨勢已持續（分鐘）", display=display.data_window)
 plot(tjDiff, "TJ 差值", display=display.data_window)
 
@@ -328,29 +359,37 @@ var table st = table.new(tblWhere, 2, 6, border_width=1, frame_color=color.new(c
 fmtP(float v) =>
     str.tostring(v, format.mintick)
 if barstate.islast and showTbl
-    color bg  = color.new(color.black, 30)
+    // 配色同原始 Trend Judge 指標：標題黑底，強UP 亮綠、UP 綠、MIX 橘、DOWN 紅、強Down 深紅，白字
+    color bg  = color.new(color.black, 20)
     color fg  = color.white
     string tjTxt = not tjLinked ? "沒有資料" : tjDirI == 2 ? "強UP" : tjDirI == 1 ? "UP" : tjDirI == -2 ? "強Down" : tjDirI == -1 ? "DOWN" : "MIX"
-    color  tjCol = tjDirI > 0 ? color.new(#36FE02, 20) : tjDirI < 0 ? color.new(#F23645, 20) : color.new(#9598A1, 20)
+    color  tjCol = not tjLinked ? color.gray : tjDirI == 2 ? color.lime : tjDirI == 1 ? color.green : tjDirI == -2 ? color.maroon : tjDirI == -1 ? color.red : color.orange
     table.cell(st, 0, 0, "Trend Judge", text_color=fg, bgcolor=bg, text_size=tblTxt)
     table.cell(st, 1, 0, tjTxt, text_color=color.white, bgcolor=tjCol, text_size=tblTxt)
-    string ageTxt = trendDir == 0 ? "MIX（沒有趨勢）" : str.tostring(trendMin, "#") + " 分" + (inAge ? "　✅ 在 " + str.tostring(ageMin) + "–" + str.tostring(ageMax) + " 分內" : trendMin < ageMin ? "　再 " + str.tostring(ageMin - trendMin, "#") + " 分進入範圍" : "　已超過 " + str.tostring(ageMax) + " 分")
+    int  aMin = is3m ? m3Min : ageMin
+    int  aMax = is3m ? m3Max : ageMax
+    bool aIn  = is3m ? in3Age : inAge
+    string ageTxt = trendDir == 0 ? "MIX（沒有趨勢）" : str.tostring(trendMin, "#") + " 分" + (aIn ? "　✅ 在 " + str.tostring(aMin) + "–" + str.tostring(aMax) + " 分內" : trendMin < aMin ? "　再 " + str.tostring(aMin - trendMin, "#") + " 分進入範圍" : "　已超過 " + str.tostring(aMax) + " 分")
     table.cell(st, 0, 1, "趨勢已持續", text_color=fg, bgcolor=bg, text_size=tblTxt)
-    table.cell(st, 1, 1, ageTxt, text_color=fg, bgcolor=trendDir != 0 and inAge ? color.new(#2962FF, 30) : bg, text_size=tblTxt)
-    string posTxt = vPos == 0 ? "空手，可以接訊號" : (vPos == 1 ? "多單" : "空單") + (vKind == 2 ? "（MIX 突破）" : "（趨勢）") + "　進 " + fmtP(vEntry) + "　停 " + fmtP(vStop) + "　標 " + fmtP(vTgt) + "　已 " + str.tostring(bar_index - vBar) + " 根"
-    table.cell(st, 0, 2, "持倉（虛擬）", text_color=fg, bgcolor=bg, text_size=tblTxt)
+    table.cell(st, 1, 1, ageTxt, text_color=fg, bgcolor=trendDir != 0 and aIn ? color.new(#2962FF, 30) : bg, text_size=tblTxt)
+    string posTxt = is3m ? "3 分 K 圖：只發 3m 快訊（趨勢 " + str.tostring(m3Min) + "–" + str.tostring(m3Max) + " 分、" + str.tostring(m3Tgt) + "R），" + (in3Age and trendDir != 0 ? "現在在範圍內" : "現在不在範圍內") : vPos == 0 ? "空手，可以接訊號" : (vPos == 1 ? "多單" : "空單") + (vKind == 2 ? "（MIX 突破）" : "（趨勢）") + "　進 " + fmtP(vEntry) + "　停 " + fmtP(vStop) + "　標 " + fmtP(vTgt) + "　已 " + str.tostring(bar_index - vBar) + " 根"
+    table.cell(st, 0, 2, is3m ? "3 分 K 快訊" : "持倉（虛擬）", text_color=fg, bgcolor=bg, text_size=tblTxt)
     table.cell(st, 1, 2, posTxt, text_color=fg, bgcolor=vPos == 1 ? color.new(#36FE02, 60) : vPos == -1 ? color.new(#F23645, 60) : bg, text_size=tblTxt)
-    string mixTxt = not mixOn ? "關閉" : bxLive and bar_index <= bxEnd ? "等突破　上 " + fmtP(bxUpL) + "　下 " + fmtP(bxDnL) + "　剩 " + str.tostring((bxEnd - bar_index) * tfMin, "#") + " 分" : not na(mbStart) ? "MIX 已 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + " 分（滿 " + str.tostring(mbMin) + " 分成形）" : "沒有區間"
+    string mixTxt = not mixOn or not is2m ? "只在 2 分 K 圖上做" : bxLive and bar_index <= bxEnd ? "等突破　上 " + fmtP(bxUpL) + "　下 " + fmtP(bxDnL) + "　剩 " + str.tostring((bxEnd - bar_index) * tfMin, "#") + " 分" : not na(mbStart) ? "MIX 已 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + " 分（滿 " + str.tostring(mbMin) + " 分成形）" : "沒有區間"
     table.cell(st, 0, 3, "MIX 區間", text_color=fg, bgcolor=bg, text_size=tblTxt)
     table.cell(st, 1, 3, mixTxt, text_color=fg, bgcolor=bg, text_size=tblTxt)
     if not tjIsNQ
         table.cell(st, 0, 4, "提示", text_color=color.white, bgcolor=color.new(color.red, 15), text_size=tblTxt)
         table.cell(st, 1, 4, "只支援 NQ / MNQ，目前：" + syminfo.ticker, text_color=color.white, bgcolor=color.new(color.red, 15), text_size=tblTxt)
-    if timeframe.period != "2"
+    if not is2m and not is3m
         table.cell(st, 0, 5, "提示", text_color=color.white, bgcolor=color.new(color.orange, 20), text_size=tblTxt)
-        table.cell(st, 1, 5, "以 2 分 K 為準，目前：" + timeframe.period, text_color=color.white, bgcolor=color.new(color.orange, 20), text_size=tblTxt)
+        table.cell(st, 1, 5, "主訊號只在 2 分 K、3m 快訊只在 3 分 K 發，目前：" + timeframe.period, text_color=color.white, bgcolor=color.new(color.orange, 20), text_size=tblTxt)
 
-// ═════════════════ 快訊：只有兩個 ═════════════════
-// 觸發選「每根 K 線一次」：MIX 突破碰到突破價就通知（盤中），趨勢訊號在 K 棒收盤時通知
+// ═════════════════ 快訊 ═════════════════
+// 主訊號（2 分 K 圖）：觸發選「每根 K 線一次」，MIX 突破碰到突破價就通知（盤中），趨勢訊號在 K 棒收盤時通知
 alertcondition(tradeBuy, "Remi Superb v2 Buy", '{{ticker}} Remi Superb v2 Buy｜進場 {{plot("v2 進場")}}｜停損 {{plot("v2 停損")}}｜目標 {{plot("v2 目標")}}')
 alertcondition(tradeSell, "Remi Superb v2 Sell", '{{ticker}} Remi Superb v2 Sell｜進場 {{plot("v2 進場")}}｜停損 {{plot("v2 停損")}}｜目標 {{plot("v2 目標")}}')
+
+// 3 分 K 快訊（3 分 K 圖）：K 棒收盤時通知，觸發選「每根 K 線收盤時一次」或「每根 K 線一次」都可以
+alertcondition(t3Buy, "Remi Superb v2 3m Buy", '{{ticker}} Remi Superb v2 3m Buy｜進場 {{plot("3m 進場")}}｜停損 {{plot("3m 停損")}}｜目標 {{plot("3m 目標")}}｜趨勢已持續 {{plot("趨勢已持續（分鐘）")}} 分')
+alertcondition(t3Sell, "Remi Superb v2 3m Sell", '{{ticker}} Remi Superb v2 3m Sell｜進場 {{plot("3m 進場")}}｜停損 {{plot("3m 停損")}}｜目標 {{plot("3m 目標")}}｜趨勢已持續 {{plot("趨勢已持續（分鐘）")}} 分')
