@@ -56,7 +56,8 @@ showTbl   = input.bool(true, "顯示狀態表格", group=grpA, inline="tbl")
 tblPos    = input.string("左上", "", options=["左上", "右上", "左下", "右下"], group=grpA, inline="tbl")
 tblSize   = input.string("小", "", options=["小", "中", "大"], group=grpA, inline="tbl")
 tblPad    = input.int(2, "表格上方留白（列）", minval=0, maxval=6, group=grpA, tooltip="表格放左上時，空幾列避開圖表左上角的商品名稱和指標名稱")
-showRaw   = input.bool(false, "也標出原版買賣訊號（灰色小三角）", group=grpA)
+showRaw   = input.bool(false, "也標出原版買賣訊號（小三角）", group=grpA, inline="raw")
+rawCol    = input.color(#FFB300, "", group=grpA, inline="raw", tooltip="沒經過過濾的原版訊號（買在 K 棒下方、賣在上方），預設橙黃色。用的是這個商品套用的訊號參數：NQ / ES / TXF 是 (20, 0, 8, 1)，QQQ / SPY / NQ RTH 是 (35, 0, 8, 1)。只是標出來看，不發快訊")
 
 // ═════════════════ Trend Judge ═════════════════
 grpT      = "Trend Judge（門檻依商品自動）"
@@ -123,8 +124,8 @@ else if newHigh
     armSell := true
 bool buySig  = trigBuy and close > sigEma and barstate.isconfirmed
 bool sellSig = trigSell and close < sigEma and barstate.isconfirmed
-plotshape(showRaw and buySig, "原版買訊", shape.triangleup, location.belowbar, color=color.new(color.gray, 30), size=size.tiny)
-plotshape(showRaw and sellSig, "原版賣訊", shape.triangledown, location.abovebar, color=color.new(color.gray, 30), size=size.tiny)
+plotshape(showRaw and buySig, "原版買訊", shape.triangleup, location.belowbar, color=rawCol, size=size.tiny)
+plotshape(showRaw and sellSig, "原版賣訊", shape.triangledown, location.abovebar, color=rawCol, size=size.tiny)
 
 // ═════════════════ Trend Judge（1 分 K 推算）═════════════════
 float tfSec    = timeframe.in_seconds()
