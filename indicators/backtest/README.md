@@ -110,6 +110,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `limit_entry.py` | 進場改用限價單（掛在停損點或一半、新停損、等幾分鐘、碰價或穿價成交）跟市價進場比較，全部在 1 分 K 上模擬；`DATA 門檻 成本`，ES、NQ 都能跑 |
 | `trend_mix_matrix.py` | Trend（過濾快訊）和 MIX 突破的 2 分 K 勝率矩陣（1R / 1.5R / 2R / 3R、多空、前後、合起來），`nq` / `es` / `txf` 用各自的預設門檻和成本；TXF 另有逐年 |
 | `nq_follow.py` | 用 NQ 2 分 K 的 Remi Superb 訊號（Trend、MIX）做 ES 或 TXF：可下單比例、報酬相關、輸贏一致率，停損用 ATR 換算 / 跟 NQ 出場 / 自己兩根 K，分時段、多空、自己 Trend Judge 同向、晚 1 分鐘、成本；TXF 另有只做夜盤和逐月 |
+| `one_minute.py` | NQ 1 分 K：1m 和 2m 同時出訊號（只用進場當下已知的資訊）、等 2m 確認再進、2m 還沒出訊號的 1m 訊號贏輸特徵、過濾訊號依趨勢已持續多久（1/2/3/5 分，MIX 長短、反轉或延續）、30–120 分鐘窗口的穩定性和一次一筆結果 |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
 | `two_lots.py` | 每個訊號下兩口：都 2R、1R+2R、1R+3R、2R+3R、到 1R 保本、留一口跑，以及同時 2 筆 |
