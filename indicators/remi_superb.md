@@ -791,6 +791,21 @@ v3 的 GEX setup（Trend Judge 順勢 + 朝 QQQ gamma flip 走），NQ 美股盤
 - 只有 3 個多月、每格幾十筆，看的是區塊不是最好那一格；整年（沒有 GEX）的 QQQ 順勢訊號也是 35–40 比 30 好一點，方向一致。
 - **v3 的 GEX setup 預設改成 (35, 0, 8, 1)**（2026-10-20，Remi 決定；在穩定區內，跟 v3 的 ETF 設定同參數）。
 
+**要看 NQ RTH 的趨勢還是 ETH 的？**（2026-10-20，`rbs/gex_trend_src.py`，(35, 0, 8, 1)、朝 flip 走，71 天）
+
+| 趨勢條件 | 筆數 | 1R 勝率 | 3R 每筆 | 一次一筆 3R 合計 / 回撤 |
+|---|---|---|---|---|
+| 不看趨勢 | 431 | 53.8% | +0.09R | +32R / 37R |
+| **RTH 1m 順勢（v3 現在）** | 77 | **66.2%** | **+0.75R** | **+56R / 6.7R** |
+| ETH 1m 順勢（24 小時 NQ） | 133 | 53.4% | +0.19R | +22R / 16.7R |
+| ETH 2m 順勢（表格的「NQ 2m」） | 133 | 53.4% | +0.19R | +22R / 16.7R |
+| RTH + ETH 都順勢 | 61 | 65.6% | +0.63R | +37R / 8.1R |
+| RTH 順勢 + ETH 不逆勢 | 72 | 65.3% | +0.76R | +53R / 6.7R |
+| ETH 順勢但 RTH 不是 | 72 | 43.1% | −0.18R | — |
+
+- **看 NQ RTH 自己的 Trend Judge**（RTH 圖上只用美股盤 K 棒算，門檻 20 點），v3 的 GEX setup 就是這樣做的。ETH 1m 和 ETH 2m 結果幾乎一樣（99% 同號），都比較差；兩個都要求只是少做幾筆好單。
+- 表格的「NQ 2m」列（24 小時 NQ）是給 v3 原本 NQ RTH 訊號用的「不反向」條件，**GEX setup 不用看它**。
+
 ## 6. 還沒確認的地方
 
 - **還沒在 TradingView 上編譯過**：v3（和 v2、兩個舊版）都只用離線的 Pine 解析器檢查過。有紅字錯誤請貼回來。
@@ -840,6 +855,7 @@ python3 -I rbs/gex_trend.py                                       # 順勢訊號
 python3 -I rbs/qqq_3008.py                                        # QQQ 原版 (30, 0, 8, 1) 順勢 + NQ 2m 不逆勢
 python3 -I rbs/qqq_3008_when.py [--check | --gex 8,13]           # (30, 0, 8, 1) 什麼時候有效：時間、跳空、開盤區間、gamma flip（可比 EMA）
 python3 -I rbs/gex_params.py                                       # gamma flip setup 的階段 × EMA（NQ RTH）
+python3 -I rbs/gex_trend_src.py                                    # gamma flip setup 看 RTH 還是 ETH 的趨勢
 ```
 
 更早的研究（門檻 20 / 40 時代的推薦設定、亞洲盤、停損方式等）在 [remis_buy_sell.md](remis_buy_sell.md) 第 4 節。
