@@ -3,6 +3,7 @@
   cd indicators/backtest
   python3 -I rbs/gex_matrix.py
   python3 -I rbs/gex_matrix.py --tj      # by the NQ RTH Trend Judge state instead (trend / MIX / against)
+  python3 -I rbs/gex_matrix.py --th      # the RTH trend threshold swept from 0 to 40 NQ points (v3: 20)
 
 GEX setup as v3 runs it: (35, 0, 8, 1) on NQ 1-minute cash-session bars, NQ RTH Trend Judge on the signal's side
 (threshold 20), QQQ below its gamma flip for buys / above for sells, no new signals 00:00-01:05 Taipei; signal close
@@ -56,6 +57,35 @@ def by_tj(cost=1.0):
             print(f'   {nm:<12} {R:g}R：{len(t):3d} 筆  勝率 {100 * (n > 0).mean():4.1f}%  每筆 {n.mean():+.3f}R  合計 {n.sum():+6.1f}R  回撤 {dd:4.1f}R')
 
 
+def th_sweep(cost=1.0):
+    """The trend condition 「RTH Trend Judge spread on the trade's side > X」 for X = 0 .. 40 NQ points (v3: 20)."""
+    one = mm.load_market('qqq', []); tdm = mm.minute_trend(one); H = mm.hourly(one, True)
+    df = mm.chart(one, tdm, 1, 20.0, 40.0)
+    s = mm.trend_signals(df, H, 1, 35, 8)
+    s = s[(s.date >= '2026-06-29') & (s.date <= '2026-10-14')].copy()
+    s = pd.concat([s, gt.feats(df, s)], axis=1); s = s[s.QQQ_flip.notna() & (s.flip_d < 0)].copy()
+    close_t = pd.DatetimeIndex(df.datetime.values[s.i]).tz_localize('UTC') + pd.Timedelta(minutes=1)
+    tw = close_t.tz_convert('Asia/Taipei'); et = close_t.tz_convert(ss.NY)
+    s = s[((tw.hour * 60 + tw.minute) > 65)].copy()
+    s['etm'] = (et.hour * 60 + et.minute)[((tw.hour * 60 + tw.minute) > 65)]
+    d = sorted(s.date.unique()); split = d[len(d) // 2]
+    print('GEX setup 的 RTH 趨勢門檻（差值順著交易方向 > X 點；v3 = 20）：(35, 0, 8, 1) + 朝 QQQ flip 走，去掉台北 00:00–01:05，每筆扣 1 點')
+    print(f'   {"":<22}  筆數    ' + '     '.join(f'{R:g}R 勝率 每筆' for R in TG) + '   一次一筆 3R 合計 / 回撤')
+    for X in (0, 5, 10, 15, 20, 25, 30, 40):
+        for nm, m in ((f'門檻 {X}', s.spread > X), (f'　只看開盤後 60 分', (s.spread > X) & (s.etm <= 630))):
+            y = s[m]; t = ss.seq(y.sort_values('i'), 3.0)
+            n = t.r3.values - cost / t.risk.values; eq = np.cumsum(n)
+            dd = np.max(np.maximum.accumulate(np.r_[0, eq])[1:] - eq) if len(eq) else 0
+            print(f'   {nm:<22}  ' + cells(y, cost) + f'   {n.sum():+6.1f}R / {dd:4.1f}R')
+    print('  門檻 20，但開盤後 60 分內放寬成 X')
+    for X in (0, 5, 10, 15):
+        m = (s.spread > 20) | ((s.etm <= 630) & (s.spread > X))
+        y = s[m]; t = ss.seq(y.sort_values('i'), 3.0)
+        n = t.r3.values - cost / t.risk.values; eq = np.cumsum(n)
+        dd = np.max(np.maximum.accumulate(np.r_[0, eq])[1:] - eq) if len(eq) else 0
+        print(f'   {"開盤 60 分內放寬到 " + str(X):<22}  ' + cells(y, cost) + f'   {n.sum():+6.1f}R / {dd:4.1f}R')
+
+
 def main(cost=1.0):
     one = mm.load_market('qqq', []); tdm = mm.minute_trend(one); H = mm.hourly(one, True)
     df = mm.chart(one, tdm, 1, 20.0, 40.0)
@@ -98,4 +128,4 @@ def main(cost=1.0):
 
 
 if __name__ == '__main__':
-    by_tj() if '--tj' in sys.argv else main()
+    by_tj() if '--tj' in sys.argv else th_sweep() if '--th' in sys.argv else main()
