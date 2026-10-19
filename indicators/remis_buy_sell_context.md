@@ -10,7 +10,7 @@
 | 指標 | 檔案 | 狀態 |
 |------|------|------|
 | Remi's Buy/Sell | [remis_buy_sell.pine](remis_buy_sell.pine) | 仿原版「買賣訊號」(20, 0, 8, 1)，每根 K 跟原版一致（71 / 71 個訊號）。另有過濾快訊（門檻依商品：NQ 20/40、ES 4/8、TXF 40/80）、1 分亞洲盤快訊。通用版，這次沒再改 |
-| **Remi Superb v3** | [remi_superb_v3.pine](remi_superb_v3.pine) | **自動辨識商品**（2026-10-19）。NQ 2m = v2（趨勢 0–180 + MIX，3R）；NQ 3m 趨勢 90–120 分 1R；QQQ / SPY 1m ETF 設定 (35, 0, 8, 1) 3R（QQQ 另加「NQ 2 分 K 不反向」，預設開，表格有 NQ 2m 列）；NQ 圖只開美股盤（RTH）自動改用「NQ RTH（代替 QQQ）」= QQQ 做法、門檻 20 點、1 分 K；TXF 2m / 3m 趨勢 60–120 分 3R（邊緣）；ES 預設不發。只有「Remi Superb v3 Buy / Sell」兩個快訊，表格預設左上（上方留白 2 列） |
+| **Remi Superb v3** | [remi_superb_v3.pine](remi_superb_v3.pine) | **自動辨識商品**（2026-10-19）。NQ 2m = v2（趨勢 0–180 + MIX，3R）；NQ 3m 趨勢 90–120 分 1R；QQQ / SPY 1m ETF 設定 (35, 0, 8, 1) 3R（QQQ 另加「NQ 2 分 K 不反向」，預設開，表格有 NQ 2m 列）；NQ 圖只開美股盤（RTH）自動改用「NQ RTH（代替 QQQ）」= QQQ 做法、門檻 20 點、1 分 K；TXF 2m / 3m 趨勢 60–120 分 3R（邊緣）；ES 預設不發。只有「Remi Superb v3 Buy / Sell」兩個快訊，表格預設左上（上方留白 2 列）；週五台灣時間週六 02:00 以後不發新訊號（可改） |
 | **Remi Superb v2** | [remi_superb_v2.pine](remi_superb_v2.pine) | **建議用這個**（2026-10-19）。趨勢訊號（過濾快訊 + 趨勢已持續 0–180 分，2026-10-19 從 30–120 改）＋ MIX 區間突破，一次一筆虛擬持倉，只有「Remi Superb v2 Buy / Sell」兩個快訊，右上角狀態表格。Trend Judge 用 1 分 K 推算。回測 627 筆，每筆 +0.268R，一年 +168R，回撤 18.6R，12/13 個月賺錢（30–120 分：+140R、回撤 13R）。主訊號只在 2 分 K 圖上發；3 分 K 圖上另有「v2 3m Buy / Sell」（趨勢 90–120 分、1R，49 筆、勝率 71.4%）。表格配色同原始 Trend Judge |
 | **Remi Superb** | [remi_superb.pine](remi_superb.pine) | **主力**。NQ 2 分 K 優化完成：過濾快訊＋MIX 區間突破快訊，Trend Judge 用秒級資料（要 Premium） |
 | **Remi Superb 1m** | [remi_superb_1m.pine](remi_superb_1m.pine) | 跟 Remi Superb 同步，只有 Trend Judge 改用 1 分 K 收盤推算（同回測），不需要 Premium；快訊名稱多「1m」。另外多了 **QQQ 1 分 K**（自動套用 QQQ 那組設定）和「收盤前 1 小時不進場」開關 |

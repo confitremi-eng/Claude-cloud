@@ -28,6 +28,9 @@ grpR      = "交易規則（各商品共用）"
 holdBars  = input.int(60, "最多持有幾根 K", minval=1, group=grpR, tooltip="停損和目標都沒碰到，持有這麼多根 K 後收盤出場（回測都是 60 根）")
 onlyOne   = input.bool(true, "一次一筆（持倉中不發新訊號）", group=grpR, tooltip="指標自己記一筆虛擬持倉：要等碰到停損、目標、持有時間到、休市前或資料中斷出場，才會發下一個訊號。回測都是一次一筆")
 flatHalt  = input.bool(true, "NQ / ES 在美東 17:00 休市前出場", group=grpR, tooltip="虛擬持倉在美東 17:00 收盤那根 K 出場。TXF、SPY、QQQ 在收盤後的資料中斷自動出場")
+friCut    = input.bool(true, "週五美股盤：台灣時間週六", group=grpR, inline="fri")
+friCutH   = input.int(2, "", minval=0, maxval=6, group=grpR, inline="fri")
+friCutM   = input.int(0, "點　分以後不發新訊號", minval=0, maxval=59, group=grpR, inline="fri", tooltip="週五晚上的美股盤，到台灣時間週六這個時間以後就不發新訊號（趨勢訊號和 MIX 突破都一樣），已經在持倉中的照常出場。預設 02:00＝美東週五 14:00（夏令）/ 13:00（冬令）。所有商品都適用。NQ 2 分 K 一年回測：拿掉 9 個訊號，每年 +162R → +159R，回撤不變")
 h1Len     = input.int(20, "1 小時 EMA 長度", minval=1, group=grpR, tooltip="看上一根已收完的 1 小時 K：買要收盤在 1 小時 EMA 之上，賣要在之下")
 riskMult  = input.float(1.0, "停損至少幾個 ATR", minval=0, step=0.1, group=grpR, inline="rk")
 atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）。停損距離小於「倍數 × 上一根的 ATR」就不做")
@@ -169,6 +172,9 @@ bool isFomc  = str.contains(fomcDates, str.format_time(tClose, "yyyy-MM-dd", "Am
 bool inEvt   = (isWkday and ((etMin >= 508 and etMin < 540) or (etMin >= 598 and etMin < 615))) or (isFomc and etMin >= 838 and etMin < 900) or (etMin >= 570 and etMin < 600) or (etMin >= 945 and etMin < 975) or (etMin >= 1005 and etMin < 1020) or (etMin >= 1080 and etMin < 1110)
 bool evtNow  = avoidEvt and inEvt
 bool haltBar = flatHalt and isCME and etMin == 1020                 // 美東 17:00 收盤那根，接著休市
+// 週五美股盤的最後幾小時（台灣時間週六 friCutH:friCutM 以後）不發新訊號
+int  twMin   = hour(tClose, "Asia/Taipei") * 60 + minute(tClose, "Asia/Taipei")
+bool friLate = friCut and dayofweek(tClose, "Asia/Taipei") == dayofweek.saturday and twMin >= friCutH * 60 + friCutM
 
 // ═════════════════ NQ 2 分 K 的 Trend Judge（QQQ 用）═════════════════
 // NQ 2 分 K（24 小時）收盤推算 5 秒 / 15 秒 EMA1130（每根走 120 / 秒數 步），門檻 10 / 35；取上一根已收完的 K，不重繪
@@ -200,8 +206,8 @@ float atrPrev  = ta.atr(atrLen)[1]
 float atrNow   = ta.atr(atrLen)
 float buyStop  = math.min(low, low[1])
 float sellStop = math.max(high, high[1])
-bool trBuy  = active and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk
-bool trSell = active and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk
+bool trBuy  = active and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate
+bool trSell = active and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate
 
 // ═════════════════ MIX 區間（只有 NQ 2 分 K）═════════════════
 float tfMin   = tfSec / 60.0
@@ -297,8 +303,8 @@ if vPos != 0 and bar_index > vBar
     if hitStop or hitTgt or bar_index - vBar >= holdBars or haltBar or mbHole
         vPos := 0
 bool flatNow = not onlyOne or vPos == 0
-bool goMixBuy  = mxBuy and flatNow and not haltBar
-bool goMixSell = mxSell and flatNow and not haltBar and not goMixBuy
+bool goMixBuy  = mxBuy and flatNow and not haltBar and not friLate
+bool goMixSell = mxSell and flatNow and not haltBar and not friLate and not goMixBuy
 float mxEntry = goMixBuy ? math.max(open, bxUpL) : goMixSell ? math.min(open, bxDnL) : na
 if goMixBuy or goMixSell
     vPos   := goMixBuy ? 1 : -1
@@ -399,6 +405,8 @@ if barstate.islast and showTbl
     string warn = ""
     if prof == "無"
         warn := "支援 NQ / ES / TXF / QQQ / SPY（含 MNQ、MES、MXF）"
+    else if friLate
+        warn := "週五 " + str.format("{0,number,00}:{1,number,00}", friCutH, friCutM) + " 以後不發新訊號（交易規則設定）"
     else if isES and not esOn
         warn := "ES 回測每種做法都虧，預設不發訊號"
     else if not okTf
