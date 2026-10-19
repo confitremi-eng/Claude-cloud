@@ -122,6 +122,8 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `mix_opt.py` | MIX 突破的改法（NQ 2 / 5 分 K）：一轉 MIX 就進場（反向 / 順勢、停損）、區間要多長、突破距離、有效時間、停損位置、各種條件、目標，放回 v3 一次一筆 |
 | `strong_stage.py` | 趨勢拉開（Trend Judge 差值是「強」門檻的幾倍）時把「階段」改短：QQQ / SPY 1m 35 → 30 / 25 / 20 / 15、NQ 2m 20 → 15 / 12 / 10；各自獨立依拉開程度、短階段多出來的訊號、放回 v3 一次一筆 |
 | `oneside_3013.py` | 原版 (30, 0, 13, 1)（單邊日用）在 QQQ / SPY 1m：Trend Judge 順勢 / MIX / 反向、趨勢時間、拉開程度、單邊日（強 + 趨勢已久、NQ 2m 也強、當天已走幾 %）、v3 過濾；附近參數（階段 20–40 × EMA 8 / 13 / 21）；一次一筆和加進 v3 |
+| `zerogex_fetch.py` | 下載 ZeroGEX（Pro API）SPY / QQQ 的歷史到 `data/zerogex/`：每分鐘 gamma flip、call / put wall 和 QQQ / SPY 的 1 分 K（`range`）、每 30 分鐘 net GEX（`frames`，很慢）、每天的狀態（`regime`）。金鑰從檔案讀，不要放進 repo；已下載的日子會跳過 |
+| `gex_qqq.py` | QQQ 1m 原版 (35, 0, 8, 1) 和 v3 訊號，依 SPY / QQQ 的 gamma 正負（價格 vs gamma flip，當下或開盤）分組，買賣分開；Remi 的規則一次一筆；NQ 代替和 ZeroGEX 的 QQQ 實際 K 棒各算一次 |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
 | `two_lots.py` | 每個訊號下兩口：都 2R、1R+2R、1R+3R、2R+3R、到 1R 保本、留一口跑，以及同時 2 筆 |
