@@ -2,7 +2,7 @@
 // Remi Superb v3：自動辨識商品和週期，套用回測過的做法，只發「可交易的 Buy」和「可交易的 Sell」兩個快訊
 //   NQ / MNQ 2 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 3R              回測每年 +162R，回撤 16R
 //   NQ / MNQ 3 分 K：趨勢訊號（趨勢已持續 90–120 分），目標 1R                           勝率 74%，每年 +20R，回撤 2R
-//   QQQ 1 分 K：ETF 設定 (35, 0, 8, 1)、Trend Judge 門檻 0.5、離慢線 ≤ 7 ATR，目標 3R      每年 +63R，回撤 28R
+//   QQQ 1 分 K：ETF 設定 (35, 0, 8, 1)、Trend Judge 門檻 0.5、離慢線 ≤ 7 ATR、NQ 2 分 K 不反向，目標 3R   每年 +66R，回撤 17R
 //   SPY 1 分 K：ETF 設定 (35, 0, 8, 1)、Trend Judge 門檻 0.8、離慢線 ≤ 7 ATR，目標 3R      每年 +67R，回撤 21R
 //   TXF / MXF 2、3 分 K：趨勢訊號（趨勢已持續 60–120 分），目標 3R                        邊緣：每年 +10R / +5R（成本 2 點）
 //   ES / MES：回測每種做法都虧，預設不發訊號
@@ -18,6 +18,8 @@ indicator("Remi Superb v3", overlay=true, max_labels_count=500, max_boxes_count=
 grpP      = "商品設定"
 profSel   = input.string("自動", "商品", options=["自動", "NQ", "ES", "TXF", "QQQ", "SPY"], group=grpP, tooltip="自動：依圖上的商品選設定（NQ / MNQ、ES / MES、TXF / MXF / TMF、QQQ、SPY）。也可以手動指定，例如用別的代號看同一個商品時")
 otherTf   = input.bool(false, "不是建議週期也發訊號", group=grpP, tooltip="建議週期：NQ、TXF 是 2 或 3 分 K，SPY、QQQ 是 1 分 K。關閉時，其他週期只顯示表格、不發訊號；打開的話用最接近的設定發（沒有回測過）")
+qNqOn     = input.bool(true, "QQQ：NQ 2 分 K 不反向", group=grpP, inline="qnq")
+nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpP, inline="qnq", tooltip="只影響 QQQ：上一根已收完的 NQ 2 分 K（24 小時圖），Trend Judge 跟訊號反向（買訊時是 DOWN / 強Down，賣訊時是 UP / 強Up）就不做，MIX 照做。回測：NQ 2m 反向時 QQQ 訊號是虧的（3R −0.05R）；去掉後每年一樣 +66R，回撤 24R → 17R。讀不到 NQ 資料時不擋")
 esOn      = input.bool(false, "ES 也發訊號（回測是虧的）", group=grpP, tooltip="ES / MES 2、3 分 K 一年回測，趨勢訊號和 MIX 突破每一種都虧，所以預設不發。打開會用 NQ 2 分 K 的做法（門檻 4、不做 MIX）")
 
 // ═════════════════ 交易規則 ═════════════════
@@ -85,7 +87,7 @@ int    winLo    = nq3 ? 90 : isTX ? 60 : 0
 int    winHi    = nq3 ? 120 : isTX ? 120 : 180
 bool   mixUse   = isNQ and not nq3
 float  tgtR     = nq3 ? 1.0 : 3.0
-string ruleTxt  = isETF ? "ETF 設定 (35, 0, 8, 1)，" + str.tostring(tgtR) + "R" : "趨勢 " + str.tostring(winLo) + "–" + str.tostring(winHi) + " 分" + (mixUse ? " + MIX 突破" : "") + "，" + str.tostring(tgtR) + "R"
+string ruleTxt  = isETF ? "ETF 設定 (35, 0, 8, 1)，" + str.tostring(tgtR) + "R" + (isQQ and qNqOn ? "，NQ 2m 不反向" : "") : "趨勢 " + str.tostring(winLo) + "–" + str.tostring(winHi) + " 分" + (mixUse ? " + MIX 突破" : "") + "，" + str.tostring(tgtR) + "R"
 string gradeTxt = not profOn and isES ? "不建議（回測都虧）" : prof == "無" ? "不支援" : not okTf ? "不是建議週期" : isNQ and tfp == "2" ? "主力" : isTX ? "邊緣" : "可做"
 
 // ═════════════════ 原版買賣訊號 ═════════════════
@@ -160,6 +162,27 @@ bool inEvt   = (isWkday and ((etMin >= 508 and etMin < 540) or (etMin >= 598 and
 bool evtNow  = avoidEvt and inEvt
 bool haltBar = flatHalt and isCME and etMin == 1020                 // 美東 17:00 收盤那根，接著休市
 
+// ═════════════════ NQ 2 分 K 的 Trend Judge（QQQ 用）═════════════════
+// NQ 2 分 K（24 小時）收盤推算 5 秒 / 15 秒 EMA1130（每根走 120 / 秒數 步），門檻 10 / 35；取上一根已收完的 K，不重繪
+nqTJ() =>
+    float aF = 1 - math.pow(1 - 2.0 / (tjEmaLen + 1), 120.0 / tjFastS)
+    float aS = 1 - math.pow(1 - 2.0 / (tjEmaLen + 1), 120.0 / tjSlowS)
+    var float ef = na
+    var float es = na
+    ef := na(ef) ? close : ef + aF * (close - ef)
+    es := na(es) ? close : es + aS * (close - es)
+    float dd = ef - es
+    int dir = dd > 35 ? 2 : dd > 10 ? 1 : dd < -35 ? -2 : dd < -10 ? -1 : 0
+    int sg  = dir > 0 ? 1 : dir < 0 ? -1 : 0
+    var int nb = 0
+    nb := sg != 0 and sg == nz(sg[1]) ? nb + 1 : sg != 0 ? 1 : 0
+    [dd[1], dir[1], nb[1] * 2]
+[nqDiff, nqDir, nqMin] = request.security(nqSym, "2", nqTJ(), lookahead=barmerge.lookahead_on)
+bool qNqUse   = isQQ and qNqOn
+bool nqHas    = not na(nqDir)
+bool nqBuyOk  = not qNqUse or not nqHas or nqDir >= 0
+bool nqSellOk = not qNqUse or not nqHas or nqDir <= 0
+
 // ═════════════════ 趨勢訊號 ═════════════════
 h1Vals() =>
     float h1e = ta.ema(close, h1Len)
@@ -169,8 +192,8 @@ float atrPrev  = ta.atr(atrLen)[1]
 float atrNow   = ta.atr(atrLen)
 float buyStop  = math.min(low, low[1])
 float sellStop = math.max(high, high[1])
-bool trBuy  = active and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin
-bool trSell = active and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin
+bool trBuy  = active and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk
+bool trSell = active and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk
 
 // ═════════════════ MIX 區間（只有 NQ 2 分 K）═════════════════
 float tfMin   = tfSec / 60.0
@@ -325,11 +348,13 @@ plot(sigStop, "v3 停損", display=display.data_window)
 plot(sigTgt, "v3 目標", display=display.data_window)
 plot(trendMin, "趨勢已持續（分鐘）", display=display.data_window)
 plot(tjDiff, "TJ 差值", display=display.data_window)
+plot(nqDiff, "NQ 2m TJ 差值", display=display.data_window)
+plot(nqMin, "NQ 2m 趨勢已持續（分鐘）", display=display.data_window)
 
 // ═════════════════ 狀態表格（配色同原始 Trend Judge）═════════════════
 tblWhere = tblPos == "左上" ? position.top_left : tblPos == "右上" ? position.top_right : tblPos == "左下" ? position.bottom_left : position.bottom_right
 tblTxt   = tblSize == "小" ? size.small : tblSize == "大" ? size.large : size.normal
-var table st = table.new(tblWhere, 2, tblPad + 6, border_width=1)
+var table st = table.new(tblWhere, 2, tblPad + 7, border_width=1)
 fmtP(float v) =>
     str.tostring(v, format.mintick)
 if barstate.islast and showTbl
@@ -358,6 +383,11 @@ if barstate.islast and showTbl
     string mixTxt = not mixUse ? "這個商品 / 週期不做" : bxLive and bar_index <= bxEnd ? "等突破　上 " + fmtP(bxUpL) + "　下 " + fmtP(bxDnL) + "　剩 " + str.tostring((bxEnd - bar_index) * tfMin, "#") + " 分" : not na(mbStart) ? "MIX 已 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + " 分（滿 60 分成形）" : "沒有區間"
     table.cell(st, 0, r0 + 4, "MIX 區間", text_color=fg, bgcolor=bg, text_size=tblTxt)
     table.cell(st, 1, r0 + 4, mixTxt, text_color=fg, bgcolor=bg, text_size=tblTxt)
+    if qNqUse
+        string nqTxt = not nqHas ? "讀不到 " + nqSym + "（不擋訊號）" : (nqDir == 2 ? "強UP" : nqDir == 1 ? "UP" : nqDir == -2 ? "強Down" : nqDir == -1 ? "DOWN" : "MIX") + (nqDir != 0 ? "　趨勢 " + str.tostring(nqMin, "#") + " 分" : "") + "　→ " + (nqDir > 0 ? "只做買" : nqDir < 0 ? "只做賣" : "買賣都可以")
+        color  nqCol = not nqHas ? color.gray : nqDir == 2 ? color.lime : nqDir == 1 ? color.green : nqDir == -2 ? color.maroon : nqDir == -1 ? color.red : color.orange
+        table.cell(st, 0, r0 + 5, "NQ 2m", text_color=fg, bgcolor=bg, text_size=tblTxt)
+        table.cell(st, 1, r0 + 5, nqTxt, text_color=fg, bgcolor=nqCol, text_size=tblTxt)
     string warn = ""
     if prof == "無"
         warn := "支援 NQ / ES / TXF / QQQ / SPY（含 MNQ、MES、MXF）"
@@ -370,8 +400,8 @@ if barstate.islast and showTbl
     else if isTX
         warn := "回測只小賺，成本 4 點時接近打平；結算日夜盤到隔天不要做"
     if warn != ""
-        table.cell(st, 0, r0 + 5, "提示", text_color=fg, bgcolor=color.new(color.orange, 20), text_size=tblTxt)
-        table.cell(st, 1, r0 + 5, warn, text_color=fg, bgcolor=color.new(color.orange, 20), text_size=tblTxt, text_halign=text.align_left)
+        table.cell(st, 0, r0 + 6, "提示", text_color=fg, bgcolor=color.new(color.orange, 20), text_size=tblTxt)
+        table.cell(st, 1, r0 + 6, warn, text_color=fg, bgcolor=color.new(color.orange, 20), text_size=tblTxt, text_halign=text.align_left)
 
 // ═════════════════ 快訊：只有兩個，所有商品共用 ═════════════════
 // 觸發選「每根 K 線一次」：NQ 2 分 K 的 MIX 突破碰到突破價就通知（盤中），其他訊號在 K 棒收盤時通知

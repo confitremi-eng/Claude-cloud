@@ -77,5 +77,30 @@ def main():
                 print(f'     {nm2:<24} {R:g}R {len(tq):4d} 筆  勝率 {100 * (tq[f"r{R:g}"] > 0).mean():4.1f}%  每筆 {nn.mean():+.3f}R  一年 {nn.sum():+6.1f}R  回撤 {dd:4.1f}R  賺錢月份 {(mo > 0).sum()}/{len(mo)}')
 
 
+
+def pine_way():
+    """Remi Superb v3's QQQ filter as the indicator computes it: Trend Judge from NQ 2m closes (chart bars, 24 / 8
+    EMA steps per bar), the previous completed 2m bar (request.security(..., expr[1], lookahead_on))."""
+    nq1 = mm.load_market('nq', []); q1 = mm.load_market('qqq', [])
+    dn = mm.chart(nq1, mm.minute_trend(nq1), 2, 10.0, 35.0)
+    c = dn.close.values
+    aF = 1 - (1 - 2 / 1131) ** 24; aS = 1 - (1 - 2 / 1131) ** 8
+    d2 = pd.Series(c).ewm(alpha=aF, adjust=False).mean().values - pd.Series(c).ewm(alpha=aS, adjust=False).mean().values
+    ndir = np.where(d2 > 10, 1, np.where(d2 < -10, -1, 0))
+    nstart = pd.DatetimeIndex(dn.datetime).values.astype('datetime64[ns]').astype(np.int64)
+    dq = mm.chart(q1, mm.minute_trend(q1), 1, 20.0, 40.0)
+    s = mm.trend_signals(dq, mm.hourly(q1, True), 1, 35, 8); y = s[mm.filt(s, 20.0, 7.0)].sort_values('i')
+    t_open = pd.DatetimeIndex(dq.last_min.values[y.i]).tz_localize('UTC').values.astype('datetime64[ns]').astype(np.int64)
+    k = np.searchsorted(nstart, t_open, 'right') - 2                  # the NQ 2m bar before the one holding this bar
+    rel = ndir[k] * y.side.values
+    print('\n######## v3 在 QQQ 上的算法（NQ 2m K 棒推算、上一根已收完），一次一筆 3R')
+    for nm, z in (('全部', y), ('NQ 2m 不反向（v3 預設）', y[rel >= 0]), ('NQ 2m 反向', y[rel < 0])):
+        tq = mm.ss.seq(z, 3.0); nn = tq.r3.values - 1.0 / tq.risk.values
+        eq = np.cumsum(nn); dd = float(np.max(np.maximum.accumulate(np.r_[0, eq])[1:] - eq)) if len(eq) else 0.0
+        mo = pd.Series(nn).groupby(tq.month.values).sum()
+        print(f'   {nm:<20} {len(tq):4d} 筆  勝率 {100 * (tq.r3 > 0).mean():4.1f}%  每筆 {nn.mean():+.3f}R  一年 {nn.sum():+6.1f}R  回撤 {dd:4.1f}R  賺錢月份 {(mo > 0).sum()}/{len(mo)}')
+
+
 if __name__ == '__main__':
     main()
+    pine_way()
