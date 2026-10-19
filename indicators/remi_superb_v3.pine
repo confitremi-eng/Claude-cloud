@@ -552,10 +552,38 @@ if barstate.islast and showTbl
             gexTxt := compact ? (below ? "下 " + dist + "　買朝 flip ✅" : "上 " + dist + "　賣朝 flip ✅") : "QQQ " + str.tostring(qqqPx, "#.##") + " 在 flip " + str.tostring(gexFlip, "#.##") + (below ? " 下面 " : " 上面 ") + dist + "（" + pct + "%）→ " + (below ? "買：朝 flip 走 ✅　賣：離開 flip" : "賣：朝 flip 走 ✅　買：離開 flip")
         addRow(row, "Flip", gexTxt, color.new(#9C27B0, 40), ha)
         row += 1
-    // GEX setup 的持倉（只有 NQ RTH）
-    if gsOn and isNqR
-        string gsTxt = not gsActive ? (compact ? "建議 1 分 K" : "GEX setup 用 NQ RTH 1 分 K") : not gsReady ? (compact ? "請輸入 flip" : "請輸入 QQQ 的 gamma flip") : gsPos == 0 ? (compact ? "空手" : "空手，等 " + gsBuyTxt + " 買 / 賣訊號") : (gsPos == 1 ? "多" : "空") + " 停 " + fmtP(gsStop) + " 標 " + fmtP(gsTgt)
-        color  gsCol = gsPos == 1 ? color.new(color.green, 40) : gsPos == -1 ? color.new(color.red, 40) : color.new(#9C27B0, 40)
+    // GEX setup（只有 NQ RTH）：持倉，或現在為什麼沒有訊號（setup 開關、週期、flip、時間、趨勢、訊號還差什麼）
+    if isNqR and (gsOn or gexOn)
+        string gsTxt = ""
+        bool   gsOk  = false
+        if not gsOn
+            gsTxt := compact ? "setup 沒開" : "GEX setup 沒打開（設定 → GEX）"
+        else if not gsActive
+            gsTxt := compact ? "要 1 分 K" : "GEX setup 只在 NQ RTH 1 分 K"
+        else if not gsReady
+            gsTxt := compact ? "請輸入 flip" : "請輸入 QQQ 的 gamma flip"
+        else if gsPos != 0
+            gsTxt := (gsPos == 1 ? "多" : "空") + " 停 " + fmtP(gsStop) + " 標 " + fmtP(gsTgt)
+            gsOk  := true
+        else
+            bool   wantBuy = qqqPx < gexFlip
+            string sideTxt = wantBuy ? "等買" : "等賣"
+            string flipTxt = "QQQ 在 flip " + (wantBuy ? "下 → 只等買" : "上 → 只等賣")
+            bool   trOk    = tjLinked and (wantBuy ? tjDirI >= 1 : tjDirI <= -1)
+            string tjNow   = not tjLinked ? "沒資料" : tjDirI == 2 ? "強UP" : tjDirI == 1 ? "UP" : tjDirI == -2 ? "強Down" : tjDirI == -1 ? "DOWN" : "MIX"
+            string timeBad = friLate ? "週五截止後" : gsEnd ? "16:00 後" : ""
+            bool   armed   = wantBuy ? gArmBuy : gArmSell
+            float  trigPx  = wantBuy ? gRefHigh : gRefLow
+            if timeBad != ""
+                gsTxt := compact ? timeBad + "不做" : flipTxt + "；" + timeBad + "不發新訊號"
+            else if not trOk
+                gsTxt := compact ? sideTxt + "｜趨勢 " + tjNow + " ✗" : flipTxt + "；趨勢 " + tjNow + "，要 " + (wantBuy ? "UP" : "DOWN") + " 才做 ✗"
+            else
+                gsOk := true
+                string trigShort = armed ? (wantBuy ? "收 > " : "收 < ") + fmtP(trigPx) : "等創 " + str.tostring(gsStage) + (wantBuy ? " 根新低" : " 根新高")
+                string trigLong  = armed ? (wantBuy ? "收盤站上 " : "收盤跌破 ") + fmtP(trigPx) + (wantBuy ? " 而且在 EMA 上" : " 而且在 EMA 下") : "還沒創 " + str.tostring(gsStage) + (wantBuy ? " 根新低（要先回檔）" : " 根新高（要先反彈）")
+                gsTxt := compact ? sideTxt + "｜趨勢 ✓｜" + trigShort : flipTxt + "；趨勢 " + tjNow + " ✓；訊號：" + trigLong
+        color gsCol = gsPos == 1 ? color.new(color.green, 40) : gsPos == -1 ? color.new(color.red, 40) : gsOk ? color.new(#9C27B0, 30) : color.new(color.gray, 30)
         addRow(row, compact ? "GEX" : "GEX setup", gsTxt, gsCol, ha)
         row += 1
     // MIX 區間（精簡時只在 NQ 2、5 分 K 顯示）
