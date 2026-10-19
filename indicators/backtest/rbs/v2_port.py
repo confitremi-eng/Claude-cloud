@@ -23,7 +23,7 @@ import mix_breakout as mb
 TH, ST, TGT, HOLD, COST = 10.0, 35.0, 3.0, 60, 1.0
 
 
-def run(age_only, tgt=TGT):
+def run(age_only, tgt=TGT, lo=30, hi=120, mix_on=True):
     df = rbs.prepared('NQ', 2)
     h, l, c, o = df.high.values, df.low.values, df.close.values, df.open.values
     n = len(c)
@@ -71,16 +71,17 @@ def run(age_only, tgt=TGT):
                 px = vs if hs else vt if ht else (c[j - 1] if holeb[j] else c[j])
                 trades.append(dict(kind=kind, side=pos, entry=ve, exit=px, risk=abs(ve - vs), date=d0, bars=j - vb)); pos = 0
         if not trad[j]: continue
-        if pos == 0 and j in mix and not halt[j]:
+        if mix_on and pos == 0 and j in mix and not halt[j]:
             k, px, mid = mix[j]
             pos, ve, vs, vt, vb, kind, d0 = k, px, mid, px + tgt * (px - mid), j, 'MIX', date[j]
             if (pos == 1 and l[j] <= vs) or (pos == -1 and h[j] >= vs):
                 trades.append(dict(kind=kind, side=pos, entry=ve, exit=vs, risk=abs(ve - vs), date=d0, bars=0)); pos = 0
-        if pos == 0 and j in trend and not halt[j] and (not age_only or 30 <= tmin[j] < 120):
+        if pos == 0 and j in trend and not halt[j] and (not age_only or lo <= tmin[j] < hi):
             k = trend[j]
             stop = min(l[j - 1], l[j]) if k == 1 else max(h[j - 1], h[j])
             pos, ve, vs, vt, vb, kind, d0 = k, c[j], stop, c[j] + tgt * (c[j] - stop), j, '趨勢', date[j]
     t = pd.DataFrame(trades)
+    run.last_signals = (f, tmin)
     t['R'] = (t.exit - t.entry) * t.side / t.risk
     t['net'] = t.R - COST / t.risk
     return t
@@ -95,7 +96,34 @@ def show(t, nm):
           f'  | 趨勢 {(t.kind == "趨勢").sum()} 筆 {t.net[t.kind == "趨勢"].mean():+.3f}R  MIX {(t.kind == "MIX").sum()} 筆 {t.net[t.kind == "MIX"].mean():+.3f}R')
 
 
+WINDOWS = [('0–30 分', 0, 30), ('30–120 分（v2 預設）', 30, 120), ('120–180 分', 120, 180), ('0–180 分', 0, 180),
+           ('180 分以上（到趨勢結束）', 180, 10 ** 9), ('不限', 0, 10 ** 9)]
+
+
+def windows():
+    print('\n######## 趨勢時間範圍（趨勢已持續 = 指標的分鐘數，MIX 或轉向歸零）')
+    run(False)
+    f, tmin = run.last_signals
+    f = f.assign(tm=tmin[f.i.values])
+    a = f.date.values < ss.SPLIT
+    print('\n  ## 趨勢訊號各自獨立（勝率 % / 每筆淨 R（前 / 後））')
+    for nm, lo, hi in WINDOWS:
+        m = ((f.tm >= lo) & (f.tm < hi)).values
+        cells = []
+        for R in (1.0, 2.0, 3.0):
+            nn = f[f'r{R:g}'].values[m] - COST / f.risk.values[m]
+            cells.append(f'{R:g}R {100 * (f[f"r{R:g}"].values[m] > 0).mean():4.1f}% {nn.mean():+.3f}（{nn[a[m]].mean():+.2f}/{nn[~a[m]].mean():+.2f}）')
+        print(f'   {nm:<22} {m.sum():4d} 筆  ' + '  '.join(cells))
+    for mix_on, title in ((False, '只做趨勢訊號'), (True, '趨勢訊號 + MIX 突破（v2 的做法）')):
+        print(f'\n  ## {title}，一次一筆')
+        for R in (2.0, 3.0):
+            for nm, lo, hi in WINDOWS:
+                show(run(True, R, lo, hi, mix_on), f'{R:g}R {nm}')
+
+
 if __name__ == '__main__':
+    if '--windows' in sys.argv:
+        windows(); sys.exit()
     print('######## Remi Superb v2 逐根重算（一次一筆、3R、每筆扣 1 點）')
     show(run(True), '預設（趨勢只做 30–120 分）')
     show(run(False), '趨勢不限時間')
