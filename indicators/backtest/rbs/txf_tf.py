@@ -2,6 +2,7 @@
 
   cd indicators/backtest
   python3 -I rbs/txf_tf.py data_TXFR1_2024.sql data_TXFR1_2025.sql data_TXFR1_2026.sql [--tf 3,5]
+  python3 -I rbs/txf_tf.py ...sql --candidates     # the three positive-looking 3m groups, year by year
 
 Trend signals = filtered alerts on the chart: Trend Judge 有趨勢 (spread > 30 points), 1-hour EMA20 side (clock
 hours), stop >= 1 ATR, close - 15 s EMA1130 <= 3 ATR, New York event windows avoided; two-bar stop, 60-bar time
@@ -100,8 +101,39 @@ def run(tf, one, tdm, H, years):
                 print(f'   ({stage},0,8,1) {nm:<16} {R:g}R  ' + tfw.seq_line(t2, years) + f'  | 4 點：每筆 {t4.net.mean():+.3f}R 每年 {t4.net.sum() / years:+.1f}R')
 
 
+def candidates(one, tdm, H):
+    """The three 3-minute groups that looked positive, year by year (each signal on its own, and one at a time)."""
+    tf = 3
+    df = mm.chart(one, tdm, tf, TH, ST)
+    h, l = df.high.values, df.low.values
+    nohalt = np.zeros(len(df), bool)
+    s20 = mm.trend_signals(df, H, tf, 20, 8); F20 = s20[mm.filt(s20, TH)].copy()
+    s35 = mm.trend_signals(df, H, tf, 35, 8); F35 = s35[mm.filt(s35, TH)].copy()
+    F35['sess'] = sess_of(df, F35.i.values, tf)
+    groups = [('(20,0,8,1) 趨勢 60–120 分', F20[(F20.tm >= 60) & (F20.tm < 120)]),
+              ('(35,0,8,1) 趨勢 300 分以上', F35[F35.tm >= 300]),
+              ('(35,0,8,1) 夜盤·美股盤中', F35[F35.sess == '夜盤·美股盤中'])]
+    print('\n######## TXF 3 分 K 的三組候選，逐年（3R；各自獨立 / 一次一筆；成本 2 點、4 點）')
+    for nm, z in groups:
+        print(f'  ## {nm}')
+        ce = {int(i): (int(k), (min(l[i - 1], l[i]) if k == 1 else max(h[i - 1], h[i])), '趨勢') for i, k in zip(z.i, z.side)}
+        t = tfw.simulate(df, ce, {}, 3.0, COSTS[0], nohalt)
+        for y_ in ('2024', '2025', '2026'):
+            zy = z[z.date.str[:4] == y_]; ty = t[t.date.str[:4] == y_]
+            if len(zy) == 0: continue
+            r = zy.r3.values
+            n2 = r - COSTS[0] / zy.risk.values; n4 = r - COSTS[1] / zy.risk.values
+            print(f'     {y_}  {len(zy):3d} 筆  勝率 {100 * (r > 0).mean():4.1f}%  每筆 {n2.mean():+.3f}R（4 點 {n4.mean():+.3f}R）'
+                  f'  | 一次一筆 {len(ty):3d} 筆 合計 {ty.net.sum():+5.1f}R（4 點 {(ty.R - COSTS[1] / ty.risk).sum():+5.1f}R）')
+
+
 def main():
     args = sys.argv[1:]
+    if '--candidates' in args:
+        args.remove('--candidates')
+        one = mm.load_market('txf', args); tdm = mm.minute_trend(one); H = mm.hourly(one, False)
+        candidates(one, tdm, H)
+        return
     tfs = [3, 5]
     if '--tf' in args:
         k = args.index('--tf'); tfs = [int(x) for x in args[k + 1].split(',')]; del args[k:k + 2]
