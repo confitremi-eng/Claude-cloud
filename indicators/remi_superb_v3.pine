@@ -19,6 +19,8 @@
 // 訊號參數：v3 的交易訊號預設依商品自動（回測過），可以改成自訂；橙黃色原版小三角另有自己的參數（預設 35, 0, 8, 1）
 // Trend Judge 用 1 分 K 收盤推算（同回測，不需要秒級資料）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
 // GEX（預設關）：手動輸入 QQQ 的 gamma flip，表格顯示現在買 / 賣是「朝 flip 走」還是「離開 flip」，只顯示、不擋訊號
+// GEX setup（預設關，只有 NQ RTH 1 分 K）：原版 (30, 0, 8, 1) + Trend Judge 順勢 + 朝 QQQ gamma flip 走，目標 3R；
+//   另外標記、另外兩個快訊、自己一次一筆，不影響上面 v3 的訊號和虛擬持倉
 indicator("Remi Superb v3", overlay=true, max_labels_count=500, max_boxes_count=500, max_lines_count=500)
 
 // ═════════════════ 商品設定 ═════════════════
@@ -46,12 +48,17 @@ mixClose  = input.bool(false, "MIX 突破等收線才進場（目標 2R）", gro
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpR, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
 
 // ═════════════════ GEX（手動輸入）═════════════════
-grpG      = "GEX（手動輸入，只顯示、不擋訊號）"
+grpG      = "GEX（手動輸入的 QQQ gamma flip）"
 gexOn     = input.bool(false, "顯示 QQQ gamma flip 方向", group=grpG, tooltip="打開後，表格多一列「Flip」：QQQ 現價在 gamma flip 下面時，買是「朝 flip 走」、賣是「離開 flip」；在上面時相反。回測（ZeroGEX 2026-06-29 .. 10-14，76 天，QQQ 1 分 K）：順勢訊號朝 flip 走的 3R 每筆約 +0.75R，離開 flip 的約 0 或虧；v3 在 QQQ 的獲利幾乎都來自朝 flip 走的訊號。樣本小，先只顯示、不擋訊號")
 gexFlip   = input.float(0.0, "QQQ gamma flip", minval=0, step=0.01, group=grpG, tooltip="從 ZeroGEX 抄 QQQ 的 gamma flip 價位（QQQ 價格，不是 NQ）。flip 每天會變、盤中也會移動，要自己更新；0 = 還沒輸入")
 qqqSym    = input.symbol("NASDAQ:QQQ", "QQQ 代號", group=grpG, tooltip="不是 QQQ 圖（例如 NQ、NQ RTH）時，用這個代號讀 QQQ 現價來跟 flip 比；美股盤以外的時間是 QQQ 最後的價格")
 gexLine   = input.bool(true, "QQQ 圖上畫 flip 線", group=grpG, inline="gl")
 gexCol    = input.color(#E040FB, "", group=grpG, inline="gl", tooltip="只有在 QQQ 圖上才畫（flip 是 QQQ 的價格）")
+gsOn      = input.bool(false, "NQ RTH：GEX setup 訊號（目標 3R）", group=grpG, tooltip="只在 NQ RTH（NQ 1 分 K、圖表只開美股盤）用：原版訊號（下面的階段、EMA，預設 30、8）出現時，Trend Judge 同向（門檻 20 點），而且朝 QQQ gamma flip 走（QQQ 在 flip 下面時買、在上面時賣，用上面輸入的 flip），就標記並發「GEX Buy / Sell」快訊。訊號 K 收盤進場、停損在訊號 K 和前一根的極值、目標 3R、持有 60 根或美東 16:00 收盤出場，自己一次一筆；週五截止後不發。不影響 v3 原本的訊號和虛擬持倉。回測（NQ 美股盤，2026-07-02 .. 10-16，ZeroGEX 的 flip）：89 筆，1R 勝率 63%，3R 每筆 +0.63R，一次一筆合計 +54R、回撤 7R；只有 3 個多月，先小口數追蹤")
+gsStage   = input.int(30, "GEX setup　階段", minval=2, group=grpG, inline="gs")
+gsEma     = input.int(8, "Ema number", minval=1, group=grpG, inline="gs", tooltip="回測用 (30, 0, 8, 1)；EMA 13 勝率差不多但訊號少四成")
+gsBuyTxt  = input.string("G▲", "標記　買", group=grpG, inline="gm")
+gsSellTxt = input.string("G▼", "賣", group=grpG, inline="gm", tooltip="顏色用上面 flip 線的顏色")
 
 // ═════════════════ 外觀 ═════════════════
 grpA      = "外觀"
@@ -269,6 +276,50 @@ bool  gexHas  = gexOn and gexFlip > 0 and not na(qqqPx)
 float gexDiff = gexHas ? qqqPx - gexFlip : na
 plot(gexOn and gexLine and isQQ and gexFlip > 0 ? gexFlip : na, "QQQ gamma flip", color=gexCol, linewidth=1, style=plot.style_linebr)
 
+// ═════════════════ GEX setup（NQ RTH）：(30, 0, 8, 1) + Trend Judge 順勢 + 朝 QQQ gamma flip 走 ═════════════════
+bool gsActive = gsOn and isNqR and (tfp == "1" or otherTf)
+bool gsReady  = gexFlip > 0 and not na(qqqPx)
+bool gNewLow  = low < ta.lowest(low, gsStage)[1]
+bool gNewHigh = high > ta.highest(high, gsStage)[1]
+var float gRefHigh = na
+var float gRefLow  = na
+var bool  gArmBuy  = false
+var bool  gArmSell = false
+float gEma      = ta.ema(close, gsEma)
+bool  gTrigBuy  = gArmBuy and close > gRefHigh
+bool  gTrigSell = gArmSell and close < gRefLow
+if gTrigBuy
+    gArmBuy := false
+else if gNewLow
+    gRefHigh := high
+    gArmBuy  := true
+if gTrigSell
+    gArmSell := false
+else if gNewHigh
+    gRefLow  := low
+    gArmSell := true
+bool gsEnd  = etMin >= 960 or session.islastbar                 // 美東 16:00 收盤（同回測只用到 16:00）
+bool gsBuy  = gsActive and gsReady and gTrigBuy and close > gEma and barstate.isconfirmed and tjLinked and tjDirI >= 1 and qqqPx < gexFlip and not friLate and not gsEnd
+bool gsSell = gsActive and gsReady and gTrigSell and close < gEma and barstate.isconfirmed and tjLinked and tjDirI <= -1 and qqqPx > gexFlip and not friLate and not gsEnd
+var int   gsPos   = 0
+var float gsEntry = na
+var float gsStop  = na
+var float gsTgt   = na
+var int   gsBar   = na
+if gsPos != 0 and bar_index > gsBar
+    bool gHitS = gsPos == 1 ? low <= gsStop : high >= gsStop
+    bool gHitT = gsPos == 1 ? high >= gsTgt : low <= gsTgt
+    if gHitS or gHitT or bar_index - gsBar >= holdBars or gsEnd or (not na(time[1]) and time - time[1] > 30 * 60 * 1000)
+        gsPos := 0
+bool gsGoBuy  = gsBuy and gsPos == 0
+bool gsGoSell = gsSell and gsPos == 0 and not gsGoBuy
+if gsGoBuy or gsGoSell
+    gsPos   := gsGoBuy ? 1 : -1
+    gsEntry := close
+    gsStop  := gsGoBuy ? math.min(low, low[1]) : math.max(high, high[1])
+    gsTgt   := close + 3.0 * (close - gsStop)
+    gsBar   := bar_index
+
 // ═════════════════ MIX 區間（只有 NQ 2、5 分 K；美東 16–20 的突破不做）═════════════════
 float tfMin   = tfSec / 60.0
 int   mbNeed  = math.max(1, math.round(60 / tfMin))
@@ -411,6 +462,12 @@ if goTrBuy
     drawBuyMark(tBuyTxt)
 if goTrSell
     drawSellMark(tSellTxt)
+if gsGoBuy
+    label.new(bar_index, low, markPad + gsBuyTxt, xloc=xloc.bar_index, yloc=yloc.belowbar, style=label.style_none, textcolor=gexCol, size=markSz)
+if gsGoSell
+    label.new(bar_index, high, gsSellTxt + markPad, xloc=xloc.bar_index, yloc=yloc.abovebar, style=label.style_none, textcolor=gexCol, size=markSz)
+plot(showPos and gsPos != 0 ? gsStop : na, "GEX 持倉停損", color=color.new(stopCol, 40), style=plot.style_linebr)
+plot(showPos and gsPos != 0 ? gsTgt : na, "GEX 持倉目標", color=color.new(tgtCol, 40), style=plot.style_linebr)
 bool inPos = vPos != 0
 plot(showPos and inPos ? vStop : na, "持倉停損", color=stopCol, style=plot.style_linebr)
 plot(showPos and inPos ? vTgt : na, "持倉目標", color=tgtCol, style=plot.style_linebr)
@@ -425,18 +482,21 @@ plot(trendMin, "趨勢已持續（分鐘）", display=display.data_window)
 plot(tjDiff, "TJ 差值", display=display.data_window)
 plot(nqDiff, "NQ 2m TJ 差值", display=display.data_window)
 plot(nqMin, "NQ 2m 趨勢已持續（分鐘）", display=display.data_window)
+plot(gsGoBuy or gsGoSell ? close : na, "GEX 進場", display=display.data_window)
+plot(gsGoBuy or gsGoSell ? gsStop : na, "GEX 停損", display=display.data_window)
+plot(gsGoBuy or gsGoSell ? gsTgt : na, "GEX 目標", display=display.data_window)
 
 // ═════════════════ 狀態表格（配色同原始 Trend Judge）═════════════════
 tblWhere = tblPos == "左上" ? position.top_left : tblPos == "右上" ? position.top_right : tblPos == "左下" ? position.bottom_left : position.bottom_right
 tblTxt   = tblSize == "極小" ? size.tiny : tblSize == "小" ? size.small : tblSize == "大" ? size.large : size.normal
-var table st = table.new(tblWhere, 2, tblPad + 8, border_width=1)
+var table st = table.new(tblWhere, 2, tblPad + 9, border_width=1)
 fmtP(float v) =>
     str.tostring(v, format.mintick)
 addRow(int r, string lbl, string val, color vb, string ha) =>
     table.cell(st, 0, r, lbl, text_color=color.white, bgcolor=color.new(color.black, 20), text_size=tblTxt)
     table.cell(st, 1, r, val, text_color=color.white, bgcolor=vb, text_size=tblTxt, text_halign=ha)
 if barstate.islast and showTbl
-    table.clear(st, 0, 0, 1, tblPad + 7)
+    table.clear(st, 0, 0, 1, tblPad + 8)
     bool  compact = tblStyle == "精簡"
     string ha     = compact ? text.align_center : text.align_left    // 精簡置中，完整靠左
     color bg      = color.new(color.black, 20)
@@ -489,6 +549,12 @@ if barstate.islast and showTbl
             gexTxt := compact ? (below ? "下 " + dist + "　買朝 flip ✅" : "上 " + dist + "　賣朝 flip ✅") : "QQQ " + str.tostring(qqqPx, "#.##") + " 在 flip " + str.tostring(gexFlip, "#.##") + (below ? " 下面 " : " 上面 ") + dist + "（" + pct + "%）→ " + (below ? "買：朝 flip 走 ✅　賣：離開 flip" : "賣：朝 flip 走 ✅　買：離開 flip")
         addRow(row, "Flip", gexTxt, color.new(#9C27B0, 40), ha)
         row += 1
+    // GEX setup 的持倉（只有 NQ RTH）
+    if gsOn and isNqR
+        string gsTxt = not gsActive ? (compact ? "建議 1 分 K" : "GEX setup 用 NQ RTH 1 分 K") : not gsReady ? (compact ? "請輸入 flip" : "請輸入 QQQ 的 gamma flip") : gsPos == 0 ? (compact ? "空手" : "空手，等 G▲ / G▼") : (gsPos == 1 ? "多" : "空") + " 停 " + fmtP(gsStop) + " 標 " + fmtP(gsTgt)
+        color  gsCol = gsPos == 1 ? color.new(color.green, 40) : gsPos == -1 ? color.new(color.red, 40) : color.new(#9C27B0, 40)
+        addRow(row, compact ? "GEX" : "GEX setup", gsTxt, gsCol, ha)
+        row += 1
     // MIX 區間（精簡時只在 NQ 2、5 分 K 顯示）
     if mixUse or not compact
         string mixTxt = not mixUse ? "這個商品 / 週期不做" : bxLive and bar_index <= bxEnd ? (compact ? (mixClose ? "收 " : "") + "上 " + fmtP(bxUpL) + " 下 " + fmtP(bxDnL) : (mixClose ? "等收線突破　上 " : "等突破　上 ") + fmtP(bxUpL) + "　下 " + fmtP(bxDnL) + "　剩 " + str.tostring((bxEnd - bar_index) * tfMin, "#") + " 分") : not na(mbStart) ? (compact ? "成形中 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + "分" : "MIX 已 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + " 分（滿 60 分成形）") : (compact ? "無" : "沒有區間")
@@ -513,8 +579,11 @@ if barstate.islast and showTbl
     if warn != ""
         addRow(row, "提示", warn, color.new(color.orange, 20), ha)
 
-// ═════════════════ 快訊：只有兩個，所有商品共用 ═════════════════
+// ═════════════════ 快訊：v3 兩個（所有商品共用）+ GEX setup 兩個（NQ RTH，預設關）═════════════════
 // 觸發選「每根 K 線一次」：NQ 2、5 分 K 的 MIX 突破碰到突破價就通知（盤中），其他訊號在 K 棒收盤時通知
 // 選了「MIX 等收線才進場」：MIX 突破也在 K 棒收盤時通知，訊息的進場價是收盤價、目標 2R
 alertcondition(tradeBuy, "Remi Superb v3 Buy", '{{ticker}} Remi Superb v3 Buy｜進場 {{plot("v3 進場")}}｜停損 {{plot("v3 停損")}}｜目標 {{plot("v3 目標")}}')
 alertcondition(tradeSell, "Remi Superb v3 Sell", '{{ticker}} Remi Superb v3 Sell｜進場 {{plot("v3 進場")}}｜停損 {{plot("v3 停損")}}｜目標 {{plot("v3 目標")}}')
+// GEX setup：觸發選「每根 K 線一次」，K 棒收盤時通知（要先在設定打開 GEX setup、輸入 flip）
+alertcondition(gsGoBuy, "Remi Superb v3 GEX Buy", '{{ticker}} Remi Superb v3 GEX Buy｜進場 {{plot("GEX 進場")}}｜停損 {{plot("GEX 停損")}}｜目標 {{plot("GEX 目標")}}')
+alertcondition(gsGoSell, "Remi Superb v3 GEX Sell", '{{ticker}} Remi Superb v3 GEX Sell｜進場 {{plot("GEX 進場")}}｜停損 {{plot("GEX 停損")}}｜目標 {{plot("GEX 目標")}}')
