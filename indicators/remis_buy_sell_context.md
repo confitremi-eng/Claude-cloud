@@ -14,7 +14,8 @@
 | **Remi Superb v2** | [remi_superb_v2.pine](remi_superb_v2.pine) | **已由 v3 取代，不再更新**（2026-10-19）。趨勢訊號（過濾快訊 + 趨勢已持續 0–180 分，2026-10-19 從 30–120 改）＋ MIX 區間突破，一次一筆虛擬持倉，只有「Remi Superb v2 Buy / Sell」兩個快訊，右上角狀態表格。Trend Judge 用 1 分 K 推算。回測 627 筆，每筆 +0.268R，一年 +168R，回撤 18.6R，12/13 個月賺錢（30–120 分：+140R、回撤 13R）。主訊號只在 2 分 K 圖上發；3 分 K 圖上另有「v2 3m Buy / Sell」（趨勢 90–120 分、1R，49 筆、勝率 71.4%）。表格配色同原始 Trend Judge |
 | **Remi Superb** | [remi_superb.pine](remi_superb.pine) | v2、v3 的前身。NQ 2 分 K 優化完成：過濾快訊＋MIX 區間突破快訊，Trend Judge 用秒級資料（要 Premium） |
 | **Remi Superb 1m** | [remi_superb_1m.pine](remi_superb_1m.pine) | 跟 Remi Superb 同步，只有 Trend Judge 改用 1 分 K 收盤推算（同回測），不需要 Premium；快訊名稱多「1m」。另外多了 **QQQ 1 分 K**（自動套用 QQQ 那組設定）和「收盤前 1 小時不進場」開關 |
-| **Remi Superb 策略** | [remi_superb_strategy.pine](remi_superb_strategy.pine) | `strategy()` 版，給 TradingView 策略測試器回測和 webhook 自動交易：過濾訊號收盤市價進場、MIX 突破掛停損單（OCO），一次一筆，60 根時間出場、17:00 休市前平倉。Trend Judge 用 1 分 K 推算。說明在 remi_superb.md 第 8 節 |
+| **Remi Superb v3 策略** | [remi_superb_v3_strategy.pine](remi_superb_v3_strategy.pine) | **TradingView 回測用這個**（2026-10-19）。`strategy()` 版，訊號和規則同 v3（自動辨識商品 / 週期、趨勢時間、週五規則、MIX 不做美東 16–20）；趨勢訊號收盤市價進場，MIX 掛停損單；TXF / QQQ / SPY 每段最後一根平倉；webhook JSON 同舊版格式。還沒在 TradingView 編譯過 |
+| **Remi Superb 策略** | [remi_superb_strategy.pine](remi_superb_strategy.pine) | 舊版（v3 之前的規則，只有 NQ 2m）。`strategy()` 版，給 TradingView 策略測試器回測和 webhook 自動交易：過濾訊號收盤市價進場、MIX 突破掛停損單（OCO），一次一筆，60 根時間出場、17:00 休市前平倉。Trend Judge 用 1 分 K 推算。說明在 remi_superb.md 第 8 節 |
 
 ## 2. Remi Superb 的最終設定（兩個版本相同）
 
@@ -124,7 +125,8 @@
 |------|------|
 | [remi_superb.md](remi_superb.md) | **Remi Superb 完整說明（以 2 分 K 為準）** |
 | [remi_superb.pine](remi_superb.pine) / [remi_superb_1m.pine](remi_superb_1m.pine) | Remi Superb（秒級 TJ / 1 分推算 TJ） |
-| [remi_superb_strategy.pine](remi_superb_strategy.pine) | Remi Superb 策略（回測、自動交易） |
+| [remi_superb_v3_strategy.pine](remi_superb_v3_strategy.pine) | Remi Superb v3 策略（TradingView 回測、自動交易） |
+| [remi_superb_strategy.pine](remi_superb_strategy.pine) | Remi Superb 舊版策略（回測、自動交易） |
 | [remis_buy_sell.pine](remis_buy_sell.pine) | Remi's Buy/Sell |
 | [remis_buy_sell.md](remis_buy_sell.md) | 原版比對、早期回測分級、所有研究細節、快訊設定 |
 | [breakout_signals.md](breakout_signals.md) | BO Signals（同一套訊號的前身） |

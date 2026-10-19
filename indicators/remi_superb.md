@@ -767,7 +767,35 @@ python3 -I rbs/gex_trend.py                                       # 順勢訊號
 
 ## 8. 策略版（TradingView 回測、自動交易）
 
-檔案：[remi_superb_strategy.pine](remi_superb_strategy.pine)。規則同上面，下單照回測：
+### v3 策略版（2026-10-19，建議用這個）
+
+檔案：[remi_superb_v3_strategy.pine](remi_superb_v3_strategy.pine)。訊號、過濾、自動辨識商品和週期都同 Remi Superb v3，改成 `strategy()` 給策略測試器回測。
+
+| 項目 | 做法 |
+|------|------|
+| 趨勢訊號 | 訊號 K 收盤市價進場，停損在訊號 K 和前一根的極值，目標依商品 / 週期（NQ 2m 3R、3m 1R、5m 2R，QQQ / SPY / TXF 3R） |
+| MIX 突破（NQ 2、5 分 K） | 區間形成後 60 分鐘內，在上下突破價掛停損單（一邊成交就取消另一邊），停損中線；下一根 K 在事件時段、美東 16–20、17:00 休市那根、週五截止後就不掛；第一次碰到突破價區間就作廢 |
+| 出場 | 停損 / 目標；持有 60 根 K 收盤平倉；NQ / ES 美東 17:00 休市前平倉；TXF（日盤 13:45、夜盤 05:00）、QQQ / SPY / NQ RTH（美東 16:00）每段最後一根平倉 |
+| 其他 | 一次一筆；週五台灣時間週六 02:00 以後不開新倉；ES 預設不交易 |
+
+**在 TradingView 回測**
+
+1. 開 **NQ1! 或 MNQ1! 的 2 分 K**（主力），貼上策略、加到圖表；3、5 分 K、QQQ / SPY 1 分 K、TXF 2 / 3 分 K 也可以，策略會自動換做法（左下表格顯示目前的設定）。
+2. 「輸入」分頁：期貨口數（預設 1）、QQQ / SPY 股數（預設 100）；可以只開趨勢訊號或只開 MIX 突破分開看。
+3. 「屬性」分頁：手續費預設每口每邊 2.5 美元、滑價 2 跳、初始資金 50,000、保證金檢查關閉。MNQ 手續費改約 0.6；**QQQ / SPY 手續費是「每股」計，要改成約 0.005**；台指手續費和稅要自己換算（策略的幣別是美元）。
+4. NQ1! 圖表設定勾「調整換月」（back-adjust）最接近我們的回測資料。回測長度依方案的 K 棒數上限，Premium 的「深度回測」可以拉更長；拉到 2025-10 以前的話，「FOMC 日期」要把更早的日期加進去。
+
+**會跟我們的回測（和指標版）有差的地方**
+
+- **成本**：TradingView 是手續費 + 滑價（2 跳 = 每邊 0.5 點），比我們每筆 1 點多一點手續費。
+- **同一根 K 碰到停損和目標**：我們算停損；TradingView 依 K 棒內的價格路徑推估。
+- **MIX 同一根 K 上下都突破**：我們不做；TradingView 成交先碰到的那邊。跳空越過突破價時，TradingView 用開盤價成交，但目標還是用突破價算。
+- **TXF / QQQ / SPY 收盤**：指標版在下一段開盤（資料中斷）才算出場；策略版在最後一根收盤平倉，比較接近回測。
+- **假日提早收盤**：NQ 不會自動平倉；QQQ / SPY 有 `session.islastbar` 會平。
+
+### 舊版策略（Remi Superb 規則，只有 NQ 2 分 K）
+
+檔案：[remi_superb_strategy.pine](remi_superb_strategy.pine)。v3 之前的規則（不限趨勢時間、沒有週五規則和 MIX 美東 16–20），留著對照。規則同上面，下單照回測：
 
 | 項目 | 做法 |
 |------|------|
@@ -809,8 +837,8 @@ python3 -I rbs/gex_trend.py                                       # 順勢訊號
 
 1. 在策略上建立快訊，條件選這個策略，訊息只填 `{{strategy.order.alert_message}}`，webhook 網址填你的下單橋接服務（例如 TradersPost、PickMyTrade 等）。
 2. 每筆成交都會送一段 JSON：
-   - **進場**：`{"strategy":"Remi Superb","ticker":"NQ1!","action":"buy","qty":1,"signal":"過濾","stop":…,"target":…}`（賣是 `"sell"`）。
-   - **出場**（停損、目標、時間、休市）：`{"strategy":"Remi Superb","ticker":"NQ1!","action":"exit"}`。
+   - **進場**：`{"strategy":"Remi Superb v3","ticker":"NQ1!","action":"buy","qty":1,"signal":"趨勢","stop":…,"target":…}`（賣是 `"sell"`，MIX 是 `"signal":"MIX 突破"`；舊版策略的 strategy 是 `"Remi Superb"`、趨勢訊號叫 `"過濾"`）。
+   - **出場**（停損、目標、時間、休市、收盤）：`{"strategy":"Remi Superb v3","ticker":"NQ1!","action":"exit"}`。
 3. 不同橋接服務要的欄位名稱不一樣，接之前先看它的格式，再改策略最下面的 `entryMsg` / `exitMsg`。
 4. **MIX 突破的注意事項**：進場是停損單。快訊在 TradingView 判斷成交時才送，所以實際是市價追進，會比回測多一點滑價。也可以只用指標版的「MIX 區間成形」快訊，自己在券商掛停損單。
 5. **建議先模擬**：先用模擬帳戶或 MNQ 1 口跑一段時間，確認下單、停損、平倉都正確。
