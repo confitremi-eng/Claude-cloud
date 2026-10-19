@@ -2,6 +2,7 @@
 // Remi Superb v3：自動辨識商品和週期，套用回測過的做法，只發「可交易的 Buy」和「可交易的 Sell」兩個快訊
 //   NQ / MNQ 2 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 3R              回測每年 +162R，回撤 16R
 //   NQ / MNQ 3 分 K：趨勢訊號（趨勢已持續 90–120 分），目標 1R                           勝率 74%，每年 +20R，回撤 2R
+//   NQ / MNQ 5 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 2R              每年 +82R，回撤 14R
 //   QQQ 1 分 K：ETF 設定 (35, 0, 8, 1)、Trend Judge 門檻 0.5、離慢線 ≤ 7 ATR、NQ 2 分 K 不反向，目標 3R   每年 +66R，回撤 17R
 //   NQ / MNQ 1 分 K 只開美股盤（RTH，代替 QQQ）：同 QQQ 的做法，門檻用 NQ 20 點（回測就是用這種圖代替 QQQ）
 //   SPY 1 分 K：ETF 設定 (35, 0, 8, 1)、Trend Judge 門檻 0.8、離慢線 ≤ 7 ATR，目標 3R      每年 +67R，回撤 21R
@@ -19,7 +20,7 @@ indicator("Remi Superb v3", overlay=true, max_labels_count=500, max_boxes_count=
 // ═════════════════ 商品設定 ═════════════════
 grpP      = "商品設定"
 profSel   = input.string("自動", "商品", options=["自動", "NQ", "NQ RTH（代替 QQQ）", "ES", "TXF", "QQQ", "SPY"], group=grpP, tooltip="自動：依圖上的商品選設定（NQ / MNQ、ES / MES、TXF / MXF / TMF、QQQ、SPY）。NQ / MNQ 圖如果只開美股盤（RTH，設定是一般交易時段、而且圖上沒有夜盤 K 棒），自動改用「NQ RTH（代替 QQQ）」：同 QQQ 的做法，建議 1 分 K。也可以手動指定")
-otherTf   = input.bool(false, "不是建議週期也發訊號", group=grpP, tooltip="建議週期：NQ、TXF 是 2 或 3 分 K，SPY、QQQ、NQ RTH 是 1 分 K。關閉時，其他週期只顯示表格、不發訊號；打開的話用最接近的設定發（沒有回測過）")
+otherTf   = input.bool(false, "不是建議週期也發訊號", group=grpP, tooltip="建議週期：NQ 是 2、3 或 5 分 K，TXF 是 2 或 3 分 K，SPY、QQQ、NQ RTH 是 1 分 K。關閉時，其他週期只顯示表格、不發訊號；打開的話用最接近的設定發（沒有回測過）")
 qNqOn     = input.bool(true, "QQQ / NQ RTH：NQ 2 分 K 不反向", group=grpP, inline="qnq")
 nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpP, inline="qnq", tooltip="只影響 QQQ 和 NQ RTH：上一根已收完的 NQ 2 分 K（固定讀 24 小時盤），Trend Judge 跟訊號反向（買訊時是 DOWN / 強Down，賣訊時是 UP / 強Up）就不做，MIX 照做。回測：NQ 2m 反向時 QQQ 訊號是虧的（3R −0.05R）；去掉後每年一樣 +66R，回撤 24R → 17R。讀不到 NQ 資料時不擋")
 esOn      = input.bool(false, "ES 也發訊號（回測是虧的）", group=grpP, tooltip="ES / MES 2、3 分 K 一年回測，趨勢訊號和 MIX 突破每一種都虧，所以預設不發。打開會用 NQ 2 分 K 的做法（門檻 4、不做 MIX）")
@@ -97,10 +98,11 @@ bool   isSP     = prof == "SPY"
 bool   isETF    = isQQ or isSP or isNqR       // 美股盤、ETF 設定
 bool   isCME    = isNQ or isES
 string tfp      = timeframe.period
-bool   okTf     = (isNQ or isTX or isES) ? (tfp == "2" or tfp == "3") : isETF ? tfp == "1" : false
+bool   okTf     = isNQ ? (tfp == "2" or tfp == "3" or tfp == "5") : (isTX or isES) ? (tfp == "2" or tfp == "3") : isETF ? tfp == "1" : false
 bool   profOn   = isES ? esOn : (isNQ or isTX or isETF)
 bool   active   = profOn and (okTf or otherTf)
 bool   nq3      = isNQ and tfp == "3"
+bool   nq5      = isNQ and tfp == "5"
 bool   sigCust  = sigMode == "自訂"
 int    stageUse = sigCust ? v3Stage : isETF ? 35 : 20
 int    emaUse   = sigCust ? v3Ema : 8
@@ -112,7 +114,7 @@ bool   useWin   = not isETF
 int    winLo    = nq3 ? 90 : isTX ? 60 : 0
 int    winHi    = nq3 ? 120 : isTX ? 120 : 180
 bool   mixUse   = isNQ and not nq3
-float  tgtR     = nq3 ? 1.0 : 3.0
+float  tgtR     = nq3 ? 1.0 : nq5 ? 2.0 : 3.0
 string ruleTxt  = isETF ? "ETF 設定 " + sigTxt + "，" + str.tostring(tgtR) + "R" + ((isQQ or isNqR) and qNqOn ? "，NQ 2m 不反向" : "") + (isNqR ? "（代替 QQQ）" : "") : "趨勢 " + str.tostring(winLo) + "–" + str.tostring(winHi) + " 分" + (mixUse ? " + MIX 突破" : "") + "，" + str.tostring(tgtR) + "R，訊號 " + sigTxt
 string gradeTxt = not profOn and isES ? "不建議（回測都虧）" : prof == "無" ? "不支援" : not okTf ? "不是建議週期" : isNQ and tfp == "2" ? "主力" : isTX ? "邊緣" : "可做"
 
@@ -467,7 +469,7 @@ if barstate.islast and showTbl
     else if isES and not esOn
         warn := compact ? "ES 預設不發" : "ES 回測每種做法都虧，預設不發訊號"
     else if not okTf
-        warn := compact ? "建議 " + (isETF ? "1" : "2 或 3") + " 分 K" : "建議週期：" + (isETF ? "1 分 K" : "2 或 3 分 K") + "，目前 " + tfp + (otherTf ? "（照設定仍發訊號，沒有回測過）" : "（不發訊號）")
+        warn := compact ? "建議 " + (isETF ? "1" : isNQ ? "2、3 或 5" : "2 或 3") + " 分 K" : "建議週期：" + (isETF ? "1 分 K" : isNQ ? "2、3 或 5 分 K" : "2 或 3 分 K") + "，目前 " + tfp + (otherTf ? "（照設定仍發訊號，沒有回測過）" : "（不發訊號）")
     else if (isQQ or isSP) and syminfo.session == session.extended
         warn := compact ? "請關延長時段" : "請關掉延長交易時段，回測只用美股盤 09:30–16:00"
     else if isTX
