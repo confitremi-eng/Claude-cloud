@@ -2,7 +2,7 @@
 
   cd indicators/backtest
   python3 rbs/zerogex_fetch.py "../../ZEROGEX API.txt"      # first: download the ZeroGEX history
-  python3 -I rbs/gex_qqq.py
+  python3 -I rbs/gex_qqq.py [階段,EMA]                 # default 35,8; e.g. 35,13
 
 Remi's observation: when SPY and QQQ gamma are both positive the QQQ 1m original signals work; when both are
 negative the original Sell works.
@@ -117,32 +117,33 @@ def seq_rows(s, cost, years_frac, split):
         print(f'   {R:g}R v3 + GEX 規則        ' + line(s[s.v3 & rule], R))
 
 
-def run(name, one, cost, th, st, nd, start, end):
+def run(name, one, cost, th, st, nd, start, end, stage=35, ema=8):
     tdm = mm.minute_trend(one); H = mm.hourly(one, True)
     df = mm.chart(one, tdm, 1, th, st)
-    s = mm.trend_signals(df, H, 1, 35, 8)
+    s = mm.trend_signals(df, H, 1, stage, ema)
     late = s.date.values > '2026-10-14'                                    # no NQ data after this: NQ 2m filter off
     s['v3'] = mm.filt(s, th, 7.0) & (sg.nq_ok(df, s, nd) | late)
     s = s[(s.date >= start) & (s.date <= end)].copy()
     s = pd.concat([s, regimes(df, s)], axis=1)
     d = sorted(s.date.unique()); split = d[len(d) // 2]
-    print(f'\n################ {name}：{d[0]} .. {d[-1]}（{len(d)} 天），原版訊號 {len(s)} 個、v3 留下 {int(s.v3.sum())} 個，'
+    print(f'\n################ ({stage}, 0, {ema}, 1) {name}：{d[0]} .. {d[-1]}（{len(d)} 天），原版訊號 {len(s)} 個、v3 留下 {int(s.v3.sum())} 個，'
           f'每筆扣 {cost:g}；前 / 後 = 前後各半的日期')
     have = s.SPY_flip.notna() & s.QQQ_flip.notna()
     print(f'  有 gamma 資料的訊號 {have.mean():.0%}')
-    table(s, cost, split, '原版 (35, 0, 8, 1) 全部（橙黃色三角）')
+    table(s, cost, split, f'原版 ({stage}, 0, {ema}, 1) 全部')
     table(s[s.v3], cost, split, 'v3 留下的')
     seq_rows(s, cost, None, split)
 
 
 def main():
+    stage, ema = (int(x) for x in (sys.argv[1] if len(sys.argv) > 1 else '35,8').split(','))
     nd = sg.nq2m_dir()
     m = zg_minute('QQQ')
     start = str(m.ts.dt.tz_convert(ss.NY).dt.date.min()); end = '2026-10-14'
-    run('QQQ 1 分 K（NQ 美股盤代替）', mm.load_market('qqq', []), 1.0, 20.0, 40.0, nd, start, end)
+    run('QQQ 1 分 K（NQ 美股盤代替）', mm.load_market('qqq', []), 1.0, 20.0, 40.0, nd, start, end, stage, ema)
     one = real_qqq()
     days = sorted(set(one.index.tz_convert(ss.NY).date))
-    run('QQQ 1 分 K（ZeroGEX 的 QQQ 實際 K 棒）', one, 0.024, 0.5, 1.0, nd, str(days[3]), str(days[-1]))
+    run('QQQ 1 分 K（ZeroGEX 的 QQQ 實際 K 棒）', one, 0.024, 0.5, 1.0, nd, str(days[3]), str(days[-1]), stage, ema)
 
 
 if __name__ == '__main__':

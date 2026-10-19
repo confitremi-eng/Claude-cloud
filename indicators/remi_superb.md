@@ -168,6 +168,7 @@ Remi 的觀察：SPY、QQQ 的 Gamma 都正時，QQQ 1 分 K 原版訊號很好�
 - **都正時的原版買訊反而最差**；都負時的原版賣訊也是虧的。用「開盤時的 gamma 狀態」整天套用也一樣。
 - **一次一筆，照「都正做買賣、都負只做賣、其他不做」**：原版 3R 從 +12R 變 −14R（NQ 代替）；QQQ 實際從 −83R 變 −23R，只是因為少做一半，還是虧。v3 加這條規則：每筆差不多（+0.21R → +0.21R / +0.22R → +0.25R），筆數少一半，合計少一半。
 - 原版訊號本身在這段期間就是虧的；要做 QQQ 1 分 K 還是用 v3（這 76 天 3R 每筆 +0.21R，兩種價格都一樣）。
+- **(35, 0, 13, 1)**（`gex_qqq.py 35,13`）：都負時更差，賣 1R / 2R / 3R 每筆 −0.02 / −0.09 / −0.11R（NQ 代替）、−0.05 / −0.15 / −0.12R（QQQ 實際），買更差（3R 約 −0.3R）；加 v3 過濾的都負賣訊（約 20 筆）也是負的。唯一兩種價格都是正的是「都正時的賣訊」（約 60 筆，3R +0.36R / +0.09R），樣本太小、又是很多格子裡挑出來的，不採用。
 - 要再測：重跑 `zerogex_fetch.py`（已下載的日子會跳過）把新的日子補進來；NQ 資料也要補 10/14 以後。
 
 ## NQ 5 分 K 什麼時候有交易價值（2026-10-19，`rbs/nq5m.py`）
@@ -739,7 +740,7 @@ python3 -I rbs/mix_opt.py 2 5                                    # MIX 突破的
 python3 -I rbs/strong_stage.py qqq spy nq                         # 趨勢拉開時把階段改短（QQQ / SPY 35 → 30–15，NQ 20 → 15–10）
 python3 -I rbs/oneside_3013.py qqq spy                            # 單邊日參數 (30, 0, 13, 1) 搭配趨勢
 python3 -I rbs/zerogex_fetch.py "../../ZEROGEX API.txt" range regime   # 下載 ZeroGEX 的 SPY / QQQ gamma 歷史（要 Pro API 金鑰）
-python3 -I rbs/gex_qqq.py                                         # QQQ 1m 原版訊號 × SPY / QQQ gamma 正負
+python3 -I rbs/gex_qqq.py [35,13]                                 # QQQ 1m 原版訊號 × SPY / QQQ gamma 正負（可換階段、EMA）
 ```
 
 更早的研究（門檻 20 / 40 時代的推薦設定、亞洲盤、停損方式等）在 [remis_buy_sell.md](remis_buy_sell.md) 第 4 節。
