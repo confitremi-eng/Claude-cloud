@@ -35,7 +35,7 @@ DEFAULTS = {
     "symbol": "MNQ", "exchange": "CME", "qty": 2, "tick": 0.25, "allowed_roots": ["NQ", "MNQ"],
     "max_entry_delay_sec": 15, "max_alert_age_sec": 30, "max_stop_points": 120,
     "max_trades_per_day": 20, "max_daily_loss_usd": 600, "max_hold_minutes": 125,
-    "flat_time_et": "16:58", "reopen_time_et": "18:00", "roll_days": 8, "tradingview_ips_only": False,
+    "flat_time_et": "16:58", "reopen_time_et": "18:00", "roll_days": 8, "tradingview_ips_only": False, "client_ip_header": "",
 }
 
 log = logging.getLogger("main")
@@ -66,12 +66,13 @@ def write_event(e: dict):
         f.write(json.dumps(e, ensure_ascii=False, default=str) + "\n")
 
 
-def client_ip(req: web.Request) -> str:
-    # 經過 Cloudflare / ngrok 通道時，真正的來源 IP 在這些標頭
-    for h in ("CF-Connecting-IP", "X-Forwarded-For"):
-        v = req.headers.get(h)
+def client_ip(req: web.Request, header: str) -> str:
+    # 經過反向代理 / 通道時，真正的來源 IP 在代理設定的標頭（Caddy：X-Forwarded-For，Cloudflare：CF-Connecting-IP）。
+    # 只讀 config 指定的那一個，其他標頭可以被偽造
+    if header:
+        v = req.headers.get(header)
         if v:
-            return v.split(",")[0].strip()
+            return v.split(",")[-1].strip()
     return req.remote or ""
 
 
@@ -82,7 +83,7 @@ def webhook_app(cfg: dict, queue: asyncio.Queue) -> web.Application:
         received = datetime.now(timezone.utc)
         if not hmac.compare_digest(req.match_info["secret"].encode(), secret):
             raise web.HTTPNotFound()
-        ip = client_ip(req)
+        ip = client_ip(req, cfg["client_ip_header"])
         if cfg["tradingview_ips_only"] and ip not in TV_IPS:
             log.warning("擋掉不是 TradingView 的來源 %s", ip)
             raise web.HTTPForbidden()

@@ -7,7 +7,10 @@
   "allow_live": false,
   "symbol": "MNQ",
   "qty": 2,
-  "allowed_roots": ["NQ", "MNQ"],
+  "allowed_roots": [
+    "NQ",
+    "MNQ"
+  ],
   "max_entry_delay_sec": 15,
   "max_alert_age_sec": 30,
   "max_stop_points": 120,
@@ -17,5 +20,6 @@
   "flat_time_et": "16:58",
   "reopen_time_et": "18:00",
   "roll_days": 8,
-  "tradingview_ips_only": false
+  "tradingview_ips_only": false,
+  "client_ip_header": ""
 }

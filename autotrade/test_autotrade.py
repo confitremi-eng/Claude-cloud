@@ -168,6 +168,16 @@ class TestWebhook(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(r.status, 200)
         self.assertEqual(q.qsize(), 1)
 
+    async def test_tradingview_ips_only(self):
+        q = asyncio.Queue()
+        app = webhook_app(cfg(tradingview_ips_only=True, client_ip_header="X-Forwarded-For"), q)
+        async with TestClient(TestServer(app)) as c:
+            r = await c.post(f"/hook/{SECRET}", data=msg(), headers={"CF-Connecting-IP": "52.89.214.238"})
+            self.assertEqual(r.status, 403)               # 偽造的標頭不算
+            r = await c.post(f"/hook/{SECRET}", data=msg(), headers={"X-Forwarded-For": "52.89.214.238"})
+            self.assertEqual(r.status, 200)
+        self.assertEqual(q.qsize(), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

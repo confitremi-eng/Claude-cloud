@@ -54,7 +54,47 @@ TradingView 的快訊不保證每次都送到。所以下面這些由程式自�
    - TradingView 的 webhook 要付費方案，帳號也要開兩步驟驗證。
    - **只接一張圖。** 如果 2 分 K 和 5 分 K 都接進來，其中一張的出場快訊會把另一張的部位平掉。
 
-## 每天開盤前
+## 雲端主機（Vultr VPS）
+
+2026-10-19 建好，Mac 不用開著：
+
+| 項目 | 內容 |
+|---|---|
+| 主機 | Vultr New Jersey，Shared CPU 2 vCPU / 4GB，Ubuntu 24.04，每月 20 美元 |
+| IP | 64.176.198.47。只能用 SSH key 登入（`~/.ssh/remi_vultr`），密碼登入已經關閉 |
+| 時區 | 美東（America/New_York） |
+| 防火牆 | 只開 22（SSH）、80 / 443（https）；8080、8081、4002 外面連不到 |
+| IB Gateway | 10.50，用 IBC 自動登入**模擬帳戶**，API port 4002；每天美東 17:15（CME 休市時）自動重啟。服務名稱 `ibgateway` |
+| autotrade | `/home/trader/autotrade`，Python 3.12 + ib_async。服務名稱 `autotrade`，開機自動啟動、當掉自動重啟 |
+| https | Caddy + Let's Encrypt，網址 `https://64-176-198-47.sslip.io/hook/<webhook_secret>`，只把 `/hook/` 轉給 autotrade |
+| 來源限制 | `tradingview_ips_only` 開著，只收 TradingView 官方 IP；來源 IP 看 Caddy 設的 `X-Forwarded-For` |
+
+登入主機：
+
+```bash
+ssh -i ~/.ssh/remi_vultr root@64.176.198.47
+```
+
+在主機上常用的指令：
+
+- 填 / 改 IBKR 登入資料，並啟動 Gateway：`remi-set-ibkr`。帳密只存在主機的 `/home/trader/ibc/config.ini`。
+- 看狀態：`systemctl status ibgateway autotrade`
+- 看即時記錄：`journalctl -u autotrade -f`
+- 看今天的快訊和下單：`tail /home/trader/autotrade/logs/events-$(date +%F).jsonl`
+- 管理介面（在主機上執行）：`curl -s 127.0.0.1:8081/status`，`curl -s -X POST 127.0.0.1:8081/flatten`
+
+從 Mac 更新程式（不會蓋掉主機上的 config.json）：
+
+```bash
+rsync -a -e "ssh -i ~/.ssh/remi_vultr" --exclude logs --exclude __pycache__ --exclude config.json ./ root@64.176.198.47:/home/trader/autotrade/ && ssh -i ~/.ssh/remi_vultr root@64.176.198.47 'chown -R trader:trader /home/trader/autotrade && systemctl restart autotrade'
+```
+
+注意：
+
+- **同一個 IBKR 使用者同時只能登入一處。** Gateway 設成搶先登入（`ExistingSessionDetectedAction=primary`），你在 Mac 上用同一個帳號登入模擬 TWS 時，其中一邊會被踢掉。建議在帳戶管理開一個子使用者專門給主機用。
+- 轉真倉時，改 `/home/trader/ibc/config.ini` 的 `TradingMode=live`、`gatewaystart.sh` 的 `TRADING_MODE=live`、autotrade config 的 `ib_port: 4001` 和 `allow_live: true`。真倉每週要在手機上做一次兩步驟驗證。
+
+## 每天開盤前（Mac 本機跑的時候）
 
 ```bash
 cd "/Users/remilin/Library/CloudStorage/Dropbox/Remi 交易人/Trading x Claude/autotrade"
