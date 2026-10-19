@@ -62,6 +62,13 @@ fBuyTxt   = input.string("⬆️", "買訊符號", group=grpF, inline="fb")
 fBuyCol   = input.color(#36FE02, "", group=grpF, inline="fb", tooltip="填一般文字時的顏色，Emoji 用它自己的顏色")
 fSellTxt  = input.string("⬇️", "賣訊符號", group=grpF, inline="fs")
 fSellCol  = input.color(#F23645, "", group=grpF, inline="fs", tooltip="填一般文字時的顏色，Emoji 用它自己的顏色")
+ageOn     = input.bool(true, "另外標出趨勢已持續", group=grpF, inline="ag")
+ageMin    = input.int(30, "", minval=0, group=grpF, inline="ag")
+ageMax    = input.int(120, "到（分鐘）", minval=1, group=grpF, inline="ag", tooltip="過濾訊號出現時，Trend Judge 這段趨勢（UP / 強UP 或 DOWN / 強Down）已經持續的分鐘數在這個範圍內（含下限、不含上限），就改用下面的符號，另外再發「（過濾・趨勢 30–120 分）」快訊；原本的過濾快訊照常發。分鐘數就是資料視窗的「趨勢已持續（分鐘）」，MIX 或轉向就歸零。改了範圍，快訊名稱不會跟著變。NQ 一年回測（2 分 K、3R、一次一筆）：30–120 分鐘的過濾訊號每筆 +0.33R、回撤 13R，全部是 +0.19R、35R；2 / 3 / 5 分 K 都比較好，見 remi_superb.md")
+wBuyTxt   = input.string("⏫", "範圍內的買訊符號", group=grpF, inline="wb")
+wBuyCol   = input.color(#36FE02, "", group=grpF, inline="wb", tooltip="趨勢已持續在上面範圍內的過濾買訊，改用這個符號。填一般文字時用這個顏色，Emoji 用它自己的顏色")
+wSellTxt  = input.string("⏬", "範圍內的賣訊符號", group=grpF, inline="ws")
+wSellCol  = input.color(#F23645, "", group=grpF, inline="ws", tooltip="趨勢已持續在上面範圍內的過濾賣訊，改用這個符號。填一般文字時用這個顏色，Emoji 用它自己的顏色")
 markSize  = input.string("大", "符號大小", options=["小", "中", "大"], group=grpF, inline="ms")
 markLines = input.int(0, "離箭頭（半行）", minval=0, maxval=12, group=grpF, inline="ms", tooltip="符號離原本箭頭的距離，每加 1 往外移半個符號高度。0 會蓋在箭頭上；跟箭頭重疊就加大，離太遠就減小。原本訊號樣式選「大」時通常要再多 1–2。兩種快訊共用")
 
@@ -237,6 +244,17 @@ bool fSell = filtOn and sellSig and sellPass
 
 float fStop = fBuy ? buyStop : fSell ? sellStop : na
 float fTgt  = na(fStop) ? na : close + tgtR * (close - fStop)
+// 趨勢已持續多久：Trend Judge 進入這段趨勢（UP / 強UP 或 DOWN / 強Down）後的分鐘數，MIX 或轉向就歸零
+var int trendBars = 0
+int trendDir = tjLinked ? (tjDirI > 0 ? 1 : tjDirI < 0 ? -1 : 0) : 0
+if trendDir != 0 and trendDir == nz(trendDir[1])
+    trendBars += 1
+else
+    trendBars := trendDir != 0 ? 1 : 0
+float trendMin = trendBars * timeframe.in_seconds() / 60.0
+// 過濾訊號裡，趨勢已持續在設定範圍內（預設 30–120 分鐘）的：改用另一個符號，另外發快訊
+bool wBuy  = ageOn and fBuy and trendDir == 1 and trendMin >= ageMin and trendMin < ageMax
+bool wSell = ageOn and fSell and trendDir == -1 and trendMin >= ageMin and trendMin < ageMax
 // 標記畫在訊號 K 棒外側（買：最低價下方，賣：最高價上方），跟原本的標籤錯開
 // 符號以原本箭頭的位置（K 棒下方 / 上方）為中心，每多一個換行往外移半個符號高度，所以縮放圖表也不會跑到箭頭裡面
 markSz = markSize == "小" ? size.small : markSize == "大" ? size.large : size.normal
@@ -249,20 +267,15 @@ drawBuyMark(txt, col) =>
 drawSellMark(txt, col) =>
     label.new(bar_index, high, txt + markPad, xloc=xloc.bar_index, yloc=yloc.abovebar, style=label.style_none, textcolor=col, size=markSz)
 if showFMark and fBuy
-    drawBuyMark(fBuyTxt, fBuyCol)
+    drawBuyMark(wBuy ? wBuyTxt : fBuyTxt, wBuy ? wBuyCol : fBuyCol)
 if showFMark and fSell
-    drawSellMark(fSellTxt, fSellCol)
+    drawSellMark(wSell ? wSellTxt : fSellTxt, wSell ? wSellCol : fSellCol)
 plot(tjDir, "內建 TJ 方向", display=display.data_window)
-// 趨勢已持續多久：Trend Judge 進入這段趨勢（UP / 強UP 或 DOWN / 強Down）後的分鐘數，MIX 或轉向就歸零（只在資料視窗顯示）
-var int trendBars = 0
-int trendDir = tjLinked ? (tjDirI > 0 ? 1 : tjDirI < 0 ? -1 : 0) : 0
-if trendDir != 0 and trendDir == nz(trendDir[1])
-    trendBars += 1
-else
-    trendBars := trendDir != 0 ? 1 : 0
-plot(trendBars * timeframe.in_seconds() / 60, "趨勢已持續（分鐘）", display=display.data_window)
+plot(trendMin, "趨勢已持續（分鐘）", display=display.data_window)
 plot(fBuy ? 1 : 0, "BUY 過濾", display=display.data_window)
 plot(fSell ? 1 : 0, "SELL 過濾", display=display.data_window)
+plot(wBuy ? 1 : 0, "BUY 過濾・趨勢範圍內", display=display.data_window)
+plot(wSell ? 1 : 0, "SELL 過濾・趨勢範圍內", display=display.data_window)
 plot(fStop, "過濾停損", display=display.data_window)
 plot(fTgt, "過濾目標", display=display.data_window)
 
@@ -437,6 +450,10 @@ alertcondition(sellSig, "Remi Superb Sell", '{{ticker}} Remi Superb Sell｜{{clo
 // 過濾快訊：要先在設定開啟「啟用過濾快訊」才會成立
 alertcondition(fBuy, "Remi Superb Buy（過濾）", '{{ticker}} Remi Superb Buy（過濾）｜{{close}}｜停損 {{plot("過濾停損")}}｜目標 {{plot("過濾目標")}}')
 alertcondition(fSell, "Remi Superb Sell（過濾）", '{{ticker}} Remi Superb Sell（過濾）｜{{close}}｜停損 {{plot("過濾停損")}}｜目標 {{plot("過濾目標")}}')
+
+// 過濾訊號裡，趨勢已持續在範圍內（預設 30–120 分鐘）的：要先開啟「另外標出趨勢已持續」，原本的過濾快訊照常發
+alertcondition(wBuy, "Remi Superb Buy（過濾・趨勢 30–120 分）", '{{ticker}} Remi Superb Buy（過濾・趨勢 30–120 分）｜{{close}}｜趨勢已持續 {{plot("趨勢已持續（分鐘）")}} 分｜停損 {{plot("過濾停損")}}｜目標 {{plot("過濾目標")}}')
+alertcondition(wSell, "Remi Superb Sell（過濾・趨勢 30–120 分）", '{{ticker}} Remi Superb Sell（過濾・趨勢 30–120 分）｜{{close}}｜趨勢已持續 {{plot("趨勢已持續（分鐘）")}} 分｜停損 {{plot("過濾停損")}}｜目標 {{plot("過濾目標")}}')
 
 // 1 分亞洲盤快訊：要先在設定開啟「啟用 1 分亞洲盤快訊」才會成立
 alertcondition(aBuy, "Remi Superb Buy（亞洲盤）", '{{ticker}} Remi Superb Buy（亞洲盤）｜{{close}}｜停損 {{plot("亞洲盤停損")}}｜目標 {{plot("亞洲盤目標")}}')
