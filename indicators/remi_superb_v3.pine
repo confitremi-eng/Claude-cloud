@@ -58,7 +58,8 @@ gsOn      = input.bool(false, "NQ RTH：GEX setup 訊號（目標 3R）", group=
 gsStage   = input.int(35, "GEX setup　階段", minval=2, group=grpG, inline="gs")
 gsEma     = input.int(8, "Ema number", minval=1, group=grpG, inline="gs", tooltip="預設 (35, 0, 8, 1)。回測（NQ RTH，2026-07 .. 10）：階段 35–50 × EMA 5–13 都好，EMA 21 不行；(35, 0, 8, 1) 77 筆、1R 勝率 66%、3R 每筆 +0.75R；(40, 0, 8, 1) 70%、+0.99R；(35, 0, 13, 1) 每筆差不多但訊號少四成")
 gsBuyTxt  = input.string("🧲", "GEX setup　買", group=grpG, inline="gm")
-gsSellTxt = input.string("🧲", "賣", group=grpG, inline="gm", tooltip="GEX setup 自己的記號（價格被 flip 吸過去，所以用磁鐵）：買標在 K 棒下方、賣標在上方，大小和離 K 棒的距離同 v3 的記號（外觀）。可以換成任何 Emoji 或文字，文字用 flip 線的顏色。同一根 K 也有 v3 的記號時，會再往外推一格，不會疊在一起")
+gsSellTxt = input.string("🧲", "賣", group=grpG, inline="gm")
+gsSize    = input.string("小", "大小", options=["小", "中", "大"], group=grpG, inline="gm", tooltip="GEX setup 自己的記號（價格被 flip 吸過去，所以用磁鐵）：紫色小標籤（flip 線的顏色），箭頭直接指著訊號那根 K 的低點（買）/ 高點（賣）。可以換成任何 Emoji 或文字")
 
 // ═════════════════ 外觀 ═════════════════
 grpA      = "外觀"
@@ -448,6 +449,7 @@ float sigTgt   = na(sigEntry) or na(sigStop) ? na : sigEntry + ((goMixBuy or goM
 
 // ═════════════════ 圖上標記 ═════════════════
 markSz = markSize == "小" ? size.small : markSize == "大" ? size.large : size.normal
+gsSz   = gsSize == "小" ? size.small : gsSize == "大" ? size.large : size.normal
 string markPad = ""
 if markLines > 0
     for k = 1 to markLines
@@ -464,13 +466,11 @@ if goTrBuy
     drawBuyMark(tBuyTxt)
 if goTrSell
     drawSellMark(tSellTxt)
-// GEX setup 的記號：同一根 K 也有 v3 的記號時，再往外推一格
+// GEX setup 的記號：紫色小標籤，箭頭直接指著那根 K 的低點（買）/ 高點（賣），不會跟 v3 的記號混在一起
 if gsGoBuy
-    string gPadB = goTrBuy or goMixBuy ? "\n\n" : ""
-    label.new(bar_index, low, markPad + gPadB + gsBuyTxt, xloc=xloc.bar_index, yloc=yloc.belowbar, style=label.style_none, textcolor=gexCol, size=markSz)
+    label.new(bar_index, low, gsBuyTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_up, color=color.new(gexCol, 25), textcolor=color.white, size=gsSz)
 if gsGoSell
-    string gPadS = goTrSell or goMixSell ? "\n\n" : ""
-    label.new(bar_index, high, gsSellTxt + gPadS + markPad, xloc=xloc.bar_index, yloc=yloc.abovebar, style=label.style_none, textcolor=gexCol, size=markSz)
+    label.new(bar_index, high, gsSellTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color.new(gexCol, 25), textcolor=color.white, size=gsSz)
 plot(showPos and gsPos != 0 ? gsStop : na, "GEX 持倉停損", color=color.new(stopCol, 40), style=plot.style_linebr)
 plot(showPos and gsPos != 0 ? gsTgt : na, "GEX 持倉目標", color=color.new(tgtCol, 40), style=plot.style_linebr)
 bool inPos = vPos != 0
