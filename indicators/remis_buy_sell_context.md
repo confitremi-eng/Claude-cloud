@@ -10,6 +10,7 @@
 | 指標 | 檔案 | 狀態 |
 |------|------|------|
 | Remi's Buy/Sell | [remis_buy_sell.pine](remis_buy_sell.pine) | 仿原版「買賣訊號」(20, 0, 8, 1)，每根 K 跟原版一致（71 / 71 個訊號）。另有過濾快訊（門檻依商品：NQ 20/40、ES 4/8、TXF 40/80）、1 分亞洲盤快訊。通用版，這次沒再改 |
+| **Remi Superb v2** | [remi_superb_v2.pine](remi_superb_v2.pine) | **建議用這個**（2026-10-19）。趨勢訊號（過濾快訊 + 趨勢已持續 30–120 分）＋ MIX 區間突破，一次一筆虛擬持倉，只有「Remi Superb v2 Buy / Sell」兩個快訊，右上角狀態表格。Trend Judge 用 1 分 K 推算。回測 528 筆，每筆 +0.265R，一年 +140R，回撤 13R，13/13 個月賺錢 |
 | **Remi Superb** | [remi_superb.pine](remi_superb.pine) | **主力**。NQ 2 分 K 優化完成：過濾快訊＋MIX 區間突破快訊，Trend Judge 用秒級資料（要 Premium） |
 | **Remi Superb 1m** | [remi_superb_1m.pine](remi_superb_1m.pine) | 跟 Remi Superb 同步，只有 Trend Judge 改用 1 分 K 收盤推算（同回測），不需要 Premium；快訊名稱多「1m」。另外多了 **QQQ 1 分 K**（自動套用 QQQ 那組設定）和「收盤前 1 小時不進場」開關 |
 | **Remi Superb 策略** | [remi_superb_strategy.pine](remi_superb_strategy.pine) | `strategy()` 版，給 TradingView 策略測試器回測和 webhook 自動交易：過濾訊號收盤市價進場、MIX 突破掛停損單（OCO），一次一筆，60 根時間出場、17:00 休市前平倉。Trend Judge 用 1 分 K 推算。說明在 remi_superb.md 第 8 節 |
