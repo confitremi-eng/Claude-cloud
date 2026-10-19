@@ -14,6 +14,7 @@ Prints, each MIX trade on its own (n / year, win %, net R per trade at 2R and 3R
   3. filters on the baseline: side, 1-hour EMA20 side, the trend before the MIX, Trend Judge at the breakout,
      box height in ATR, minutes after the box formed, session; target R
   4. one position at a time with the v3 trend signals (trend 0-180 minutes), baseline against the variants
+  5. the conditions from 3 put back into v3; 6. v3's default rules (Friday cut-off, no MIX 16-20 New York)
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
@@ -239,6 +240,15 @@ def run(C, R_main):
     print(f'   {"趨勢訊號在美東 16–20（各自獨立）":<34} {sum(sess[i] == "收盤後 16-20" for i in keep) / C.years:.0f} 筆/年')
     print(f'   {"趨勢和 MIX 都不做美東 16–20":<34} ' + seq(C, no1620(base), R_main))
     print(f'   {"　+ MIX 成形後 10 分內作廢":<34} ' + seq(C, no1620(sk), R_main))
+    C.trend = keep
+
+    print(f'\n######## 6. v3 的預設規則：週五台北週六 02:00 以後不發新訊號 + MIX 不做美東 16–20（一次一筆，{R_main:g}R）')
+    tw = (C.df.datetime + pd.Timedelta(minutes=C.tf)).dt.tz_convert('Asia/Taipei')
+    late = ((tw.dt.weekday == 5) & (tw.dt.hour * 60 + tw.dt.minute >= 120)).values
+    for nm, fri, pm in (('都不加', False, False), ('只加週五', True, False), ('只加 MIX 16–20', False, True), ('兩個都加（v3 預設）', True, True)):
+        C.trend = {i: v for i, v in keep.items() if not (fri and late[i])}
+        cands = [x for x in base if not (fri and late[x[0]]) and not (pm and x[4]['sess'] == '收盤後 16-20')]
+        print(f'   {nm:<30} ' + seq(C, cands, R_main))
     C.trend = keep
 
 

@@ -1,8 +1,8 @@
 //@version=6
 // Remi Superb v3：自動辨識商品和週期，套用回測過的做法，只發「可交易的 Buy」和「可交易的 Sell」兩個快訊
-//   NQ / MNQ 2 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 3R              回測每年 +162R，回撤 16R
+//   NQ / MNQ 2 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 3R              回測每年 +166R，回撤 12.5R
 //   NQ / MNQ 3 分 K：趨勢訊號（趨勢已持續 90–120 分），目標 1R                           勝率 74%，每年 +20R，回撤 2R
-//   NQ / MNQ 5 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 2R              每年 +82R，回撤 14R
+//   NQ / MNQ 5 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 2R              每年 +90R，回撤 11R
 //   QQQ 1 分 K：ETF 設定 (35, 0, 8, 1)、Trend Judge 門檻 0.5、離慢線 ≤ 7 ATR、NQ 2 分 K 不反向，目標 3R   每年 +66R，回撤 17R
 //   NQ / MNQ 1 分 K 只開美股盤（RTH，代替 QQQ）：同 QQQ 的做法，門檻用 NQ 20 點（回測就是用這種圖代替 QQQ）
 //   SPY 1 分 K：ETF 設定 (35, 0, 8, 1)、Trend Judge 門檻 0.8、離慢線 ≤ 7 ATR，目標 3R      每年 +67R，回撤 21R
@@ -11,6 +11,7 @@
 // 趨勢訊號 = 原版買賣訊號 + Trend Judge 有趨勢 + 1 小時 EMA20 同向 + 停損 ≥ 1 ATR + 離 15 秒 EMA1130 不太遠 + 避開數據 / 開收盤 / Globex / FOMC
 //   訊號 K 收盤進場，停損在訊號 K 和前一根的極值
 // MIX 區間突破（只有 NQ 2、5 分 K）：Trend Judge 連續 MIX 60 分鐘 → 區間；形成後 60 分鐘內第一次突破 10% 就在突破價進場，停損在中線
+//   美東 16:00–20:00（收盤後）碰到突破價就不做，這個區間作廢（預設開，可關）
 // 一次一筆：指標自己記一筆虛擬持倉，碰到停損 / 目標、持有 60 根 K、美東 17:00 休市前（NQ / ES）或資料中斷才算出場
 // 回測：NQ / ES / TXF 用各自的 1 分 K；SPY / QQQ 用 ES / NQ 只留美股盤的 K 棒代替。說明見 indicators/remi_superb.md
 // 訊號參數：v3 的交易訊號預設依商品自動（回測過），可以改成自訂；橙黃色原版小三角另有自己的參數（預設 35, 0, 8, 1）
@@ -37,6 +38,7 @@ h1Len     = input.int(20, "1 小時 EMA 長度", minval=1, group=grpR, tooltip="
 riskMult  = input.float(1.0, "停損至少幾個 ATR", minval=0, step=0.1, group=grpR, inline="rk")
 atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）。停損距離小於「倍數 × 上一根的 ATR」就不做")
 avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpR, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00。所有商品都一樣（回測也是）")
+mixPmOff  = input.bool(true, "MIX 突破不做美東 16–20（收盤後）", group=grpR, tooltip="只影響 NQ 2、5 分 K 的 MIX 突破：K 棒收盤時間在美東 16:00–20:00（台灣時間夏令 04:00–08:00、冬令 05:00–09:00）碰到突破價就不做，這個區間作廢（跟事件時段一樣）。趨勢訊號照常。回測一年：2 分 K 每年 +162R → +168R、回撤 16R → 12.5R；5 分 K +82R → +94R、回撤 14R → 11R，前後半年都一樣")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpR, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
 
 // ═════════════════ 外觀 ═════════════════
@@ -211,6 +213,7 @@ bool isFomc  = str.contains(fomcDates, str.format_time(tClose, "yyyy-MM-dd", "Am
 bool inEvt   = (isWkday and ((etMin >= 508 and etMin < 540) or (etMin >= 598 and etMin < 615))) or (isFomc and etMin >= 838 and etMin < 900) or (etMin >= 570 and etMin < 600) or (etMin >= 945 and etMin < 975) or (etMin >= 1005 and etMin < 1020) or (etMin >= 1080 and etMin < 1110)
 bool evtNow  = avoidEvt and inEvt
 bool haltBar = flatHalt and isCME and etMin == 1020                 // 美東 17:00 收盤那根，接著休市
+bool mixPm   = mixPmOff and etMin >= 960 and etMin < 1200           // 美東 16:00–20:00（收盤後）不做 MIX 突破
 // 週五美股盤的最後幾小時（台灣時間週六 friCutH:friCutM 以後）不發新訊號
 int  twMin   = hour(tClose, "Asia/Taipei") * 60 + minute(tClose, "Asia/Taipei")
 bool friLate = friCut and dayofweek(tClose, "Asia/Taipei") == dayofweek.saturday and twMin >= friCutH * 60 + friCutM
@@ -248,7 +251,7 @@ float sellStop = math.max(high, high[1])
 bool trBuy  = active and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate
 bool trSell = active and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate
 
-// ═════════════════ MIX 區間（只有 NQ 2、5 分 K）═════════════════
+// ═════════════════ MIX 區間（只有 NQ 2、5 分 K；美東 16–20 的突破不做）═════════════════
 float tfMin   = tfSec / 60.0
 int   mbNeed  = math.max(1, math.round(60 / tfMin))
 int   mbGrace = math.max(0, math.round(4 / tfMin))
@@ -315,7 +318,7 @@ if bxLive and not mbForm and bar_index > bxForm
         bool dnHit = low <= bxDnL
         if upHit or dnHit
             bxLive := false
-            if not (upHit and dnHit) and not evtNow
+            if not (upHit and dnHit) and not evtNow and not mixPm
                 mxBuy  := active and mixUse and upHit
                 mxSell := active and mixUse and dnHit
 var line bxUpLine = na
@@ -474,6 +477,8 @@ if barstate.islast and showTbl
         warn := compact ? "請關延長時段" : "請關掉延長交易時段，回測只用美股盤 09:30–16:00"
     else if isTX
         warn := compact ? "邊緣，成本高" : "回測只小賺，成本 4 點時接近打平；結算日夜盤到隔天不要做"
+    else if active and mixUse and mixPm
+        warn := compact ? "16–20 不做 MIX" : "美東 16:00–20:00 不做 MIX 突破，趨勢訊號照常（交易規則設定）"
     if warn != ""
         addRow(row, "提示", warn, color.new(color.orange, 20), ha)
 
