@@ -2,6 +2,7 @@
 
   cd indicators/backtest
   python3 -I rbs/gex_matrix.py
+  python3 -I rbs/gex_matrix.py --tj      # by the NQ RTH Trend Judge state instead (trend / MIX / against)
 
 GEX setup as v3 runs it: (35, 0, 8, 1) on NQ 1-minute cash-session bars, NQ RTH Trend Judge on the signal's side
 (threshold 20), QQQ below its gamma flip for buys / above for sells, no new signals 00:00-01:05 Taipei; signal close
@@ -26,6 +27,33 @@ def cells(y, cost):
         r = y[f'r{R:g}'].values
         out.append(f'{100 * (r > 0).mean():5.1f}% {(r - cost / y.risk.values).mean():+.2f}')
     return f'{len(y):4d}  ' + '   '.join(out)
+
+
+def by_tj(cost=1.0):
+    """Same setup without the trend condition, split by the NQ RTH Trend Judge state at the signal."""
+    one = mm.load_market('qqq', []); tdm = mm.minute_trend(one); H = mm.hourly(one, True)
+    df = mm.chart(one, tdm, 1, 20.0, 40.0)
+    s = mm.trend_signals(df, H, 1, 35, 8)
+    s = s[(s.date >= '2026-06-29') & (s.date <= '2026-10-14')].copy()
+    s = pd.concat([s, gt.feats(df, s)], axis=1); s = s[s.QQQ_flip.notna() & (s.flip_d < 0)].copy()
+    close_t = pd.DatetimeIndex(df.datetime.values[s.i]).tz_localize('UTC') + pd.Timedelta(minutes=1)
+    tw = close_t.tz_convert('Asia/Taipei')
+    s = s[(tw.hour * 60 + tw.minute) > 65]
+    s['tj'] = np.sign(s.dir.values) * s.side.values
+    print('GEX setup 依 NQ RTH Trend Judge 狀態：(35, 0, 8, 1) + 朝 QQQ flip 走，去掉台北 00:00–01:05，2026-06-29 .. 10-14，每筆扣 1 點')
+    print(f'   {"":<28}  筆數    ' + '     '.join(f'{R:g}R 勝率 每筆' for R in TG))
+    rows = [('順勢（v3 現在）', s.tj > 0), ('MIX', s.tj == 0), ('順勢或 MIX', s.tj >= 0), ('逆勢', s.tj < 0), ('不看趨勢', s.tj > -9)]
+    for nm, m in rows:
+        print(f'   {nm:<28}  ' + cells(s[m], cost))
+    for side, sn in ((1, '買'), (-1, '賣')):
+        print(f'   {"MIX，" + sn:<28}  ' + cells(s[(s.tj == 0) & (s.side == side)], cost))
+    print('一次一筆')
+    for nm, m in rows[:4]:
+        for R in (2.0, 3.0):
+            t = ss.seq(s[m].sort_values('i'), R)
+            n = t[f'r{R:g}'].values - cost / t.risk.values; eq = np.cumsum(n)
+            dd = np.max(np.maximum.accumulate(np.r_[0, eq])[1:] - eq) if len(eq) else 0
+            print(f'   {nm:<12} {R:g}R：{len(t):3d} 筆  勝率 {100 * (n > 0).mean():4.1f}%  每筆 {n.mean():+.3f}R  合計 {n.sum():+6.1f}R  回撤 {dd:4.1f}R')
 
 
 def main(cost=1.0):
@@ -70,4 +98,4 @@ def main(cost=1.0):
 
 
 if __name__ == '__main__':
-    main()
+    by_tj() if '--tj' in sys.argv else main()

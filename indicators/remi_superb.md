@@ -837,6 +837,16 @@ v3 的 GEX setup 預設（NQ RTH 1 分 K，(35, 0, 8, 1) + RTH 趨勢 + 朝 QQQ 
 - **3R 最好**；勝率 1R 66%、3R 50%（到 2R 的單幾乎都會到 3R）。
 - 賣比買好；趨勢剛開始 0–60 分的最弱；離 flip 0.5–1% 的那段 2R 以上不好。這些分組每格只有 10–40 筆，**不建議再加條件**，只當看盤參考。
 - 每格樣本小、只有 3 個多月，ZeroGEX 資料累積後重跑。
+- **RTH 是 MIX 時也做？不行**（`--tj`，同樣朝 flip 走、去掉台北 00:00–01:05）：
+
+| NQ RTH Trend Judge | 筆數 | 1R 勝率 / 每筆 | 2R | 3R | 一次一筆 3R 合計 / 回撤 |
+|---|---|---|---|---|---|
+| **順勢（v3 現在）** | 64 | 65.6% / +0.25 | 50.0% / +0.35 | 50.0% / +0.69 | **+42R / 4.8R** |
+| MIX | 85 | 48.2% / −0.10 | 36.5% / −0.04 | 29.4% / −0.11 | −10R / 25R |
+| 順勢或 MIX | 149 | 55.7% / +0.05 | 42.3% / +0.13 | 38.3% / +0.23 | +32R / 14R |
+| 逆勢 | 221 | 52.0% / −0.02 | 35.7% / −0.04 | 31.2% / +0.02 | +2R / 24R |
+
+  MIX 時買賣都虧（買 3R −0.03R、賣 −0.18R）；加進來總 R 變少、回撤變三倍。「朝 flip 走」要配上 RTH 順勢才有用。
 
 ## 6. 還沒確認的地方
 
@@ -888,7 +898,7 @@ python3 -I rbs/qqq_3008.py                                        # QQQ 原版 (
 python3 -I rbs/qqq_3008_when.py [--check | --gex 8,13]           # (30, 0, 8, 1) 什麼時候有效：時間、跳空、開盤區間、gamma flip（可比 EMA）
 python3 -I rbs/gex_params.py                                       # gamma flip setup 的階段 × EMA（NQ RTH）
 python3 -I rbs/gex_trend_src.py                                    # gamma flip setup 看 RTH 還是 ETH 的趨勢
-python3 -I rbs/gex_matrix.py                                       # GEX setup 勝率矩陣（v3 預設）
+python3 -I rbs/gex_matrix.py [--tj]                                # GEX setup 勝率矩陣（v3 預設）；--tj 依 RTH Trend Judge 狀態
 ```
 
 更早的研究（門檻 20 / 40 時代的推薦設定、亞洲盤、停損方式等）在 [remis_buy_sell.md](remis_buy_sell.md) 第 4 節。
