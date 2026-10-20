@@ -144,6 +144,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `flip_wait.py` | 反向轉來的新趨勢未滿 W 分不做趨勢訊號，NQ 2m / 5m 五年逐年；`groups`：每個趨勢訊號依反向 / 延續、趨勢時間、近幾小時翻轉次數分組 |
 | `h1_off.py` | v3 關掉 1h EMA20 同向 / 只做逆 1h 的趨勢訊號，NQ 2m / 5m 五年逐年 |
 | `m30_ema.py` | 1h EMA20 同向改用 30m EMA89 / 兩個都同向 / 任一同向，NQ 2m / 5m 五年逐年 |
+| `h1_span.py` | 1h 同向過濾用 EMA5–200 / 不過濾，NQ 2m / 5m 五年逐年 |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
