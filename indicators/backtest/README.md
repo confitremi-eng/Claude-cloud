@@ -154,6 +154,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `gex_day.py` | 用 TradingView 匯出的 NQ 1 分 K 接在 Databento 後面，重跑某一天的 GEX setup（ZeroGEX 每分鐘 flip），對照匯出裡的 🧲 |
 | `gex_lunch.py` | GEX setup 在台北 00:00–01:05 的訊號：每筆附當天 K 線、flip、停損目標的網頁（樣板 `gex_lunch_template.html`） |
 | `trend_cap.py` | v3 趨勢時間上限 120 / 180 / 240 / 300 / 400 / 不限，NQ 2m / 5m 五年逐年＋最近 3 個月 |
+| `risk_atr.py` | v3 2m 停損門檻 0.8 / 1 / 1.2 / 1.5 ATR，或不到 X ATR 就把停損放大到 X ATR 照做 |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
