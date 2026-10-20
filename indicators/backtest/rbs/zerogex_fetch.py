@@ -9,9 +9,12 @@ The key is read from the file given (keep it out of git). Writes, per symbol:
   zerogex/{SYM}_frames.csv   every 30 minutes 09:30-15:30 ET and 15:59 (replay/frame summary): ts, spot, net_gex,
                              net_gex_at_spot, gamma_flip, call_wall, put_wall
   zerogex/{SYM}_regime.csv   per session (gex/regime-history): state, spot / gamma flip at the open and close
+  zerogex/{SYM}_hourly.csv   hourly buckets incl. pre-market / after-hours (gex/historical, 1hour; rewritten each run):
+                             ts (UTC, bucket start; the value is the last snapshot inside the hour, so use it from
+                             ts + 1 hour), spot, gamma_flip, call_wall, put_wall, net_gex
 Days already on disk are skipped, so it can be re-run to add new sessions. Stops on HTTP 429.
 """
-import csv, json, os, sys, time, urllib.error, urllib.request
+import csv, json, os, sys, time, urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -120,6 +123,25 @@ def fetch_regime(api, sym):
     print(f'  {sym} 每天的狀態 {len(js["sessions"])} 天')
 
 
+def fetch_hourly(api, sym, start='2026-06-29'):
+    path = os.path.join(OUT, f'{sym}_hourly.csv'); rows = {}; end = None
+    while True:
+        q = f'/api/gex/historical?symbol={sym}&timeframe=1hour&window_units=90&start_date={start}' + (f'&end_date={urllib.parse.quote(end)}' if end else '')
+        js = api.get(q)
+        b = js if isinstance(js, list) else (js or {}).get('data') or []
+        new = [r for r in b if r.get('timestamp') and r['timestamp'] not in rows]
+        if not new: break
+        for r in new:
+            rows[r['timestamp']] = [r['timestamp'], num(r.get('spot_price')), num(r.get('gamma_flip')), num(r.get('call_wall')),
+                                    num(r.get('put_wall')), num(r.get('net_gex'))]
+        end = min(r['timestamp'] for r in new)
+        if end[:10] < start: break
+    with open(path, 'w', newline='') as f:
+        w = csv.writer(f); w.writerow(['ts', 'spot', 'gamma_flip', 'call_wall', 'put_wall', 'net_gex'])
+        for k in sorted(rows): w.writerow(rows[k])
+    print(f'  {sym} 每小時 {len(rows)} 筆（{min(rows)[:10] if rows else "-"} .. {max(rows)[:10] if rows else "-"}）')
+
+
 def main():
     api = Api(sys.argv[1])
     what = set(sys.argv[2:]) or {'range', 'frames', 'regime'}
@@ -128,6 +150,7 @@ def main():
     done_today = now.hour * 60 + now.minute >= 16 * 60 + 5                     # today's session is over after 16:05 ET
     for sym in SYMS:
         days = [d for d in sessions(api, sym) if d < today or (d == today and done_today)]   # finished sessions only
+        if 'hourly' in what: fetch_hourly(api, sym)
         if 'regime' in what: fetch_regime(api, sym)
         if 'range' in what: fetch_range(api, sym, days)
         if 'frames' in what: fetch_frames(api, sym, days)
