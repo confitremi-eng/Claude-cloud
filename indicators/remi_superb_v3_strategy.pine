@@ -1,6 +1,6 @@
 //@version=6
 // Remi Superb v3 策略：給 TradingView 策略測試器回測用，訊號和規則同 Remi Superb v3（自動辨識商品和週期），說明見 indicators/remi_superb.md 第 8 節
-//   NQ / MNQ 2 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 3R
+//   NQ / MNQ 2 分 K：趨勢訊號（趨勢已持續 0–400 分）+ MIX 區間突破，目標 3R
 //   NQ / MNQ 3 分 K：趨勢訊號（趨勢已持續 90–120 分），目標 1R
 //   NQ / MNQ 5 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 2R
 //   QQQ / SPY 1 分 K、NQ 1 分 K 只開美股盤（RTH）：ETF 設定 (35, 0, 8, 1)，目標 3R（QQQ、NQ RTH 另加 NQ 2 分 K 不反向）
@@ -102,7 +102,7 @@ float  stU      = isNQ ? 35.0 : isES ? 8.0 : isTX ? 60.0 : isQQ ? 1.0 : isSP ? 1
 float  distU    = isETF ? 7.0 : 3.0
 bool   useWin   = not isETF
 int    winLo    = nq3 ? 90 : isTX ? 60 : 0
-int    winHi    = nq3 ? 120 : isTX ? 120 : 180
+int    winHi    = nq3 ? 120 : isTX ? 120 : isNQ and tfp == "2" ? 400 : 180   // NQ 2m 2026-10-21 從 180 放寬到 400（trend_cap.py）
 bool   mixUse   = isNQ and not nq3
 float  tgtR     = nq3 ? 1.0 : nq5 ? 2.0 : 3.0
 int    qtyUse   = isStock ? qtyEtf : qtyFut

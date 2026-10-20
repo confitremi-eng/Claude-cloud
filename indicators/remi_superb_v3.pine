@@ -1,7 +1,7 @@
 //@version=6
 // Remi Superb v3：自動辨識商品和週期，套用回測過的做法，只發「可交易的 Buy」和「可交易的 Sell」兩個快訊
 // 狀態：大致完成（2026-10-19），之後只做小修
-//   NQ / MNQ 2 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 3R              回測每年 +166R，回撤 12.5R
+//   NQ / MNQ 2 分 K：趨勢訊號（趨勢已持續 0–400 分）+ MIX 區間突破，目標 3R              回測每年 +210R，回撤 17R
 //   NQ / MNQ 3 分 K：趨勢訊號（趨勢已持續 90–120 分），目標 1R                           勝率 74%，每年 +20R，回撤 2R
 //   NQ / MNQ 5 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 2R              每年 +90R，回撤 11R
 //   QQQ 1 分 K：ETF 設定 (35, 0, 8, 1)、Trend Judge 門檻 0.5、離慢線 ≤ 7 ATR、NQ 2 分 K 不反向，目標 3R   每年 +66R，回撤 17R
@@ -142,7 +142,7 @@ float  stU      = isNQ ? 35.0 : isES ? 8.0 : isTX ? 60.0 : isQQ ? 1.0 : isSP ? 1
 float  distU    = isETF ? 7.0 : 3.0
 bool   useWin   = not isETF
 int    winLo    = nq3 ? 90 : isTX ? 60 : 0
-int    winHi    = nq3 ? 120 : isTX ? 120 : 180
+int    winHi    = nq3 ? 120 : isTX ? 120 : isNQ and tfp == "2" ? 400 : 180   // NQ 2m 2026-10-21 從 180 放寬到 400（trend_cap.py）
 bool   mixUse   = isNQ and not nq3
 float  tgtR     = nq3 ? 1.0 : nq5 ? 2.0 : 3.0
 string ruleTxt  = isETF ? "ETF 設定 " + sigTxt + "，" + str.tostring(tgtR) + "R" + ((isQQ or isNqR) and qNqOn ? "，NQ 2m 不反向" : "") + (isNqR ? "（代替 QQQ）" : "") : "趨勢 " + str.tostring(winLo) + "–" + str.tostring(winHi) + " 分" + (mixUse ? " + MIX 突破" + (mixClose ? "（收線 2R）" : "") : "") + "，" + str.tostring(tgtR) + "R，訊號 " + sigTxt
