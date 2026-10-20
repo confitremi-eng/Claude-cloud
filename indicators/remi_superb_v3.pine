@@ -83,8 +83,8 @@ showPos   = input.bool(true, "畫出持倉的停損和目標", group=grpA, inlin
 stopCol   = input.color(#F23645, "", group=grpA, inline="ps")
 tgtCol    = input.color(#36FE02, "", group=grpA, inline="ps")
 showTbl   = input.bool(true, "顯示狀態表格", group=grpA, inline="tbl")
-tblStyle  = input.string("精簡", "", options=["精簡", "完整"], group=grpA, inline="tbl")
-tblSize   = input.string("極小", "字", options=["極小", "小", "中", "大"], group=grpA, inline="tbl", tooltip="精簡：短標題、一列一行，只顯示這個商品用得到的列（版面小或分割畫面時用）。完整：每列都顯示，附設定說明")
+tblStyle  = input.string("精簡", "", options=["迷你", "精簡", "完整"], group=grpA, inline="tbl")
+tblSize   = input.string("極小", "字", options=["極小", "小", "中", "大"], group=grpA, inline="tbl", tooltip="迷你：最多三列（趨勢 + NQ 2m、持倉或提示、GEX），手機或很小的版面用。精簡：短標題、一列一行，只顯示這個商品用得到的列（版面小或分割畫面時用）。完整：每列都顯示，附設定說明")
 tblPos    = input.string("左下", "表格位置", options=["左下", "右下", "左上", "右上"], group=grpA, tooltip="表格放在圖表的哪個角落")
 tblPad    = input.int(2, "表格放上面時，上方留白（列）", minval=0, maxval=6, group=grpA, tooltip="表格放左上或右上時，空幾列避開圖表上方的商品名稱和指標名稱；放下面時不留白")
 showRaw   = input.bool(false, "也標出原版買賣訊號（小三角）", group=grpA, inline="raw")
@@ -513,7 +513,14 @@ addRow(int r, string lbl, string val, color vb, string ha) =>
     table.cell(st, 1, r, val, text_color=color.white, bgcolor=vb, text_size=tblTxt, text_halign=ha)
 if barstate.islast and showTbl
     table.clear(st, 0, 0, 1, tblPad + 8)
-    bool  compact = tblStyle == "精簡"
+    bool  mini    = tblStyle == "迷你"                                // 迷你：最多三列，用精簡的文字
+    bool  compact = tblStyle != "完整"
+    string miniTj  = ""
+    color  miniTjC = color.gray
+    string miniNq  = ""
+    string miniMix = ""
+    string miniGex = ""
+    color  miniGexC = color.gray
     string ha     = compact ? text.align_center : text.align_left    // 精簡置中，完整靠左
     color bg      = color.new(color.black, 20)
     color blank   = color.new(color.black, 100)
@@ -526,15 +533,19 @@ if barstate.islast and showTbl
     // 設定
     color  setCol = gradeTxt == "主力" ? color.new(#2962FF, 30) : gradeTxt == "可做" ? color.new(#2962FF, 55) : gradeTxt == "邊緣" ? color.new(color.orange, 40) : color.new(color.red, 30)
     string setTxt = prof == "無" ? "不支援 " + syminfo.ticker : compact ? prof + " " + tfp + "m " + gradeTxt : prof + " " + tfp + " 分 K（" + gradeTxt + "）\n" + ruleTxt
-    addRow(row, "設定", setTxt, setCol, ha)
-    row += 1
+    if not mini
+        addRow(row, "設定", setTxt, setCol, ha)
+        row += 1
     // Trend Judge 和趨勢已持續
     string tjTxt = not tjLinked ? "沒有資料" : tjDirI == 2 ? "強UP" : tjDirI == 1 ? "UP" : tjDirI == -2 ? "強Down" : tjDirI == -1 ? "DOWN" : "MIX"
     color  tjCol = not tjLinked ? color.gray : tjDirI == 2 ? color.lime : tjDirI == 1 ? color.green : tjDirI == -2 ? color.maroon : tjDirI == -1 ? color.red : color.orange
     if compact
         string tjShort = tjTxt + (trendDir != 0 ? " " + str.tostring(trendMin, "#") + "分" + (useWin and inWin ? " ✅" : "") : "")
-        addRow(row, "趨勢", tjShort, tjCol, ha)
-        row += 1
+        miniTj  := tjShort
+        miniTjC := tjCol
+        if not mini
+            addRow(row, "趨勢", tjShort, tjCol, ha)
+            row += 1
     else
         addRow(row, "Trend Judge", tjTxt, tjCol, ha)
         row += 1
@@ -544,15 +555,18 @@ if barstate.islast and showTbl
     // 持倉
     color  posCol = vPos == 1 ? color.new(color.green, 40) : vPos == -1 ? color.new(color.red, 40) : bg
     string posTxt = compact ? (not active ? "不發訊號" : vPos == 0 ? "空手" : (vPos == 1 ? "多" : "空") + " 停 " + fmtP(vStop) + " 標 " + fmtP(vTgt)) : not active ? "這個商品 / 週期不發訊號" : vPos == 0 ? "空手，可以接訊號" : (vPos == 1 ? "多單" : "空單") + (vKind == 2 ? "（MIX 突破）" : "（趨勢）") + "　進 " + fmtP(vEntry) + "　停 " + fmtP(vStop) + "　標 " + fmtP(vTgt) + "　已 " + str.tostring(bar_index - vBar) + " 根"
-    addRow(row, compact ? "持倉" : "持倉（虛擬）", posTxt, posCol, ha)
-    row += 1
+    if not mini
+        addRow(row, compact ? "持倉" : "持倉（虛擬）", posTxt, posCol, ha)
+        row += 1
     // NQ 2m（QQQ、NQ RTH）
     if qNqUse
         string nqState = not nqHas ? "讀不到" : nqDir == 2 ? "強UP" : nqDir == 1 ? "UP" : nqDir == -2 ? "強Down" : nqDir == -1 ? "DOWN" : "MIX"
         string nqTxt   = compact ? nqState + (nqHas and nqDir != 0 ? " " + str.tostring(nqMin, "#") + "分" : "") + (nqHas ? (nqDir > 0 ? " 只做買" : nqDir < 0 ? " 只做賣" : " 都可以") : "") : not nqHas ? "讀不到 " + nqSym + "（不擋訊號）" : nqState + (nqDir != 0 ? "　趨勢 " + str.tostring(nqMin, "#") + " 分" : "") + "　→ " + (nqDir > 0 ? "只做買" : nqDir < 0 ? "只做賣" : "買賣都可以")
         color  nqCol   = not nqHas ? color.gray : nqDir == 2 ? color.lime : nqDir == 1 ? color.green : nqDir == -2 ? color.maroon : nqDir == -1 ? color.red : color.orange
-        addRow(row, "NQ 2m", nqTxt, nqCol, ha)
-        row += 1
+        miniNq := "2m " + (not nqHas ? "讀不到" : nqState + (nqDir > 0 ? " 只買" : nqDir < 0 ? " 只賣" : ""))
+        if not mini
+            addRow(row, "NQ 2m", nqTxt, nqCol, ha)
+            row += 1
     // GEX：朝 flip 走 / 離開 flip（只顯示）
     if gexOn
         string gexTxt = ""
@@ -563,8 +577,11 @@ if barstate.islast and showTbl
             string dist = str.tostring(math.abs(gexDiff), "#.##")
             string pct  = str.tostring(math.abs(gexDiff) / gexFlip * 100, "#.##")
             gexTxt := compact ? (below ? "下 " + dist + "　買朝 flip ✅" : "上 " + dist + "　賣朝 flip ✅") : "QQQ " + str.tostring(qqqPx, "#.##") + " 在 flip " + str.tostring(gexFlip, "#.##") + (below ? " 下面 " : " 上面 ") + dist + "（" + pct + "%）→ " + (below ? "買：朝 flip 走 ✅　賣：離開 flip" : "賣：朝 flip 走 ✅　買：離開 flip")
-        addRow(row, "Flip", gexTxt, color.new(#9C27B0, 40), ha)
-        row += 1
+        miniGex  := not gexHas ? "請輸入 flip" : (gexDiff < 0 ? "Flip 下 " : "Flip 上 ") + str.tostring(math.abs(gexDiff), "#.##")
+        miniGexC := color.new(#9C27B0, 40)
+        if not mini
+            addRow(row, "Flip", gexTxt, color.new(#9C27B0, 40), ha)
+            row += 1
     // GEX setup（只有 NQ RTH）：持倉，或現在為什麼沒有訊號（setup 開關、週期、flip、時間、趨勢、訊號還差什麼）
     if isNqR and (gsOn or gexOn)
         string gsTxt = ""
@@ -597,13 +614,19 @@ if barstate.islast and showTbl
                 string trigLong  = armed ? (wantBuy ? "收盤站上 " : "收盤跌破 ") + fmtP(trigPx) + (wantBuy ? " 而且在 EMA 上" : " 而且在 EMA 下") : "還沒創 " + str.tostring(gsStage) + (wantBuy ? " 根新低（要先回檔）" : " 根新高（要先反彈）")
                 gsTxt := compact ? sideTxt + "｜趨勢 ✓｜" + trigShort : flipTxt + "；趨勢 " + tjNow + " ✓；訊號：" + trigLong
         color gsCol = gsPos == 1 ? color.new(color.green, 40) : gsPos == -1 ? color.new(color.red, 40) : gsOk ? color.new(#9C27B0, 30) : color.new(color.gray, 30)
-        addRow(row, compact ? "GEX" : "GEX setup", gsTxt, gsCol, ha)
-        row += 1
+        if gsOn                                                         // setup 沒開時第 3 列只顯示 flip
+            miniGex  := gsReady and miniGex != "" ? miniGex + "｜" + gsTxt : gsTxt
+            miniGexC := gsCol
+        if not mini
+            addRow(row, compact ? "GEX" : "GEX setup", gsTxt, gsCol, ha)
+            row += 1
     // MIX 區間（精簡時只在 NQ 2、5 分 K 顯示）
     if mixUse or not compact
         string mixTxt = not mixUse ? "這個商品 / 週期不做" : bxLive and bar_index <= bxEnd ? (compact ? (mixClose ? "收 " : "") + "上 " + fmtP(bxUpL) + " 下 " + fmtP(bxDnL) : (mixClose ? "等收線突破　上 " : "等突破　上 ") + fmtP(bxUpL) + "　下 " + fmtP(bxDnL) + "　剩 " + str.tostring((bxEnd - bar_index) * tfMin, "#") + " 分") : not na(mbStart) ? (compact ? "成形中 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + "分" : "MIX 已 " + str.tostring((bar_index - mbStart + 1) * tfMin, "#") + " 分（滿 60 分成形）") : (compact ? "無" : "沒有區間")
-        addRow(row, compact ? "MIX" : "MIX 區間", mixTxt, bg, ha)
-        row += 1
+        miniMix := mixUse ? mixTxt : ""
+        if not mini
+            addRow(row, compact ? "MIX" : "MIX 區間", mixTxt, bg, ha)
+            row += 1
     // 提示
     string warn = ""
     if prof == "無"
@@ -624,7 +647,21 @@ if barstate.islast and showTbl
         warn := compact ? "FOMC 日不做" : "FOMC 當天整天不做（交易規則設定）"
     else if active and mixUse and mixPm
         warn := compact ? "16–20 不做 MIX" : "美東 16:00–20:00 不做 MIX 突破，趨勢訊號照常（交易規則設定）"
-    if warn != ""
+    if mini
+        // 第 1 列：商品週期｜Trend Judge 和趨勢分鐘（+ NQ 2m 方向）
+        string miniLbl = prof == "無" ? "不支援" : (prof == "NQ RTH" ? "RTH" : prof) + " " + tfp + "m"
+        addRow(row, miniLbl, miniTj + (miniNq != "" ? "｜" + miniNq : ""), miniTjC, ha)
+        row += 1
+        // 第 2 列：有持倉就顯示持倉；空手時有提示先顯示提示，沒有就顯示 MIX 區間
+        if vPos != 0 or warn == ""
+            addRow(row, "持倉", posTxt + (vPos == 0 and miniMix != "" ? "｜MIX " + miniMix : ""), posCol, ha)
+        else
+            addRow(row, "提示", warn, color.new(color.orange, 20), ha)
+        row += 1
+        // 第 3 列：GEX（只在 NQ RTH 打開 GEX 時）
+        if miniGex != ""
+            addRow(row, "GEX", miniGex, miniGexC, ha)
+    else if warn != ""
         addRow(row, "提示", warn, color.new(color.orange, 20), ha)
 
 // ═════════════════ 快訊：v3 兩個（所有商品共用）+ GEX setup 兩個（NQ RTH，預設關）═════════════════
