@@ -13,7 +13,8 @@
 //   一次一筆；持有 60 根 K 還沒出場就收盤平倉；NQ / ES 美東 17:00 休市前平倉；TXF、QQQ、SPY、NQ RTH 在每段交易時間最後一根平倉
 //   不開新倉：事件時段、垃圾時間（美東 12:00–13:05）、FOMC 日、週五台灣時間週六 02:00 以後
 // Trend Judge 用 1 分 K 收盤推算（同回測）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
-// 沒有 GEX setup（它只在指標版）
+// GEX setup（預設關，NQ RTH 1 分 K）：(35, 0, 8, 1) + Trend Judge 順勢 + 朝手動輸入的 QQQ flip 走，目標 3R；垃圾時間只做賣
+//   跟 v3 的單共用一個倉位（空手才進場）；回測整段歷史都用同一個 flip，所以 GEX setup 的歷史回測不準
 strategy("Remi Superb v3 策略", overlay=true, pyramiding=0, process_orders_on_close=true, calc_on_every_tick=false, default_qty_type=strategy.fixed, default_qty_value=1, initial_capital=50000, currency=currency.USD, commission_type=strategy.commission.cash_per_contract, commission_value=2.5, slippage=2, margin_long=0, margin_short=0, max_boxes_count=500, max_lines_count=500)
 
 // ═════════════════ 1. 商品 ═════════════════
@@ -29,7 +30,19 @@ qtyEtf    = input.int(100, "QQQ / SPY 股數", minval=1, group=grpQ, tooltip="QQ
 useTrend  = input.bool(true, "做趨勢訊號", group=grpQ)
 useMix    = input.bool(true, "做 MIX 區間突破（NQ 2、5 分 K）", group=grpQ)
 
-// ═════════════════ 3. 趨勢訊號過濾 ═════════════════
+// ═════════════════ 3. GEX：QQQ gamma flip ═════════════════
+grpG      = "GEX：QQQ gamma flip"
+gexFlip   = input.float(0.0, "QQQ gamma flip", minval=0, step=0.01, group=grpG, tooltip="從 ZeroGEX 抄 QQQ 的 gamma flip（填 QQQ 的價格，不是 NQ）；0 = 還沒填，GEX setup 不做。注意：策略回測整段歷史都用這一個值，實際 flip 每天都不同，所以 GEX setup 的歷史回測不準，只有填的那天之後才有意義（快訊下單沒問題）")
+qqqSym    = input.symbol("NASDAQ:QQQ", "QQQ 代號", group=grpG, tooltip="在 NQ 圖上用這個代號讀 QQQ 現價來跟 flip 比")
+
+// ═════════════════ 4. GEX setup（NQ RTH 1 分 K）═════════════════
+grpX      = "GEX setup（NQ RTH 1 分 K）"
+gsOn      = input.bool(false, "做 GEX setup（目標 3R）", group=grpX, tooltip="只在 NQ RTH 1 分 K：原版訊號（下面的階段、EMA）+ Trend Judge 同向（門檻 20 點）+ 朝 QQQ flip 走（QQQ 在 flip 下方只做買、上方只做賣），收盤市價進場，停損在訊號 K 和前一根的極值，目標 3R，持有 60 根或美東 16:00 平倉；週五截止後不做。跟指標版不同：這裡和 v3 的單共用一個倉位，要空手才進場，同一根 v3 也有單時做 v3 的")
+gsStage   = input.int(35, "階段", minval=2, group=grpX, inline="gs")
+gsEma     = input.int(8, "Ema number", minval=1, group=grpX, inline="gs", tooltip="預設 (35, 0, 8, 1)，同指標版")
+gsJunkSell = input.bool(true, "垃圾時間照做 GEX 賣單", group=grpX, tooltip="垃圾時間（「不交易的時間」設定）所有單都不做，只有 GEX setup 的賣單例外，同指標版")
+
+// ═════════════════ 5. 趨勢訊號過濾 ═════════════════
 grpR      = "趨勢訊號過濾"
 h1Len     = input.int(20, "1 小時 EMA 長度", minval=1, group=grpR, tooltip="看上一根已收完的 1 小時 K：買要收在 EMA 上方，賣要在下方。回測 EMA 15–30 都接近、20 最好")
 riskMult  = input.float(0.95, "停損至少（ATR 倍數）", minval=0, step=0.05, group=grpR, inline="rk")
@@ -37,7 +50,7 @@ atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", toolt
 qNqOn     = input.bool(true, "QQQ / NQ RTH：NQ 2 分 K 不反向", group=grpR, inline="qnq")
 nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpR, inline="qnq", tooltip="只影響 QQQ 和 NQ RTH：上一根已收完的 NQ 2 分 K（24 小時盤）Trend Judge 跟訊號反向就不做。讀不到 NQ 時不擋")
 
-// ═════════════════ 4. 不交易的時間（趨勢訊號和 MIX 共用）═════════════════
+// ═════════════════ 6. 不交易的時間（趨勢訊號和 MIX 共用）═════════════════
 grpN      = "不交易的時間（趨勢訊號和 MIX 共用）"
 avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpN, tooltip="美東時間，看 K 棒收盤：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00")
 junkOn    = input.bool(true, "垃圾時間：美東", group=grpN, inline="junk")
@@ -51,17 +64,17 @@ friCut    = input.bool(true, "週五：台灣時間週六", group=grpN, inline="
 friCutH   = input.int(2, "", minval=0, maxval=6, group=grpN, inline="fri")
 friCutM   = input.int(0, "點　分以後不開新倉", minval=0, maxval=59, group=grpN, inline="fri", tooltip="預設 02:00 = 美東週五 14:00。已經在持倉中的照常出場")
 
-// ═════════════════ 5. MIX 區間突破（NQ 2、5 分 K）═════════════════
+// ═════════════════ 7. MIX 區間突破（NQ 2、5 分 K）═════════════════
 grpM      = "MIX 區間突破（NQ 2、5 分 K）"
 mixPmOff  = input.bool(true, "不做美東 16–20（收盤後）", group=grpM, tooltip="K 棒收盤在美東 16:00–20:00（台灣時間 04:00–08:00）不掛 MIX 突破單；碰到突破價區間照樣作廢")
 mixClose  = input.bool(false, "等收線才進場（目標 2R）", group=grpM, tooltip="關（預設）：在突破價掛停損單，碰到就成交，目標同週期（2 分 K 3R、5 分 K 2R）。開：K 棒收在突破價外才在那根收盤市價進場，目標 2R，停損一樣在中線；只碰到、沒收出去不算，區間繼續有效。回測一年：2 分 K +166R → +146R；5 分 K +90R → +83R")
 
-// ═════════════════ 6. 持倉和出場 ═════════════════
+// ═════════════════ 8. 持倉和出場 ═════════════════
 grpO      = "持倉和出場"
 holdBars  = input.int(60, "最多持有幾根 K", minval=1, group=grpO, tooltip="停損和目標都沒碰到，持有這麼多根 K 後收盤平倉（回測都是 60 根）")
 flatHalt  = input.bool(true, "NQ / ES 在美東 17:00 休市前平倉", group=grpO, tooltip="美東 17:00 收盤那根 K 平倉，也不讓 MIX 突破單掛過休市。假日提早收盤不會自動處理")
 
-// ═════════════════ 7. 線和表格 ═════════════════
+// ═════════════════ 9. 線和表格 ═════════════════
 grpA      = "線和表格"
 showPos   = input.bool(true, "畫出持倉的停損和目標", group=grpA, inline="ps")
 stopCol   = input.color(#F23645, "", group=grpA, inline="ps")
@@ -72,13 +85,13 @@ boxLnCol  = input.color(#9598A1, "線", group=grpA, inline="bx")
 showTbl   = input.bool(true, "顯示狀態表格", group=grpA, inline="tbl")
 tblPos    = input.string("左下", "", options=["左下", "右下", "左上", "右上"], group=grpA, inline="tbl")
 
-// ═════════════════ 8. 訊號參數 ═════════════════
+// ═════════════════ 10. 訊號參數 ═════════════════
 grpS      = "訊號參數（階段、Ema number）"
 sigMode   = input.string("自動（依商品）", "訊號", options=["自動（依商品）", "自訂"], group=grpS, tooltip="自動：NQ / ES / TXF 用 (20, 0, 8, 1)，QQQ / SPY / NQ RTH 用 (35, 0, 8, 1)。自訂：所有商品都改用下面這一列（沒有回測過）")
 v3Stage   = input.int(20, "自訂　階段", minval=2, group=grpS, inline="v3s")
 v3Ema     = input.int(8, "Ema number", minval=1, group=grpS, inline="v3s")
 
-// ═════════════════ 9. Trend Judge ═════════════════
+// ═════════════════ 11. Trend Judge ═════════════════
 grpT      = "Trend Judge（門檻依商品自動）"
 tjCalc    = input.string("1 分 K 推算（同回測）", "算法", options=["1 分 K 推算（同回測）", "圖表 K 棒推算"], group=grpT, tooltip="門檻（一般 / 強勢）：NQ 10 / 35、NQ RTH 20 / 40、ES 4 / 8、TXF 30 / 60、QQQ 0.5 / 1、SPY 0.8 / 1.6")
 tjEmaLen  = input.int(1130, "EMA 長度", minval=1, group=grpT)
@@ -233,6 +246,34 @@ int nqDir = request.security(ticker.modify(nqSym, session.extended), "2", nqTJ()
 bool qNqUse   = (isQQ or isNqR) and qNqOn
 bool nqBuyOk  = not qNqUse or na(nqDir) or nqDir >= 0
 bool nqSellOk = not qNqUse or na(nqDir) or nqDir <= 0
+
+// ═════════════════ GEX setup（NQ RTH）：(35, 0, 8, 1) + Trend Judge 順勢 + 朝 QQQ gamma flip 走（同指標版）═════════════════
+float qqqPx    = isQQ ? close : request.security(qqqSym, timeframe.period, close)
+bool  gsActive = gsOn and isNqR and (tfp == "1" or otherTf)
+bool  gsReady  = gexFlip > 0 and not na(qqqPx)
+bool  gNewLow  = low < ta.lowest(low, gsStage)[1]
+bool  gNewHigh = high > ta.highest(high, gsStage)[1]
+var float gRefHigh = na
+var float gRefLow  = na
+var bool  gArmBuy  = false
+var bool  gArmSell = false
+float gEma      = ta.ema(close, gsEma)
+bool  gTrigBuy  = gArmBuy and close > gRefHigh
+bool  gTrigSell = gArmSell and close < gRefLow
+if gTrigBuy
+    gArmBuy := false
+else if gNewLow
+    gRefHigh := high
+    gArmBuy  := true
+if gTrigSell
+    gArmSell := false
+else if gNewHigh
+    gRefLow  := low
+    gArmSell := true
+bool gsEnd   = etMin >= 960 or session.islastbar
+bool junkNow = junkAt(tClose)
+bool gsBuy   = gsActive and gsReady and gTrigBuy and close > gEma and tjLinked and tjDirI >= 1 and qqqPx < gexFlip and not friLate and not gsEnd and not junkNow
+bool gsSell  = gsActive and gsReady and gTrigSell and close < gEma and tjLinked and tjDirI <= -1 and qqqPx > gexFlip and not friLate and not gsEnd and (not junkNow or gsJunkSell)
 
 // ═════════════════ 趨勢訊號 ═════════════════
 h1Vals() =>
@@ -397,6 +438,22 @@ if goShort
     posStop := sellStop
     posTgt  := tgtS
 
+// GEX setup：空手、這根 v3 沒有單時，收盤市價進場
+bool goGsL = canEnter and gsBuy and not goLong and not goShort and not goMixL and not goMixS
+bool goGsS = canEnter and gsSell and not goGsL and not goLong and not goShort and not goMixL and not goMixS
+if goGsL
+    float tgtGL = close + 3.0 * (close - buyStop)
+    strategy.entry("G L", strategy.long, qty=qtyUse, comment="GEX 買", alert_message=entryMsg("buy", "GEX setup", close, buyStop, tgtGL))
+    strategy.exit("G L x", "G L", stop=buyStop, limit=tgtGL, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
+    posStop := buyStop
+    posTgt  := tgtGL
+if goGsS
+    float tgtGS = close - 3.0 * (sellStop - close)
+    strategy.entry("G S", strategy.short, qty=qtyUse, comment="GEX 賣", alert_message=entryMsg("sell", "GEX setup", close, sellStop, tgtGS))
+    strategy.exit("G S x", "G S", stop=sellStop, limit=tgtGS, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
+    posStop := sellStop
+    posTgt  := tgtGS
+
 // MIX 突破：區間有效、空手，而且下一根不在事件時段、美東 16–20、休市那根、週五截止後，才在上下突破價掛停損單
 bool mixArm = not mixClose and active and mixUse and useMix and canEnter and not goLong and not goShort and bxLive and bar_index >= bxForm and bar_index < bxEnd and not evtNext and not pmNext and not haltNxt and not friNext and not friLate and not fomcNext
 if mixArm
@@ -427,7 +484,7 @@ if barstate.islast and showTbl
     string tjTxt = not tjLinked ? "沒有資料" : tjDirI == 2 ? "強UP" : tjDirI == 1 ? "UP" : tjDirI == -2 ? "強Down" : tjDirI == -1 ? "DOWN" : "MIX"
     color  tjCol = not tjLinked ? color.gray : tjDirI == 2 ? color.lime : tjDirI == 1 ? color.green : tjDirI == -2 ? color.maroon : tjDirI == -1 ? color.red : color.orange
     addRow(1, "趨勢", tjTxt + (trendDir != 0 ? " " + str.tostring(trendMin, "#") + "分" + (useWin and inWin ? " ✅" : "") : ""), tjCol)
-    addRow(2, "下單", (isStock ? str.tostring(qtyEtf) + " 股" : str.tostring(qtyFut) + " 口") + (mixUse and useMix ? "，趨勢 + MIX" + (mixClose ? "（收線 2R）" : "") : "，趨勢"), color.new(color.black, 20))
+    addRow(2, "下單", (isStock ? str.tostring(qtyEtf) + " 股" : str.tostring(qtyFut) + " 口") + (mixUse and useMix ? "，趨勢 + MIX" + (mixClose ? "（收線 2R）" : "") : "，趨勢") + (gsActive ? (gsReady ? " + GEX" : " + GEX（請輸入 flip）") : ""), color.new(color.black, 20))
     string warn = prof == "無" ? "只支援 NQ / ES / TXF / QQQ / SPY" : isES and not esOn ? "ES 預設不交易" : isNQ and tfp == "1" and profSel == "自動" ? "1m 請開 RTH 或選 NQ RTH" : not okTf ? (otherTf ? "不是建議週期（沒回測過）" : "不是建議週期，不交易") : isStock and syminfo.session == session.extended ? "請關延長交易時段" : isStock ? "手續費請改每股約 0.005" : ""
     if warn != ""
         addRow(3, "提示", warn, color.new(color.orange, 20))
