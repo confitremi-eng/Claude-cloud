@@ -40,7 +40,7 @@ friCut    = input.bool(true, "週五美股盤：台灣時間週六", group=grpR,
 friCutH   = input.int(2, "", minval=0, maxval=6, group=grpR, inline="fri")
 friCutM   = input.int(0, "點　分以後不發新訊號", minval=0, maxval=59, group=grpR, inline="fri", tooltip="週五晚上的美股盤，到台灣時間週六這個時間以後就不發新訊號（趨勢訊號和 MIX 突破都一樣），已經在持倉中的照常出場。預設 02:00＝美東週五 14:00（夏令）/ 13:00（冬令）。所有商品都適用。NQ 2 分 K 一年回測：拿掉 9 個訊號，每年 +162R → +159R，回撤不變")
 h1Len     = input.int(20, "1 小時 EMA 長度", minval=1, group=grpR, tooltip="看上一根已收完的 1 小時 K：買要收盤在 1 小時 EMA 之上，賣要在之下")
-riskMult  = input.float(1.0, "停損至少幾個 ATR", minval=0, step=0.1, group=grpR, inline="rk")
+riskMult  = input.float(0.95, "停損至少幾個 ATR", minval=0, step=0.05, group=grpR, inline="rk")
 atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）。停損距離小於「倍數 × 上一根的 ATR」就不做")
 avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpR, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00。所有商品都一樣（回測也是）")
 mixPmOff  = input.bool(true, "MIX 突破不做美東 16–20（收盤後）", group=grpR, tooltip="只影響 NQ 2、5 分 K 的 MIX 突破：K 棒收盤時間在美東 16:00–20:00（台灣時間夏令 04:00–08:00、冬令 05:00–09:00）碰到突破價就不做，這個區間作廢（跟事件時段一樣）。趨勢訊號照常。回測一年：2 分 K 每年 +162R → +168R、回撤 16R → 12.5R；5 分 K +82R → +94R、回撤 14R → 11R，前後半年都一樣")
