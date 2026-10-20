@@ -1,18 +1,24 @@
 """python -m unittest test_autotrade -v（在 autotrade/ 裡跑）"""
 import asyncio
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 from aiohttp.test_utils import TestClient, TestServer
 
 from broker import DryRunBroker
 from engine import ET, Engine, trading_day
+import main
 from main import DEFAULTS, webhook_app
 from notify import Notifier, Tracker
 from signals import parse_contract, parse_payload, round_tick, ticker_root
 
 SECRET = "test-secret-1234567890"
+
+# 測試的 webhook 事件寫到暫存資料夾，不要混進真正的 logs/（在主機上跑測試時會被當成真的快訊記錄）
+main.LOGS = Path(tempfile.mkdtemp(prefix="autotrade-test-"))
 
 
 def cfg(**kw):

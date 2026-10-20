@@ -77,7 +77,7 @@ ssh -i ~/.ssh/remi_vultr root@64.176.198.47
 
 在主機上常用的指令：
 
-- 填 / 改 IBKR 登入資料，並啟動 Gateway：`remi-set-ibkr`。帳密只存在主機的 `/home/trader/ibc/config.ini`。
+- 填 / 改 IBKR 登入資料，並啟動 Gateway：`remi-set-ibkr`。要填**模擬帳戶專屬的使用者名稱**（DUR282640 是 `remibmoney`），不是主帳號；主帳號底下有多個模擬使用者時，IBKR 會拒絕用主帳號登入模擬。帳密只存在主機的 `/home/trader/ibc/config.ini`。
 - 填 / 改 Discord 通知網址：`remi-set-discord`（重啟 autotrade，頻道會收到「🚀 autotrade 啟動」）。
 - 看狀態：`systemctl status ibgateway autotrade`
 - 看即時記錄：`journalctl -u autotrade -f`
