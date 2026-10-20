@@ -85,9 +85,12 @@
 
 ## Remi Superb v3：自動辨識商品（2026-10-19，大致完成）
 
+> **⚠️ 2026-10-20 樣本外驗證不過關**（[backtest/oos_plan.md](backtest/oos_plan.md) 第 7 節）：規則凍結，用 2021-10 .. 2025-10 的 NQ 重跑，NQ 2m 樣本外 4 年每年都虧（合計 −244R，每筆 −0.10R，扣成本前也是 0 附近），5m、3m 也一樣；NQ RTH 等於打平。下面的回測數字只代表 2025-10 .. 2026-10 這一年。**建議停止實單，只做模擬，重新研究。**
+
+
 檔案：[remi_superb_v3.pine](remi_superb_v3.pine)。一支指標放在任何支援的圖上，自動套用該商品、該週期回測過的做法；只有兩個快訊「Remi Superb v3 Buy / Sell」，所有商品共用。也可以在「商品設定」手動指定。
 
-**狀態：大致完成（2026-10-19），建議用這支。** 規則都回測過，之後只做小修。後來試過、沒有加進來的改法（一轉 MIX 就進場、趨勢拉開時把階段改短、單邊日參數 (30, 0, 13, 1)、改 2R 等）見第 5 節。還要做的：在 TradingView 上編譯確認、用 MNQ 小口數前瞻追蹤（見第 6 節）。
+**狀態：2026-10-19 標成大致完成；2026-10-20 樣本外驗證不過關（見上方警告）。** 規則都回測過，之後只做小修。後來試過、沒有加進來的改法（一轉 MIX 就進場、趨勢拉開時把階段改短、單邊日參數 (30, 0, 13, 1)、改 2R 等）見第 5 節。還要做的：在 TradingView 上編譯確認、用 MNQ 小口數前瞻追蹤（見第 6 節）。
 
 | 商品 | 週期 | 做法 | 一次一筆回測 | 表格標示 |
 |---|---|---|---|---|
@@ -971,6 +974,7 @@ python3 -I rbs/qqq_3008_when.py [--check | --gex 8,13]           # (30, 0, 8, 1)
 python3 -I rbs/gex_params.py                                       # gamma flip setup 的階段 × EMA（NQ RTH）
 python3 -I rbs/gex_trend_src.py                                    # gamma flip setup 看 RTH 還是 ETH 的趨勢
 python3 -I rbs/gex_matrix.py [--tj | --th]                         # GEX setup 勝率矩陣（v3 預設）；--tj 依 RTH Trend Judge 狀態；--th 掃趨勢門檻
+python3 -I rbs/oos_check.py [main | rules | neighbours | scaled]   # v3 樣本外驗證（2021-10 .. 2026-10，規則凍結）
 ```
 
 更早的研究（門檻 20 / 40 時代的推薦設定、亞洲盤、停損方式等）在 [remis_buy_sell.md](remis_buy_sell.md) 第 4 節。
