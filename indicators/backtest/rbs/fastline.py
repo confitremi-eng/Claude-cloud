@@ -1,7 +1,7 @@
 """v3 trend signals by where the close is against the 5 s EMA1130 (Trend Judge's fast line) at the signal.
 
   cd indicators/backtest
-  python3 -I rbs/fastline.py [2 | 5]          # default 2
+  python3 -I rbs/fastline.py [2 | 5] [slow]   # default 2, the 5 s fast line; slow = the 15 s EMA1130 instead
 
 Remi's observation (2026-10-20): a trend sell came while price was already back above the fast line, and such
 signals win much less. Side of the fast line = (close - 5 s EMA1130) on the trade's side: + = buy above / sell below
@@ -19,17 +19,19 @@ PERIODS = (('v3 那一年 25/10–26/10', '2025-10-15', '2026-10-18'), ('2025/01
            ('樣本外 4 年 21/10–25/10', '2021-10-15', '2025-10-14'))
 
 
-def main(tf=2):
+def main(tf=2, line='emaF'):
+    lname = '5 秒 EMA1130（快線）' if line == 'emaF' else '15 秒 EMA1130（慢線）'
+    short = '快線' if line == 'emaF' else '慢線'
     R_main = 3.0 if tf == 2 else 2.0
     one = oc.load(); M = oc.Market(one); C = M.ctx(tf)
     df = C.df
     s = oc.trend_set(df, M.H, tf, 20, df.thr.values, 3.0, 0, 180)
     lm = pd.DatetimeIndex(df.last_min)
-    fast = M.tdm['emaF'].reindex(lm).values
+    fast = M.tdm[line].reindex(lm).values
     _, atr = mm.ss.bar_context(df, tf)
     s = s.copy()
     s['fast'] = (df.close.values[s.i] - fast[s.i]) * s.side.values / atr[s.i]
-    print(f'NQ {tf} 分 K，v3 的趨勢訊號（凍結規則），每筆扣 1 點；「快線那邊」= 收盤在 5 秒 EMA1130 的哪一邊（+ 順著交易方向）')
+    print(f'NQ {tf} 分 K，v3 的趨勢訊號（凍結規則），每筆扣 1 點；分組 = 收盤在 {lname} 的哪一邊（+ 順著交易方向）')
     for nm, a, b in PERIODS:
         z = s[(s.date >= a) & (s.date <= b)]
         d = sorted(z.date.unique()); split = d[len(d) // 2]
@@ -37,11 +39,11 @@ def main(tf=2):
         print(f'\n  ## {nm}')
         print(f'   {"":<24}   筆數   1R 勝率 每筆   2R 勝率 每筆   3R 勝率 每筆')
         R(z, '全部')
-        R(z[z.fast > 0], '在快線順向那邊（正常）')
-        R(z[z.fast <= 0], '已經回到快線另一邊')
+        R(z[z.fast > 0], f'在{short}順向那邊')
+        R(z[z.fast <= 0], f'已經回到{short}另一邊')
         for lo, hi in ((-99, -0.5), (-0.5, 0), (0, 0.5), (0.5, 1), (1, 99)):
-            R(z[(z.fast >= lo) & (z.fast < hi)], f'　離快線 {"" if lo == -99 else format(lo, "+g")}～{"" if hi == 99 else format(hi, "+g")} ATR')
-    print('\n## 逐年（10 月到 10 月）：1R 勝率 / 3R 每筆（快線順向 | 已回到另一邊）')
+            R(z[(z.fast >= lo) & (z.fast < hi)], f'　離{short} {"" if lo == -99 else format(lo, "+g")}～{"" if hi == 99 else format(hi, "+g")} ATR')
+    print(f'\n## 逐年（10 月到 10 月）：1R 勝率 / 3R 每筆（{short}順向 | 已回到另一邊）')
     for nm, a, b in oc.YEARS:
         z = s[(s.date >= a) & (s.date <= b)]
         g, w = z[z.fast > 0], z[z.fast <= 0]
@@ -49,12 +51,12 @@ def main(tf=2):
         print(f'   {nm:<16} 順向 {f(g)}   |   另一邊 {f(w)}')
     mix0 = oc.mix_list(C)
     print(f'\n## 逐年放回 v3（趨勢 + MIX，一次一筆，{R_main:g}R）：每年 R / 回撤')
-    for lab, T in (('v3 現在', s), ('加條件：快線順向', s[s.fast > 0])):
+    for lab, T in (('v3 現在', s), (f'加條件：{short}順向', s[s.fast > 0])):
         t = oc.sim(C, T, mix0, R_main, R_main)
         print(f'   {lab:<14} ' + '  '.join(f'{nm[:2]} {oc.year_stats(t[(t.date >= a) & (t.date <= b)])["tot"]:+6.1f} / {oc.year_stats(t[(t.date >= a) & (t.date <= b)])["dd"]:4.1f}' for nm, a, b in oc.YEARS))
-    print(f'\n## 放回 v3（趨勢 + MIX，一次一筆，{R_main:g}R）：趨勢訊號只做在快線順向那邊的；每段的合計 R / 回撤')
+    print(f'\n## 放回 v3（趨勢 + MIX，一次一筆，{R_main:g}R）：趨勢訊號只做在{short}順向那邊的；每段的合計 R / 回撤')
     mix = oc.mix_list(C)
-    for lab, T in (('v3 現在', s), ('加條件：快線順向', s[s.fast > 0])):
+    for lab, T in (('v3 現在', s), (f'加條件：{short}順向', s[s.fast > 0])):
         t = oc.sim(C, T, mix, R_main, R_main)
         parts = []
         for nm, a, b in PERIODS:
@@ -64,4 +66,5 @@ def main(tf=2):
 
 
 if __name__ == '__main__':
-    main(int(sys.argv[1]) if len(sys.argv) > 1 else 2)
+    nums = [a for a in sys.argv[1:] if a.isdigit()]
+    main(int(nums[0]) if nums else 2, 'emaS' if 'slow' in sys.argv else 'emaF')
