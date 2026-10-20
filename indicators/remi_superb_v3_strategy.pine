@@ -1,68 +1,86 @@
 //@version=6
 // Remi Superb v3 策略：給 TradingView 策略測試器回測用，訊號和規則同 Remi Superb v3（自動辨識商品和週期），說明見 indicators/remi_superb.md 第 8 節
-//   NQ / MNQ 2 分 K：趨勢訊號（趨勢已持續 0–400 分）+ MIX 區間突破，目標 3R
-//   NQ / MNQ 3 分 K：趨勢訊號（趨勢已持續 90–120 分），目標 1R
-//   NQ / MNQ 5 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 2R
-//   QQQ / SPY 1 分 K、NQ 1 分 K 只開美股盤（RTH）：ETF 設定 (35, 0, 8, 1)，目標 3R（QQQ、NQ RTH 另加 NQ 2 分 K 不反向）
-//   TXF / MXF 2、3 分 K：趨勢訊號（趨勢已持續 60–120 分），目標 3R；ES / MES 預設不做
+//   NQ / MNQ 2 分 K：趨勢訊號（趨勢 0–400 分）+ MIX 區間突破，目標 3R
+//   NQ / MNQ 3 分 K：趨勢訊號（趨勢 90–120 分），目標 1R
+//   NQ / MNQ 5 分 K：趨勢訊號（趨勢 0–180 分）+ MIX 區間突破，目標 2R
+//   QQQ / SPY 1 分 K、NQ 1 分 K 只開美股盤（RTH）：(35, 0, 8, 1)，目標 3R（QQQ、NQ RTH 另加 NQ 2 分 K 不反向）
+//   TXF / MXF 2、3 分 K：趨勢訊號（趨勢 60–120 分），目標 3R；ES / MES 預設不做
 // 下單：
 //   趨勢訊號：訊號 K 收盤市價進場，停損在訊號 K 和前一根的極值
 //   MIX 突破：區間形成後 60 分鐘內，在上下突破價（區間高度 10%）掛停損單，一邊成交就取消另一邊，停損在中線；
 //             下一根 K 在事件時段、美東 16:00–20:00、休市那根、週五截止後就不掛；第一次碰到突破價（不論有沒有成交）區間就作廢
-//             選項「MIX 等收線才進場」：改成 K 棒收在突破價外才在收盤市價進場，目標 2R（預設關）
+//             選項「等收線才進場」：改成 K 棒收在突破價外才在收盤市價進場，目標 2R（預設關）
 //   一次一筆；持有 60 根 K 還沒出場就收盤平倉；NQ / ES 美東 17:00 休市前平倉；TXF、QQQ、SPY、NQ RTH 在每段交易時間最後一根平倉
-//   週五美股盤：台灣時間週六 02:00 以後不開新倉
+//   不開新倉：事件時段、垃圾時間（美東 12:00–13:05）、FOMC 日、週五台灣時間週六 02:00 以後
 // Trend Judge 用 1 分 K 收盤推算（同回測）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
+// 沒有 GEX setup（它只在指標版）
 strategy("Remi Superb v3 策略", overlay=true, pyramiding=0, process_orders_on_close=true, calc_on_every_tick=false, default_qty_type=strategy.fixed, default_qty_value=1, initial_capital=50000, currency=currency.USD, commission_type=strategy.commission.cash_per_contract, commission_value=2.5, slippage=2, margin_long=0, margin_short=0, max_boxes_count=500, max_lines_count=500)
 
-// ═════════════════ 下單 ═════════════════
-grpO      = "下單"
-qtyFut    = input.int(1, "期貨口數", minval=1, group=grpO, tooltip="NQ / MNQ / ES / MES / TXF / MXF 每筆幾口。NQ 1 點 = 20 美元，MNQ 1 點 = 2 美元。手續費（每口每邊）和滑價（跳動點）在「屬性」分頁改：預設 2.5 美元、2 跳；MNQ 建議手續費改約 0.6")
-qtyEtf    = input.int(100, "QQQ / SPY 股數", minval=1, group=grpO, tooltip="QQQ / SPY 每筆幾股。注意：「屬性」分頁的手續費是「每口（= 每股）」計，回測 QQQ / SPY 時請改成每股約 0.005 美元，否則會被高估很多")
-useTrend  = input.bool(true, "做趨勢訊號", group=grpO)
-useMix    = input.bool(true, "做 MIX 區間突破（NQ 2、5 分 K）", group=grpO)
-showPos   = input.bool(true, "畫出持倉的停損和目標", group=grpO, inline="ps")
-stopCol   = input.color(#F23645, "", group=grpO, inline="ps")
-tgtCol    = input.color(#36FE02, "", group=grpO, inline="ps")
-showBox   = input.bool(true, "畫出 MIX 區間", group=grpO, inline="bx")
-boxCol    = input.color(color.new(#9598A1, 85), "", group=grpO, inline="bx")
-boxLnCol  = input.color(#9598A1, "線", group=grpO, inline="bx")
-showTbl   = input.bool(true, "顯示狀態表格", group=grpO, inline="tbl")
-tblPos    = input.string("左下", "", options=["左下", "右下", "左上", "右上"], group=grpO, inline="tbl")
+// ═════════════════ 1. 商品 ═════════════════
+grpP      = "商品"
+profSel   = input.string("自動", "商品", options=["自動", "NQ", "NQ RTH（代替 QQQ）", "ES", "TXF", "QQQ", "SPY"], group=grpP, tooltip="自動：依圖上的商品選做法（NQ / MNQ、ES / MES、TXF / MXF / TMF、QQQ、SPY）。NQ 圖只開美股盤時自動改用「NQ RTH」，做法同 QQQ。也可以手動指定")
+otherTf   = input.bool(false, "不是建議週期也交易", group=grpP, tooltip="建議週期：NQ 2、3、5 分 K；TXF 2、3 分 K；QQQ、SPY、NQ RTH 1 分 K。關（預設）：其他週期不交易。開：用最接近的做法（沒有回測過）")
+esOn      = input.bool(false, "ES 也交易（回測是虧的）", group=grpP, tooltip="ES / MES 2、3 分 K 回測每一種做法都虧，所以預設不做。打開會用 NQ 2 分 K 的做法（門檻 4 點、不做 MIX）")
 
-// ═════════════════ 商品設定 ═════════════════
-grpP      = "商品設定"
-profSel   = input.string("自動", "商品", options=["自動", "NQ", "NQ RTH（代替 QQQ）", "ES", "TXF", "QQQ", "SPY"], group=grpP, tooltip="自動：依圖上的商品選設定（NQ / MNQ、ES / MES、TXF / MXF / TMF、QQQ、SPY）。NQ / MNQ 圖如果只開美股盤（RTH），自動改用「NQ RTH（代替 QQQ）」。也可以手動指定")
-otherTf   = input.bool(false, "不是建議週期也交易", group=grpP, tooltip="建議週期：NQ 是 2、3 或 5 分 K，TXF 是 2 或 3 分 K，SPY、QQQ、NQ RTH 是 1 分 K。關閉時，其他週期不交易；打開的話用最接近的設定（沒有回測過）")
-qNqOn     = input.bool(true, "QQQ / NQ RTH：NQ 2 分 K 不反向", group=grpP, inline="qnq")
-nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpP, inline="qnq", tooltip="只影響 QQQ 和 NQ RTH：上一根已收完的 NQ 2 分 K（固定讀 24 小時盤），Trend Judge 跟訊號反向就不做。讀不到 NQ 資料時不擋")
-esOn      = input.bool(false, "ES 也交易（回測是虧的）", group=grpP, tooltip="ES / MES 2、3 分 K 一年回測，趨勢訊號和 MIX 突破每一種都虧，所以預設不做。打開會用 NQ 2 分 K 的做法（門檻 4、不做 MIX）")
+// ═════════════════ 2. 下單 ═════════════════
+grpQ      = "下單"
+qtyFut    = input.int(1, "期貨口數", minval=1, group=grpQ, tooltip="NQ / MNQ / ES / MES / TXF / MXF 每筆幾口。NQ 1 點 = 20 美元，MNQ 1 點 = 2 美元。手續費（每口每邊）和滑價（跳動點）在「屬性」分頁改：預設 2.5 美元、2 跳；MNQ 建議手續費改約 0.6")
+qtyEtf    = input.int(100, "QQQ / SPY 股數", minval=1, group=grpQ, tooltip="QQQ / SPY 每筆幾股。「屬性」分頁的手續費是每口（= 每股）計，回測 QQQ / SPY 時請改成每股約 0.005 美元，否則成本會被高估很多")
+useTrend  = input.bool(true, "做趨勢訊號", group=grpQ)
+useMix    = input.bool(true, "做 MIX 區間突破（NQ 2、5 分 K）", group=grpQ)
 
-// ═════════════════ 交易規則 ═════════════════
-grpR      = "交易規則（各商品共用）"
-holdBars  = input.int(60, "最多持有幾根 K", minval=1, group=grpR, tooltip="停損和目標都沒碰到，持有這麼多根 K 後收盤平倉（回測都是 60 根）")
-flatHalt  = input.bool(true, "NQ / ES 在美東 17:00 休市前平倉", group=grpR, tooltip="美東 17:00 收盤那根 K 平倉，也不讓 MIX 突破單掛過休市。假日提早收盤不會自動處理")
-friCut    = input.bool(true, "週五美股盤：台灣時間週六", group=grpR, inline="fri")
-friCutH   = input.int(2, "", minval=0, maxval=6, group=grpR, inline="fri")
-friCutM   = input.int(0, "點　分以後不開新倉", minval=0, maxval=59, group=grpR, inline="fri", tooltip="預設 02:00＝美東週五 14:00（夏令）/ 13:00（冬令）。已經在持倉中的照常出場")
-h1Len     = input.int(20, "1 小時 EMA 長度", minval=1, group=grpR, tooltip="看上一根已收完的 1 小時 K：買要收盤在 1 小時 EMA 之上，賣要在之下")
-riskMult  = input.float(0.95, "停損至少幾個 ATR", minval=0, step=0.05, group=grpR, inline="rk")
-atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk")
-avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpR, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00")
-mixPmOff  = input.bool(true, "MIX 突破不做美東 16–20（收盤後）", group=grpR, tooltip="K 棒收盤時間在美東 16:00–20:00（台灣時間夏令 04:00–08:00、冬令 05:00–09:00）不掛 MIX 突破單；碰到突破價區間照樣作廢")
-mixClose  = input.bool(false, "MIX 突破等收線才進場（目標 2R）", group=grpR, tooltip="預設關：在突破價掛停損單，碰到就成交，目標同週期（2 分 K 3R、5 分 K 2R）。打開：K 棒收在突破價外才在那根收盤市價進場，目標 2R，停損一樣在中線；只碰到、沒收出去不算，區間繼續有效；那根在事件時段或美東 16–20 就不做、區間作廢。回測一年（v3 預設規則）：2 分 K 每年 +166R → +146R、回撤差不多；5 分 K +90R → +83R、回撤 10.7R → 13.6R")
-fomcDay   = input.bool(true, "FOMC 當天整天不做", group=grpR, tooltip="FOMC 利率決議當天（美東日期，看下面的 FOMC 日期清單）趨勢訊號和 MIX 突破都不做，已有持倉照常出場。原本只避開 13:58–15:00。回測 NQ 2m 五年每一年都改善（+2 / +1 / +8 / +11 / +5R，v3 那年 +159R → +164R）；5m 大約持平")
-fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpR, tooltip="利率決議公布日（美東），逗號分開。回測更早的期間，要把那段時間的 FOMC 日期加進來")
+// ═════════════════ 3. 趨勢訊號過濾 ═════════════════
+grpR      = "趨勢訊號過濾"
+h1Len     = input.int(20, "1 小時 EMA 長度", minval=1, group=grpR, tooltip="看上一根已收完的 1 小時 K：買要收在 EMA 上方，賣要在下方。回測 EMA 15–30 都接近、20 最好")
+riskMult  = input.float(0.95, "停損至少（ATR 倍數）", minval=0, step=0.05, group=grpR, inline="rk")
+atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）；停損距離小於「倍數 × 上一根的 ATR」就不做。預設 0.95（NQ 2m 回測 0.9–1.1 結果都一樣）。所有商品共用")
+qNqOn     = input.bool(true, "QQQ / NQ RTH：NQ 2 分 K 不反向", group=grpR, inline="qnq")
+nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpR, inline="qnq", tooltip="只影響 QQQ 和 NQ RTH：上一根已收完的 NQ 2 分 K（24 小時盤）Trend Judge 跟訊號反向就不做。讀不到 NQ 時不擋")
 
-// ═════════════════ 訊號參數 ═════════════════
+// ═════════════════ 4. 不交易的時間（趨勢訊號和 MIX 共用）═════════════════
+grpN      = "不交易的時間（趨勢訊號和 MIX 共用）"
+avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpN, tooltip="美東時間，看 K 棒收盤：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00")
+junkOn    = input.bool(true, "垃圾時間：美東", group=grpN, inline="junk")
+junkH1    = input.int(12, "", minval=0, maxval=23, group=grpN, inline="junk")
+junkM1    = input.int(0, ":", minval=0, maxval=59, group=grpN, inline="junk")
+junkH2    = input.int(13, "到", minval=0, maxval=23, group=grpN, inline="junk")
+junkM2    = input.int(5, ":", minval=0, maxval=59, group=grpN, inline="junk", tooltip="這段時間（美東，看 K 棒收盤，含頭尾；預設 12:00–13:05 = 台灣 00:00–01:05）趨勢訊號和 MIX 都不做（MIX 碰到突破價區間作廢，同事件時段），持倉照常出場。所有商品適用")
+fomcDay   = input.bool(true, "FOMC 當天整天不做", group=grpN, tooltip="FOMC 利率決議當天（美東日期，用下面的清單）趨勢訊號和 MIX 都不做，持倉照常出場。回測 NQ 2m 五年每一年都改善（+1～+11R）；5m 大約持平")
+fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpN, tooltip="利率決議公布日（美東），逗號分開。回測更早的期間，要把那段時間的 FOMC 日期加進來；2027 年還沒加")
+friCut    = input.bool(true, "週五：台灣時間週六", group=grpN, inline="fri")
+friCutH   = input.int(2, "", minval=0, maxval=6, group=grpN, inline="fri")
+friCutM   = input.int(0, "點　分以後不開新倉", minval=0, maxval=59, group=grpN, inline="fri", tooltip="預設 02:00 = 美東週五 14:00。已經在持倉中的照常出場")
+
+// ═════════════════ 5. MIX 區間突破（NQ 2、5 分 K）═════════════════
+grpM      = "MIX 區間突破（NQ 2、5 分 K）"
+mixPmOff  = input.bool(true, "不做美東 16–20（收盤後）", group=grpM, tooltip="K 棒收盤在美東 16:00–20:00（台灣時間 04:00–08:00）不掛 MIX 突破單；碰到突破價區間照樣作廢")
+mixClose  = input.bool(false, "等收線才進場（目標 2R）", group=grpM, tooltip="關（預設）：在突破價掛停損單，碰到就成交，目標同週期（2 分 K 3R、5 分 K 2R）。開：K 棒收在突破價外才在那根收盤市價進場，目標 2R，停損一樣在中線；只碰到、沒收出去不算，區間繼續有效。回測一年：2 分 K +166R → +146R；5 分 K +90R → +83R")
+
+// ═════════════════ 6. 持倉和出場 ═════════════════
+grpO      = "持倉和出場"
+holdBars  = input.int(60, "最多持有幾根 K", minval=1, group=grpO, tooltip="停損和目標都沒碰到，持有這麼多根 K 後收盤平倉（回測都是 60 根）")
+flatHalt  = input.bool(true, "NQ / ES 在美東 17:00 休市前平倉", group=grpO, tooltip="美東 17:00 收盤那根 K 平倉，也不讓 MIX 突破單掛過休市。假日提早收盤不會自動處理")
+
+// ═════════════════ 7. 線和表格 ═════════════════
+grpA      = "線和表格"
+showPos   = input.bool(true, "畫出持倉的停損和目標", group=grpA, inline="ps")
+stopCol   = input.color(#F23645, "", group=grpA, inline="ps")
+tgtCol    = input.color(#36FE02, "", group=grpA, inline="ps")
+showBox   = input.bool(true, "畫出 MIX 區間", group=grpA, inline="bx")
+boxCol    = input.color(color.new(#9598A1, 85), "", group=grpA, inline="bx")
+boxLnCol  = input.color(#9598A1, "線", group=grpA, inline="bx")
+showTbl   = input.bool(true, "顯示狀態表格", group=grpA, inline="tbl")
+tblPos    = input.string("左下", "", options=["左下", "右下", "左上", "右上"], group=grpA, inline="tbl")
+
+// ═════════════════ 8. 訊號參數 ═════════════════
 grpS      = "訊號參數（階段、Ema number）"
 sigMode   = input.string("自動（依商品）", "訊號", options=["自動（依商品）", "自訂"], group=grpS, tooltip="自動：NQ / ES / TXF 用 (20, 0, 8, 1)，QQQ / SPY / NQ RTH 用 (35, 0, 8, 1)。自訂：所有商品都改用下面這一列（沒有回測過）")
 v3Stage   = input.int(20, "自訂　階段", minval=2, group=grpS, inline="v3s")
 v3Ema     = input.int(8, "Ema number", minval=1, group=grpS, inline="v3s")
 
-// ═════════════════ Trend Judge ═════════════════
+// ═════════════════ 9. Trend Judge ═════════════════
 grpT      = "Trend Judge（門檻依商品自動）"
-tjCalc    = input.string("1 分 K 推算（同回測）", "算法", options=["1 分 K 推算（同回測）", "圖表 K 棒推算"], group=grpT, tooltip="門檻：NQ 10 / 35、ES 4 / 8、TXF 30 / 60、QQQ 0.5 / 1、SPY 0.8 / 1.6、NQ RTH 20 / 40（一般 / 強勢）")
+tjCalc    = input.string("1 分 K 推算（同回測）", "算法", options=["1 分 K 推算（同回測）", "圖表 K 棒推算"], group=grpT, tooltip="門檻（一般 / 強勢）：NQ 10 / 35、NQ RTH 20 / 40、ES 4 / 8、TXF 30 / 60、QQQ 0.5 / 1、SPY 0.8 / 1.6")
 tjEmaLen  = input.int(1130, "EMA 長度", minval=1, group=grpT)
 tjFastS   = input.int(5, "快線秒數", minval=1, group=grpT, inline="tjs")
 tjSlowS   = input.int(15, "慢線秒數", minval=1, group=grpT, inline="tjs")
@@ -174,6 +192,9 @@ evtAt(int tc) =>
     bool wk = dw >= dayofweek.monday and dw <= dayofweek.friday
     bool fo = str.contains(fomcDates, str.format_time(tc, "yyyy-MM-dd", "America/New_York"))
     (wk and ((m >= 508 and m < 540) or (m >= 598 and m < 615))) or (fo and m >= 838 and m < 900) or (m >= 570 and m < 600) or (m >= 945 and m < 975) or (m >= 1005 and m < 1020) or (m >= 1080 and m < 1110)
+junkAt(int tc) =>
+    int m = hour(tc, "America/New_York") * 60 + minute(tc, "America/New_York")
+    junkOn and m >= junkH1 * 60 + junkM1 and m <= junkH2 * 60 + junkM2
 friAt(int tc) =>
     int tw = hour(tc, "Asia/Taipei") * 60 + minute(tc, "Asia/Taipei")
     friCut and dayofweek(tc, "Asia/Taipei") == dayofweek.saturday and tw >= friCutH * 60 + friCutM
@@ -183,8 +204,8 @@ int  tNext   = tClose + tfMs
 int  etMin   = hour(tClose, "America/New_York") * 60 + minute(tClose, "America/New_York")
 int  etMinN  = hour(tNext, "America/New_York") * 60 + minute(tNext, "America/New_York")
 int  twMin   = hour(tClose, "Asia/Taipei") * 60 + minute(tClose, "Asia/Taipei")
-bool evtNow  = avoidEvt and evtAt(tClose)
-bool evtNext = avoidEvt and evtAt(tNext)
+bool evtNow  = (avoidEvt and evtAt(tClose)) or junkAt(tClose)     // 事件時段或垃圾時間
+bool evtNext = (avoidEvt and evtAt(tNext)) or junkAt(tNext)
 bool haltBar = flatHalt and isCME and etMin == 1020
 bool haltNxt = flatHalt and isCME and etMinN == 1020
 bool pmNext  = mixPmOff and etMinN >= 960 and etMinN < 1200

@@ -1,96 +1,110 @@
 //@version=6
-// Remi Superb v3：自動辨識商品和週期，套用回測過的做法，只發「可交易的 Buy」和「可交易的 Sell」兩個快訊
-// 狀態：大致完成（2026-10-19），之後只做小修
-//   NQ / MNQ 2 分 K：趨勢訊號（趨勢已持續 0–400 分）+ MIX 區間突破，目標 3R              回測每年 +210R，回撤 17R
-//   NQ / MNQ 3 分 K：趨勢訊號（趨勢已持續 90–120 分），目標 1R                           勝率 74%，每年 +20R，回撤 2R
-//   NQ / MNQ 5 分 K：趨勢訊號（趨勢已持續 0–180 分）+ MIX 區間突破，目標 2R              每年 +90R，回撤 11R
-//   QQQ 1 分 K：ETF 設定 (35, 0, 8, 1)、Trend Judge 門檻 0.5、離慢線 ≤ 7 ATR、NQ 2 分 K 不反向，目標 3R   每年 +66R，回撤 17R
-//   NQ / MNQ 1 分 K 只開美股盤（RTH，代替 QQQ）：同 QQQ 的做法，門檻用 NQ 20 點（回測就是用這種圖代替 QQQ）
-//   SPY 1 分 K：ETF 設定 (35, 0, 8, 1)、Trend Judge 門檻 0.8、離慢線 ≤ 7 ATR，目標 3R      每年 +67R，回撤 21R
-//   TXF / MXF 2、3 分 K：趨勢訊號（趨勢已持續 60–120 分），目標 3R                        邊緣：每年 +10R / +5R（成本 2 點）
-//   ES / MES：回測每種做法都虧，預設不發訊號
-// 趨勢訊號 = 原版買賣訊號 + Trend Judge 有趨勢 + 1 小時 EMA20 同向 + 停損 ≥ 1 ATR + 離 15 秒 EMA1130 不太遠 + 避開數據 / 開收盤 / Globex / FOMC
+// Remi Superb v3：自動辨識商品和週期，套用回測過的做法，發「可交易的 Buy / Sell」快訊
+// 狀態：大致完成（最後調整 2026-10-21），之後只做小修。說明見 indicators/remi_superb.md
+// 各商品的做法（回測數字是 2025-10 .. 2026-10 這一年）
+//   NQ / MNQ 2 分 K：趨勢訊號（趨勢 0–400 分）+ MIX 區間突破，目標 3R            每年 +210R，回撤 17R
+//   NQ / MNQ 3 分 K：趨勢訊號（趨勢 90–120 分），目標 1R                         勝率 74%，每年 +20R，回撤 2R
+//   NQ / MNQ 5 分 K：趨勢訊號（趨勢 0–180 分）+ MIX 區間突破，目標 2R            每年 +90R，回撤 11R
+//   NQ RTH 1 分 K（NQ 只開美股盤，代替 QQQ）：(35, 0, 8, 1)、門檻 20 點、離慢線 ≤ 7 ATR、NQ 2m 不反向，目標 3R
+//   QQQ 1 分 K：同 NQ RTH 的做法，門檻 0.5                                      每年 +66R，回撤 17R
+//   SPY 1 分 K：(35, 0, 8, 1)、門檻 0.8、離慢線 ≤ 7 ATR，目標 3R                  每年 +67R，回撤 21R
+//   TXF / MXF 2、3 分 K：趨勢訊號（趨勢 60–120 分），目標 3R                     邊緣：每年 +10R / +5R（成本 2 點）
+//   ES / MES：回測每種做法都虧，預設不發
+// 趨勢訊號 = 原版訊號 + Trend Judge 同向 + 1 小時 EMA20 同向 + 停損 ≥ 0.95 ATR + 離 15 秒 EMA1130 不太遠 + 避開事件時段和 FOMC 日
 //   訊號 K 收盤進場，停損在訊號 K 和前一根的極值
-// MIX 區間突破（只有 NQ 2、5 分 K）：Trend Judge 連續 MIX 60 分鐘 → 區間；形成後 60 分鐘內第一次突破 10% 就在突破價進場，停損在中線
-//   美東 16:00–20:00（收盤後）碰到突破價就不做，這個區間作廢（預設開，可關）
-//   選項「MIX 等收線才進場」：等 K 棒收在突破價外才在收盤進場，目標 2R（預設關＝碰到突破價就進場）
-// 一次一筆：指標自己記一筆虛擬持倉，碰到停損 / 目標、持有 60 根 K、美東 17:00 休市前（NQ / ES）或資料中斷才算出場
-// 回測：NQ / ES / TXF 用各自的 1 分 K；SPY / QQQ 用 ES / NQ 只留美股盤的 K 棒代替。說明見 indicators/remi_superb.md
-// 訊號參數：v3 的交易訊號預設依商品自動（回測過），可以改成自訂；橙黃色原版小三角另有自己的參數（預設 35, 0, 8, 1）
-// Trend Judge 用 1 分 K 收盤推算（同回測，不需要秒級資料）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
-// GEX（預設關）：手動輸入 QQQ 的 gamma flip，表格顯示現在買 / 賣是「朝 flip 走」還是「離開 flip」，只顯示、不擋訊號
-// GEX setup（預設關，只有 NQ RTH 1 分 K）：原版 (35, 0, 8, 1) + Trend Judge 順勢 + 朝 QQQ gamma flip 走，目標 3R；記號 🧲
-//   另外標記、另外兩個快訊、自己一次一筆，不影響上面 v3 的訊號和虛擬持倉；台灣時間 00:00–01:05 不發（可改、可關）
+// MIX 區間突破（NQ 2、5 分 K）：Trend Judge 連續 MIX 60 分 → 區間；之後 60 分內第一次突破 10% 就在突破價進場，停損在中線
+//   預設不做美東 16–20（收盤後）；可選「等收線才進場」（目標 2R）
+// 一次一筆：指標自己記一筆虛擬持倉，碰到停損 / 目標、持有 60 根、美東 17:00 休市前（NQ / ES）或資料中斷才出場
+// Trend Judge 用 1 分 K 收盤推算（同回測）；沒有 1 分資料的舊 K 棒改用圖表 K 棒
+// GEX（預設關）：手動輸入 QQQ gamma flip，表格顯示買 / 賣是不是朝 flip 走（只顯示，不擋 v3 的訊號）
+// GEX setup（預設關，NQ RTH 1 分 K）：(35, 0, 8, 1) + Trend Judge 順勢 + 朝 flip 走，目標 3R，記號 🧲
+//   自己一次一筆、另外兩個快訊，不影響 v3 的訊號
+// 垃圾時間：美東 12:00–13:05（台灣 00:00–01:05）所有訊號都不發（可改、可關）
 indicator("Remi Superb v3", overlay=true, max_labels_count=500, max_boxes_count=500, max_lines_count=500)
 
-// ═════════════════ 商品設定 ═════════════════
-grpP      = "商品設定"
-profSel   = input.string("自動", "商品", options=["自動", "NQ", "NQ RTH（代替 QQQ）", "ES", "TXF", "QQQ", "SPY"], group=grpP, tooltip="自動：依圖上的商品選設定（NQ / MNQ、ES / MES、TXF / MXF / TMF、QQQ、SPY）。NQ / MNQ 圖如果只開美股盤（RTH：最近 1500 根 K 都在美東 09:30–16:15 之內），自動改用「NQ RTH（代替 QQQ）」：同 QQQ 的做法，建議 1 分 K。也可以手動指定")
-otherTf   = input.bool(false, "不是建議週期也發訊號", group=grpP, tooltip="建議週期：NQ 是 2、3 或 5 分 K，TXF 是 2 或 3 分 K，SPY、QQQ、NQ RTH 是 1 分 K。關閉時，其他週期只顯示表格、不發訊號；打開的話用最接近的設定發（沒有回測過）")
-qNqOn     = input.bool(true, "QQQ / NQ RTH：NQ 2 分 K 不反向", group=grpP, inline="qnq")
-nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpP, inline="qnq", tooltip="只影響 QQQ 和 NQ RTH：上一根已收完的 NQ 2 分 K（固定讀 24 小時盤），Trend Judge 跟訊號反向（買訊時是 DOWN / 強Down，賣訊時是 UP / 強Up）就不做，MIX 照做。回測：NQ 2m 反向時 QQQ 訊號是虧的（3R −0.05R）；去掉後每年一樣 +66R，回撤 24R → 17R。讀不到 NQ 資料時不擋")
-esOn      = input.bool(false, "ES 也發訊號（回測是虧的）", group=grpP, tooltip="ES / MES 2、3 分 K 一年回測，趨勢訊號和 MIX 突破每一種都虧，所以預設不發。打開會用 NQ 2 分 K 的做法（門檻 4、不做 MIX）")
+// ═════════════════ 1. 商品 ═════════════════
+grpP      = "商品"
+profSel   = input.string("自動", "商品", options=["自動", "NQ", "NQ RTH（代替 QQQ）", "ES", "TXF", "QQQ", "SPY"], group=grpP, tooltip="自動：依圖上的商品選做法（NQ / MNQ、ES / MES、TXF / MXF / TMF、QQQ、SPY）。NQ 圖只開美股盤時（最近 1500 根 K 都在美東 09:30–16:15 之內）自動改用「NQ RTH」，做法同 QQQ。也可以手動指定")
+otherTf   = input.bool(false, "不是建議週期也發訊號", group=grpP, tooltip="建議週期：NQ 2、3、5 分 K；TXF 2、3 分 K；QQQ、SPY、NQ RTH 1 分 K。關（預設）：其他週期只顯示表格。開：用最接近的做法發訊號（沒有回測過）")
+esOn      = input.bool(false, "ES 也發訊號（回測是虧的）", group=grpP, tooltip="ES / MES 2、3 分 K 回測每一種做法都虧，所以預設不發。打開會用 NQ 2 分 K 的做法（門檻 4 點、不做 MIX）")
 
-// ═════════════════ 交易規則 ═════════════════
-grpR      = "交易規則（各商品共用）"
-holdBars  = input.int(60, "最多持有幾根 K", minval=1, group=grpR, tooltip="停損和目標都沒碰到，持有這麼多根 K 後收盤出場（回測都是 60 根）")
-onlyOne   = input.bool(true, "一次一筆（持倉中不發新訊號）", group=grpR, tooltip="指標自己記一筆虛擬持倉：要等碰到停損、目標、持有時間到、休市前或資料中斷出場，才會發下一個訊號。回測都是一次一筆")
-flatHalt  = input.bool(true, "NQ / ES 在美東 17:00 休市前出場", group=grpR, tooltip="虛擬持倉在美東 17:00 收盤那根 K 出場。TXF、SPY、QQQ 在收盤後的資料中斷自動出場")
-friCut    = input.bool(true, "週五美股盤：台灣時間週六", group=grpR, inline="fri")
-friCutH   = input.int(2, "", minval=0, maxval=6, group=grpR, inline="fri")
-friCutM   = input.int(0, "點　分以後不發新訊號", minval=0, maxval=59, group=grpR, inline="fri", tooltip="週五晚上的美股盤，到台灣時間週六這個時間以後就不發新訊號（趨勢訊號和 MIX 突破都一樣），已經在持倉中的照常出場。預設 02:00＝美東週五 14:00（夏令）/ 13:00（冬令）。所有商品都適用。NQ 2 分 K 一年回測：拿掉 9 個訊號，每年 +162R → +159R，回撤不變")
-h1Len     = input.int(20, "1 小時 EMA 長度", minval=1, group=grpR, tooltip="看上一根已收完的 1 小時 K：買要收盤在 1 小時 EMA 之上，賣要在之下")
-riskMult  = input.float(0.95, "停損至少幾個 ATR", minval=0, step=0.05, group=grpR, inline="rk")
-atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）。停損距離小於「倍數 × 上一根的 ATR」就不做")
-avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpR, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00。所有商品都一樣（回測也是）")
-mixPmOff  = input.bool(true, "MIX 突破不做美東 16–20（收盤後）", group=grpR, tooltip="只影響 NQ 2、5 分 K 的 MIX 突破：K 棒收盤時間在美東 16:00–20:00（台灣時間夏令 04:00–08:00、冬令 05:00–09:00）碰到突破價就不做，這個區間作廢（跟事件時段一樣）。趨勢訊號照常。回測一年：2 分 K 每年 +162R → +168R、回撤 16R → 12.5R；5 分 K +82R → +94R、回撤 14R → 11R，前後半年都一樣")
-mixClose  = input.bool(false, "MIX 突破等收線才進場（目標 2R）", group=grpR, tooltip="預設關：價格碰到突破價就進場（掛停損單），目標同週期（2 分 K 3R、5 分 K 2R）。打開：要等 K 棒收在突破價外，才在那根收盤進場，目標 2R，停損一樣在中線；只碰到、沒收出去不算，區間繼續有效。回測一年（v3 預設規則，一次一筆）：2 分 K 每年 +166R → +146R、回撤 12.5R → 12.6R；5 分 K +90R → +83R、回撤 10.7R → 13.6R。單獨看 MIX 時等收線的回撤比較小，放進 v3 後就沒有了")
-fomcDay   = input.bool(true, "FOMC 當天整天不做", group=grpR, tooltip="FOMC 利率決議當天（美東日期，看下面的 FOMC 日期清單）趨勢訊號和 MIX 突破都不做，已有持倉照常出場。原本只避開 13:58–15:00。回測 NQ 2m 五年每一年都改善（+2 / +1 / +8 / +11 / +5R，v3 那年 +159R → +164R）；5m 大約持平")
-fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpR, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
-
-// ═════════════════ GEX（手動輸入）═════════════════
-grpG      = "GEX（手動輸入的 QQQ gamma flip）"
-gexOn     = input.bool(false, "顯示 QQQ gamma flip 方向", group=grpG, tooltip="打開後，表格多一列「Flip」：QQQ 現價在 gamma flip 下面時，買是「朝 flip 走」、賣是「離開 flip」；在上面時相反。回測（ZeroGEX 2026-06-29 .. 10-14，76 天，QQQ 1 分 K）：順勢訊號朝 flip 走的 3R 每筆約 +0.75R，離開 flip 的約 0 或虧；v3 在 QQQ 的獲利幾乎都來自朝 flip 走的訊號。樣本小，先只顯示、不擋訊號")
-gexFlip   = input.float(0.0, "QQQ gamma flip", minval=0, step=0.01, group=grpG, tooltip="從 ZeroGEX 抄 QQQ 的 gamma flip 價位（QQQ 價格，不是 NQ）。flip 每天會變、盤中也會移動，要自己更新；0 = 還沒輸入")
-qqqSym    = input.symbol("NASDAQ:QQQ", "QQQ 代號", group=grpG, tooltip="不是 QQQ 圖（例如 NQ、NQ RTH）時，用這個代號讀 QQQ 現價來跟 flip 比；美股盤以外的時間是 QQQ 最後的價格")
+// ═════════════════ 2. GEX（每天手動更新 flip）═════════════════
+grpG      = "GEX：QQQ gamma flip"
+gexFlip   = input.float(0.0, "QQQ gamma flip", minval=0, step=0.01, group=grpG, tooltip="從 ZeroGEX 抄 QQQ 的 gamma flip（填 QQQ 的價格，不是 NQ）。flip 每天會變、盤中也會移動，要自己更新；0 = 還沒填。下面的「表格顯示」和 GEX setup 都用這個值")
+gexOn     = input.bool(false, "表格顯示朝 / 離開 flip", group=grpG, tooltip="表格多一列「Flip」：QQQ 在 flip 下方時買是「朝 flip 走」，在上方時賣是「朝 flip 走」。只顯示，不擋 v3 的訊號。回測（2026-06-29 .. 10-14）：順勢訊號朝 flip 走的 3R 每筆約 +0.75R，離開 flip 的約打平")
+qqqSym    = input.symbol("NASDAQ:QQQ", "QQQ 代號", group=grpG, tooltip="在 NQ 等其他圖上，用這個代號讀 QQQ 現價來跟 flip 比；美股盤以外的時間用 QQQ 最後的價格")
 gexLine   = input.bool(true, "QQQ 圖上畫 flip 線", group=grpG, inline="gl")
-gexCol    = input.color(#E040FB, "", group=grpG, inline="gl", tooltip="只有在 QQQ 圖上才畫（flip 是 QQQ 的價格）")
-gsOn      = input.bool(false, "NQ RTH：GEX setup 訊號（目標 3R）", group=grpG, tooltip="只在 NQ RTH（NQ 1 分 K、圖表只開美股盤）用：原版訊號（下面的階段、EMA，預設 35、8）出現時，Trend Judge 同向（門檻 20 點），而且朝 QQQ gamma flip 走（QQQ 在 flip 下面時買、在上面時賣，用上面輸入的 flip），就標記並發「GEX Buy / Sell」快訊。訊號 K 收盤進場、停損在訊號 K 和前一根的極值、目標 3R、持有 60 根或美東 16:00 收盤出場，自己一次一筆；週五截止後不發。不影響 v3 原本的訊號和虛擬持倉。回測（NQ 美股盤，2026-07 .. 10-14，ZeroGEX 的 flip，(35, 0, 8, 1)）：77 筆，1R 勝率 66%，3R 每筆 +0.75R，一次一筆合計 +56R、回撤 7R；只有 3 個多月，先小口數追蹤")
-gsStage   = input.int(35, "GEX setup　階段", minval=2, group=grpG, inline="gs")
-gsEma     = input.int(8, "Ema number", minval=1, group=grpG, inline="gs", tooltip="預設 (35, 0, 8, 1)。回測（NQ RTH，2026-07 .. 10）：階段 35–50 × EMA 5–13 都好，EMA 21 不行；(35, 0, 8, 1) 77 筆、1R 勝率 66%、3R 每筆 +0.75R；(40, 0, 8, 1) 70%、+0.99R；(35, 0, 13, 1) 每筆差不多但訊號少四成")
-gsBuyTxt  = input.string("🧲", "GEX setup　買", group=grpG, inline="gm")
-gsSellTxt = input.string("🧲", "賣", group=grpG, inline="gm")
-gsSize    = input.string("小", "大小", options=["小", "中", "大"], group=grpG, inline="gm", tooltip="GEX setup 自己的記號（價格被 flip 吸過去，所以用磁鐵）：沒有底色，緊貼在訊號那根 K 的低點下方（買）/ 高點上方（賣）。可以換成任何 Emoji 或文字（文字用 flip 線的顏色）")
-gsLunchMd = input.string("只做賣", "GEX setup：台灣時間", options=["只做賣", "都不做", "照做"], group=grpG, inline="glt")
-gsLH1     = input.int(0, "", minval=0, maxval=23, group=grpG, inline="glt")
-gsLM1     = input.int(0, ":", minval=0, maxval=59, group=grpG, inline="glt")
-gsLH2     = input.int(1, "到", minval=0, maxval=23, group=grpG, inline="glt")
-gsLM2     = input.int(5, ":", minval=0, maxval=59, group=grpG, inline="glt", tooltip="這段時間（看 K 棒收盤的台灣時間，含頭尾）的 GEX setup：只做賣（預設，買單不發 🧲 和快訊）、都不做、或照做；已經在持倉中的照常出場。只影響 GEX setup，v3 原本的訊號不受影響。00:00–01:05 = 美東 12:00–13:05。回測（2026-06-29 .. 10-19，每筆單獨算）：這段 16 筆，買 10 筆 3R 勝率 20%、每筆 −0.30R；賣 6 筆勝率 83%、每筆 +2.28R；其他時間買 +0.46R、賣 +1.05R。只有 16 筆，買單虧損集中在 3 天，要繼續觀察")
+gexCol    = input.color(#E040FB, "", group=grpG, inline="gl", tooltip="只在 QQQ 圖上畫（flip 是 QQQ 的價格）。這個顏色也是 🧲 換成文字時的顏色")
 
-// ═════════════════ 外觀 ═════════════════
-grpA      = "外觀"
+// ═════════════════ 3. GEX setup 🧲（NQ RTH 1 分 K）═════════════════
+grpX      = "GEX setup 🧲（NQ RTH 1 分 K）"
+gsOn      = input.bool(false, "GEX setup 訊號（目標 3R）", group=grpX, tooltip="只在 NQ RTH 1 分 K（圖表只開美股盤）：原版訊號（下面的階段、EMA）+ Trend Judge 同向（門檻 20 點）+ 朝 QQQ flip 走（QQQ 在 flip 下方只做買、上方只做賣），就標 🧲 並發「GEX Buy / Sell」快訊。訊號 K 收盤進場，停損在訊號 K 和前一根的極值，目標 3R，持有 60 根或美東 16:00 出場；自己一次一筆，週五截止後不發，不影響 v3 的訊號。回測（2026-06-29 .. 10-14，ZeroGEX 每分鐘的 flip）：77 筆，3R 勝率 49%、每筆 +0.75R，一次一筆 +56R、回撤 7R")
+gsStage   = input.int(35, "階段", minval=2, group=grpX, inline="gs")
+gsEma     = input.int(8, "Ema number", minval=1, group=grpX, inline="gs", tooltip="預設 (35, 0, 8, 1)。回測：階段 35–50 × EMA 5–13 都好，EMA 21 不行")
+gsBuyTxt  = input.string("🧲", "記號　買", group=grpX, inline="gm")
+gsSellTxt = input.string("🧲", "賣", group=grpX, inline="gm")
+gsSize    = input.string("小", "大小", options=["小", "中", "大"], group=grpX, inline="gm", tooltip="沒有底色，緊貼在訊號 K 的低點下方（買）/ 高點上方（賣）。可以換成任何 Emoji 或文字（文字用 flip 線的顏色）")
+
+// ═════════════════ 4. 趨勢訊號過濾 ═════════════════
+grpR      = "趨勢訊號過濾"
+h1Len     = input.int(20, "1 小時 EMA 長度", minval=1, group=grpR, tooltip="看上一根已收完的 1 小時 K：買要收在 EMA 上方，賣要在下方。回測 EMA 15–30 都接近、20 最好；改用 30 分 EMA89 或不過濾都比較差")
+riskMult  = input.float(0.95, "停損至少（ATR 倍數）", minval=0, step=0.05, group=grpR, inline="rk")
+atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）；停損距離小於「倍數 × 上一根的 ATR」就不做。預設 0.95（2026-10-21 從 1.0 改）：NQ 2m 回測 0.9–1.1 結果都一樣、勝率 40%。所有商品共用")
+qNqOn     = input.bool(true, "QQQ / NQ RTH：NQ 2 分 K 不反向", group=grpR, inline="qnq")
+nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpR, inline="qnq", tooltip="只影響 QQQ 和 NQ RTH：上一根已收完的 NQ 2 分 K（24 小時盤）Trend Judge 跟訊號反向就不做（買時 DOWN / 強Down、賣時 UP / 強UP）。回測：每年一樣 +66R，回撤 24R → 17R。讀不到 NQ 時不擋")
+
+// ═════════════════ 5. 不交易的時間（趨勢訊號和 MIX 共用）═════════════════
+grpN      = "不交易的時間（趨勢訊號和 MIX 共用）"
+avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpN, tooltip="美東時間，看 K 棒收盤：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00。所有商品都一樣（回測也是）")
+junkOn    = input.bool(true, "垃圾時間：美東", group=grpN, inline="junk")
+junkH1    = input.int(12, "", minval=0, maxval=23, group=grpN, inline="junk")
+junkM1    = input.int(0, ":", minval=0, maxval=59, group=grpN, inline="junk")
+junkH2    = input.int(13, "到", minval=0, maxval=23, group=grpN, inline="junk")
+junkM2    = input.int(5, ":", minval=0, maxval=59, group=grpN, inline="junk", tooltip="這段時間（美東，看 K 棒收盤，含頭尾；預設 12:00–13:05 = 台灣 00:00–01:05）所有訊號都不發：趨勢訊號、MIX 突破（碰到突破價區間作廢，同事件時段）、GEX setup。持倉照常出場。所有商品適用（2026-10-21 Remi 定義）")
+fomcDay   = input.bool(true, "FOMC 當天整天不做", group=grpN, tooltip="FOMC 利率決議當天（美東日期，用下面的清單）趨勢訊號和 MIX 都不做，持倉照常出場。回測 NQ 2m 五年每一年都改善（+1～+11R）；5m 大約持平")
+fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpN, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程補上（2027 年還沒加）")
+friCut    = input.bool(true, "週五：台灣時間週六", group=grpN, inline="fri")
+friCutH   = input.int(2, "", minval=0, maxval=6, group=grpN, inline="fri")
+friCutM   = input.int(0, "點　分以後不發新訊號", minval=0, maxval=59, group=grpN, inline="fri", tooltip="週五美股盤到台灣時間週六這個時間以後不發新訊號（趨勢、MIX、GEX setup 都一樣），持倉照常出場。預設 02:00 = 美東週五 14:00。所有商品適用。GEX setup 回測：這段 5 筆、每筆 −0.30R")
+
+// ═════════════════ 6. MIX 區間突破（NQ 2、5 分 K）═════════════════
+grpM      = "MIX 區間突破（NQ 2、5 分 K）"
+mixPmOff  = input.bool(true, "不做美東 16–20（收盤後）", group=grpM, tooltip="K 棒收盤在美東 16:00–20:00（台灣時間 04:00–08:00）碰到突破價就不做，這個區間作廢。趨勢訊號照常。回測一年：2 分 K +162R → +168R、回撤 16R → 12.5R；5 分 K +82R → +94R、回撤 14R → 11R")
+mixClose  = input.bool(false, "等收線才進場（目標 2R）", group=grpM, tooltip="關（預設）：價格碰到突破價就進場，目標同週期（2 分 K 3R、5 分 K 2R）。開：要等 K 棒收在突破價外，才在那根收盤進場，目標 2R，停損一樣在中線。回測一年：2 分 K +166R → +146R；5 分 K +90R → +83R，所以預設關")
+
+// ═════════════════ 7. 持倉和出場 ═════════════════
+grpO      = "持倉和出場"
+onlyOne   = input.bool(true, "一次一筆（持倉中不發新訊號）", group=grpO, tooltip="指標自己記一筆虛擬持倉，要等碰到停損、目標、持有時間到、休市前或資料中斷出場，才發下一個訊號。回測都是一次一筆，建議保持開")
+holdBars  = input.int(60, "最多持有幾根 K", minval=1, group=grpO, tooltip="停損和目標都沒碰到，持有這麼多根 K 後收盤出場（回測都是 60 根）")
+flatHalt  = input.bool(true, "NQ / ES 在美東 17:00 休市前出場", group=grpO, tooltip="虛擬持倉在美東 17:00 收盤那根 K 出場。TXF、SPY、QQQ 在收盤後的資料中斷自動出場")
+
+// ═════════════════ 8. 記號和線 ═════════════════
+grpA      = "記號和線"
 markSize  = input.string("大", "符號大小", options=["小", "中", "大"], group=grpA, inline="ms")
 markLines = input.int(0, "離 K 棒（半行）", minval=0, maxval=12, group=grpA, inline="ms", tooltip="符號離 K 棒的距離，每加 1 往外移半個符號高度")
 tBuyTxt   = input.string("⏫", "趨勢訊號　買", group=grpA, inline="tb")
 tSellTxt  = input.string("⏬", "賣", group=grpA, inline="tb")
 mBuyTxt   = input.string("🔼", "MIX 突破　買", group=grpA, inline="mb")
 mSellTxt  = input.string("🔽", "賣", group=grpA, inline="mb")
-txtCol    = input.color(#FFB300, "文字顏色", group=grpA, tooltip="符號填一般文字時的顏色，Emoji 用它自己的顏色")
-showBox   = input.bool(true, "畫出 MIX 區間", group=grpA, inline="bx")
-boxCol    = input.color(color.new(#9598A1, 85), "", group=grpA, inline="bx")
-boxLnCol  = input.color(#9598A1, "線", group=grpA, inline="bx", tooltip="灰框是用來算區間的那段 MIX，虛線是上下突破價（只有 NQ 2、5 分 K）")
+txtCol    = input.color(#FFB300, "文字顏色", group=grpA, tooltip="符號填一般文字時的顏色；Emoji 用它自己的顏色")
 showPos   = input.bool(true, "畫出持倉的停損和目標", group=grpA, inline="ps")
 stopCol   = input.color(#F23645, "", group=grpA, inline="ps")
 tgtCol    = input.color(#36FE02, "", group=grpA, inline="ps")
-showTbl   = input.bool(true, "顯示狀態表格", group=grpA, inline="tbl")
-tblStyle  = input.string("精簡", "", options=["迷你", "精簡", "完整"], group=grpA, inline="tbl")
-tblSize   = input.string("極小", "字", options=["極小", "小", "中", "大"], group=grpA, inline="tbl", tooltip="迷你：精簡拿掉「持倉」和「GEX」兩列（NQ RTH 是設定、趨勢、NQ 2m、Flip 四列），有提示時放在設定那一列。精簡：短標題、一列一行，只顯示這個商品用得到的列（版面小或分割畫面時用）。完整：每列都顯示，附設定說明")
-tblPos    = input.string("左下", "表格位置", options=["左下", "右下", "左上", "右上"], group=grpA, tooltip="表格放在圖表的哪個角落")
-tblPad    = input.int(2, "表格放上面時，上方留白（列）", minval=0, maxval=6, group=grpA, tooltip="表格放左上或右上時，空幾列避開圖表上方的商品名稱和指標名稱；放下面時不留白")
+showBox   = input.bool(true, "畫出 MIX 區間", group=grpA, inline="bx")
+boxCol    = input.color(color.new(#9598A1, 85), "", group=grpA, inline="bx")
+boxLnCol  = input.color(#9598A1, "線", group=grpA, inline="bx", tooltip="灰框是用來算區間的那段 MIX，虛線是上下突破價（只有 NQ 2、5 分 K）")
 showRaw   = input.bool(false, "也標出原版買賣訊號（小三角）", group=grpA, inline="raw")
-rawCol    = input.color(#FFB300, "", group=grpA, inline="raw", tooltip="沒經過過濾的原版訊號（買在 K 棒下方、賣在上方），預設橙黃色。參數在「訊號參數」的「原版小三角」那一列，跟 v3 的訊號分開算。只是標出來看，不發快訊")
+rawCol    = input.color(#FFB300, "", group=grpA, inline="raw", tooltip="沒經過過濾的原版訊號（買在 K 棒下方、賣在上方），只是標出來看，不發快訊。參數在「訊號參數」的「原版小三角」那一列")
 
-// ═════════════════ 訊號參數 ═════════════════
+// ═════════════════ 9. 狀態表格 ═════════════════
+grpB      = "狀態表格"
+showTbl   = input.bool(true, "顯示狀態表格", group=grpB, inline="tbl")
+tblStyle  = input.string("精簡", "", options=["迷你", "精簡", "完整"], group=grpB, inline="tbl")
+tblSize   = input.string("極小", "字", options=["極小", "小", "中", "大"], group=grpB, inline="tbl", tooltip="迷你：精簡拿掉「持倉」和「GEX」兩列（NQ RTH 是設定、趨勢、NQ 2m、Flip 四列），有提示時放在設定那一列。精簡：短標題、只顯示這個商品用得到的列。完整：每列都顯示，附設定說明")
+tblPos    = input.string("左下", "表格位置", options=["左下", "右下", "左上", "右上"], group=grpB)
+tblPad    = input.int(2, "放上面時，上方留白（列）", minval=0, maxval=6, group=grpB, tooltip="表格放左上或右上時，空幾列避開圖表上方的商品名稱和指標名稱；放下面時不留白")
+
+// ═════════════════ 10. 訊號參數 ═════════════════
 grpS      = "訊號參數（階段、Ema number、Ema enable）"
 sigMode   = input.string("自動（依商品）", "v3 訊號", options=["自動（依商品）", "自訂"], group=grpS, tooltip="v3 交易訊號用的原版訊號參數。自動：NQ / ES / TXF 用 (20, 0, 8, 1)，QQQ / SPY / NQ RTH 用 (35, 0, 8, 1)，都是回測過的。自訂：所有商品都改用下面這一列（沒有回測過）")
 v3Stage   = input.int(20, "自訂　階段", minval=2, group=grpS, inline="v3s")
@@ -99,9 +113,9 @@ rawStage  = input.int(35, "原版小三角　階段", minval=2, group=grpS, inli
 rawEma    = input.int(8, "Ema number", minval=1, group=grpS, inline="raws")
 rawEmaOn  = input.bool(true, "Ema enable", group=grpS, inline="raws", tooltip="橙黃色小三角用的參數，預設 (35, 0, 8, 1)。原版 Remi's Buy/Sell 是 (20, 0, 8, 1)；想看 v3 在這個商品實際用的訊號，就改成跟 v3 一樣（NQ / ES / TXF 是 20、8，QQQ / SPY / NQ RTH 是 35、8）")
 
-// ═════════════════ Trend Judge ═════════════════
+// ═════════════════ 11. Trend Judge ═════════════════
 grpT      = "Trend Judge（門檻依商品自動）"
-tjCalc    = input.string("1 分 K 推算（同回測）", "算法", options=["1 分 K 推算（同回測）", "圖表 K 棒推算"], group=grpT, tooltip="1 分 K 推算：每根 K 裡的每一根 1 分 K 收盤依序更新 5 秒 / 15 秒 EMA（同回測），沒有 1 分資料的舊 K 棒自動改用圖表 K 棒。門檻：NQ 10 / 35、ES 4 / 8、TXF 30 / 60、QQQ 0.5 / 1、SPY 0.8 / 1.6（一般 / 強勢）")
+tjCalc    = input.string("1 分 K 推算（同回測）", "算法", options=["1 分 K 推算（同回測）", "圖表 K 棒推算"], group=grpT, tooltip="1 分 K 推算：每根 K 裡的每一根 1 分 K 收盤依序更新 5 秒 / 15 秒 EMA（同回測），沒有 1 分資料的舊 K 棒自動改用圖表 K 棒。門檻（一般 / 強勢）：NQ 10 / 35、NQ RTH 20 / 40、ES 4 / 8、TXF 30 / 60、QQQ 0.5 / 1、SPY 0.8 / 1.6")
 tjEmaLen  = input.int(1130, "EMA 長度", minval=1, group=grpT)
 tjFastS   = input.int(5, "快線秒數", minval=1, group=grpT, inline="tjs")
 tjSlowS   = input.int(15, "慢線秒數", minval=1, group=grpT, inline="tjs")
@@ -240,7 +254,11 @@ bool isWkday = etDow >= dayofweek.monday and etDow <= dayofweek.friday
 bool isFomc  = str.contains(fomcDates, str.format_time(tClose, "yyyy-MM-dd", "America/New_York"))
 bool fomcSkip = fomcDay and isFomc                                  // FOMC 當天整天不做（趨勢和 MIX）
 bool inEvt   = (isWkday and ((etMin >= 508 and etMin < 540) or (etMin >= 598 and etMin < 615))) or (isFomc and etMin >= 838 and etMin < 900) or (etMin >= 570 and etMin < 600) or (etMin >= 945 and etMin < 975) or (etMin >= 1005 and etMin < 1020) or (etMin >= 1080 and etMin < 1110)
-bool evtNow  = avoidEvt and inEvt
+int    junkS   = junkH1 * 60 + junkM1
+int    junkE   = junkH2 * 60 + junkM2
+bool   junkNow = junkOn and etMin >= junkS and etMin <= junkE           // 垃圾時間（美東，含頭尾）：趨勢、MIX、GEX setup 都不發
+string junkTxt = str.format("{0,number,00}:{1,number,00}–{2,number,00}:{3,number,00}", junkH1, junkM1, junkH2, junkM2)
+bool evtNow  = (avoidEvt and inEvt) or junkNow
 bool haltBar = flatHalt and isCME and etMin == 1020                 // 美東 17:00 收盤那根，接著休市
 bool mixPm   = mixPmOff and etMin >= 960 and etMin < 1200           // 美東 16:00–20:00（收盤後）不做 MIX 突破
 // 週五美股盤的最後幾小時（台灣時間週六 friCutH:friCutM 以後）不發新訊號
@@ -309,14 +327,8 @@ else if gNewHigh
     gRefLow  := low
     gArmSell := true
 bool gsEnd  = etMin >= 960 or session.islastbar                 // 美東 16:00 收盤（同回測只用到 16:00）
-int  gsLS   = gsLH1 * 60 + gsLM1
-int  gsLE   = gsLH2 * 60 + gsLM2
-bool gsInLunch  = gsLunchMd != "照做" and (gsLS <= gsLE ? twMin >= gsLS and twMin <= gsLE : twMin >= gsLS or twMin <= gsLE)   // 台灣時間這段：只做賣 / 都不做
-bool gsNoBuyL   = gsInLunch
-bool gsNoSellL  = gsInLunch and gsLunchMd == "都不做"
-string gsLunchTxt = str.format("{0,number,00}:{1,number,00}–{2,number,00}:{3,number,00}", gsLH1, gsLM1, gsLH2, gsLM2)
-bool gsBuy  = gsActive and gsReady and gTrigBuy and close > gEma and barstate.isconfirmed and tjLinked and tjDirI >= 1 and qqqPx < gexFlip and not friLate and not gsEnd and not gsNoBuyL
-bool gsSell = gsActive and gsReady and gTrigSell and close < gEma and barstate.isconfirmed and tjLinked and tjDirI <= -1 and qqqPx > gexFlip and not friLate and not gsEnd and not gsNoSellL
+bool gsBuy  = gsActive and gsReady and gTrigBuy and close > gEma and barstate.isconfirmed and tjLinked and tjDirI >= 1 and qqqPx < gexFlip and not friLate and not gsEnd and not junkNow
+bool gsSell = gsActive and gsReady and gTrigSell and close < gEma and barstate.isconfirmed and tjLinked and tjDirI <= -1 and qqqPx > gexFlip and not friLate and not gsEnd and not junkNow
 var int   gsPos   = 0
 var float gsEntry = na
 var float gsStop  = na
@@ -542,6 +554,8 @@ if barstate.islast and showTbl
         warn := compact ? "請關延長時段" : "請關掉延長交易時段，回測只用美股盤 09:30–16:00"
     else if isTX
         warn := compact ? "邊緣，成本高" : "回測只小賺，成本 4 點時接近打平；結算日夜盤到隔天不要做"
+    else if active and junkNow
+        warn := compact ? "垃圾時間不做" : "垃圾時間（美東 " + junkTxt + "）不發新訊號（不交易的時間設定）"
     else if active and fomcSkip
         warn := compact ? "FOMC 日不做" : "FOMC 當天整天不做（交易規則設定）"
     else if active and mixUse and mixPm
@@ -611,13 +625,11 @@ if barstate.islast and showTbl
             string flipTxt = "QQQ 在 flip " + (wantBuy ? "下 → 只等買" : "上 → 只等賣")
             bool   trOk    = tjLinked and (wantBuy ? tjDirI >= 1 : tjDirI <= -1)
             string tjNow   = not tjLinked ? "沒資料" : tjDirI == 2 ? "強UP" : tjDirI == 1 ? "UP" : tjDirI == -2 ? "強Down" : tjDirI == -1 ? "DOWN" : "MIX"
-            bool   lunchNo = wantBuy ? gsNoBuyL : gsNoSellL
-            string timeBad = friLate ? "週五截止後" : gsEnd ? "16:00 後" : lunchNo ? "台灣 " + gsLunchTxt + " " : ""
-            bool   sellOnly = lunchNo and not friLate and not gsEnd and gsLunchMd == "只做賣"
+            string timeBad = friLate ? "週五截止後" : gsEnd ? "16:00 後" : junkNow ? "垃圾時間 " : ""
             bool   armed   = wantBuy ? gArmBuy : gArmSell
             float  trigPx  = wantBuy ? gRefHigh : gRefLow
             if timeBad != ""
-                gsTxt := sellOnly ? (compact ? timeBad + "只做賣" : flipTxt + "；" + timeBad + "只做賣單，不發買訊號") : compact ? timeBad + "不做" : flipTxt + "；" + timeBad + "不發新訊號"
+                gsTxt := compact ? timeBad + "不做" : flipTxt + "；" + timeBad + "不發新訊號"
             else if not trOk
                 gsTxt := compact ? sideTxt + "｜趨勢 " + tjNow + " ✗" : flipTxt + "；趨勢 " + tjNow + "，要 " + (wantBuy ? "UP" : "DOWN") + " 才做 ✗"
             else
