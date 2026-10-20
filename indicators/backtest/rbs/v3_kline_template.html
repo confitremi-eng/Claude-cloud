@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v3 虧損日 K 線</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root { --bg:#f2f2f2; --card:#fff; --fg:#1d1d1f; --muted:#6b6b70; --line:#e0e0e0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#16171a; --card:#1f2024; --fg:#ececec; --muted:#9a9aa2; --line:#33343a; } }
+:root[data-theme="dark"] { --bg:#16171a; --card:#1f2024; --fg:#ececec; --muted:#9a9aa2; --line:#33343a; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; }
+main { max-width:1100px; margin:0 auto; padding:16px 16px 40px; }
+h1 { font-size:20px; margin:0 0 4px; } .sub { color:var(--muted); font-size:13px; margin:0 0 12px; }
+.bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+select { font:inherit; padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); max-width:100%; }
+button { font:inherit; padding:6px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
+#chart { height:520px; background:#f2f2f2; border-radius:10px; overflow:hidden; }
+.info { margin:10px 0; color:var(--muted); font-size:13px; }
+table { width:100%; border-collapse:collapse; font-size:13px; background:var(--card); border-radius:10px; overflow:hidden; }
+td, th { padding:6px 8px; border-bottom:1px solid var(--line); text-align:left; } th { color:var(--muted); font-weight:500; }
+.neg { color:#d9534f; } .pos { color:#2e9d5b; }
+.legend { font-size:12px; color:var(--muted); margin-top:6px; }
+</style>
+</head>
+<body>
+<main>
+<h1>v3 虧損日 K 線（NQ 2 分 K，台北時間）</h1>
+<p class="sub">每個樣本外年度虧最多的 3 天，和 v3 那一年賺最多的 3 天對照。規則凍結、一次一筆、3R。</p>
+<div class="bar"><select id="day"></select><button id="prev">上一天</button><button id="next">下一天</button></div>
+<div id="chart"></div>
+<div class="legend">紫色虛線 = 5 秒 EMA1130（快線）、藍色虛線 = 15 秒 EMA1130（慢線）；▼ 賣 / ▲ 買進場，● 出場；紅線 = 停損、綠線 = 目標（只畫持倉期間）</div>
+<div class="info" id="info"></div>
+<table><thead><tr><th>進場</th><th>方向</th><th>種類</th><th>進場價</th><th>停損</th><th>目標</th><th>出場</th><th>R</th></tr></thead><tbody id="rows"></tbody></table>
+</main>
+<script>
+const DAYS = /*DATA*/null;
+const sel = document.getElementById('day');
+DAYS.forEach((d, i) => { const o = document.createElement('option'); o.value = i; o.textContent = d.label; sel.appendChild(o); });
+const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+  layout:{ background:{ color:'#f2f2f2' }, textColor:'#333' }, grid:{ vertLines:{ color:'#e4e4e4' }, horzLines:{ color:'#e4e4e4' } },
+  timeScale:{ timeVisible:true, secondsVisible:false }, rightPriceScale:{ borderColor:'#ccc' }, crosshair:{ mode:0 } });
+const candles = chart.addCandlestickSeries({ upColor:'#ffffff', downColor:'#d9534f', borderUpColor:'#111', borderDownColor:'#111', wickUpColor:'#111', wickDownColor:'#111' });
+const fast = chart.addLineSeries({ color:'#c94fe0', lineWidth:2, lineStyle:1, priceLineVisible:false, lastValueVisible:false });
+const slow = chart.addLineSeries({ color:'#3b6cf0', lineWidth:2, lineStyle:1, priceLineVisible:false, lastValueVisible:false });
+let extra = [];
+const fmt = s => { const d = new Date(s * 1000); return d.toISOString().slice(11, 16); };
+function show(i) {
+  const d = DAYS[i]; sel.value = i;
+  extra.forEach(s => chart.removeSeries(s)); extra = [];
+  candles.setData(d.bars.map(b => ({ time:b[0], open:b[1], high:b[2], low:b[3], close:b[4] })));
+  fast.setData(d.bars.filter(b => b[5] !== null).map(b => ({ time:b[0], value:b[5] })));
+  slow.setData(d.bars.filter(b => b[6] !== null).map(b => ({ time:b[0], value:b[6] })));
+  const marks = [];
+  d.trades.forEach(t => {
+    marks.push({ time:t.t0, position:t.side === 1 ? 'belowBar' : 'aboveBar', color:t.side === 1 ? '#2e9d5b' : '#d9534f',
+                 shape:t.side === 1 ? 'arrowUp' : 'arrowDown', text:(t.kind === 'MIX' ? 'MIX ' : '趨勢') + (t.side === 1 ? '買' : '賣') });
+    marks.push({ time:t.t1, position:t.side === 1 ? 'aboveBar' : 'belowBar', color:'#8a2be2', shape:'circle', text:t.exit + ' ' + (t.net > 0 ? '+' : '') + t.net + 'R' });
+    const seg = (price, color) => { const s = chart.addLineSeries({ color, lineWidth:1, priceLineVisible:false, lastValueVisible:false });
+      s.setData(t.t1 > t.t0 ? [{ time:t.t0, value:price }, { time:t.t1, value:price }] : [{ time:t.t0, value:price }]); extra.push(s); };
+    seg(t.stop, '#e05050'); seg(t.tgt, '#3cb371');
+  });
+  marks.sort((a, b) => a.time - b.time); candles.setMarkers(marks);
+  chart.timeScale().fitContent();
+  document.getElementById('info').textContent = `${d.year}｜${d.date}（美東日期）｜當天 v3 ${d.net > 0 ? '+' : ''}${d.net}R｜當天 NQ ${d.move > 0 ? '+' : ''}${d.move} 點｜Trend Judge 有趨勢的時間 ${d.trend}%`;
+  document.getElementById('rows').innerHTML = d.trades.map(t => `<tr><td>${fmt(t.t0)}</td><td>${t.side === 1 ? '買' : '賣'}</td><td>${t.kind}</td><td>${t.entry.toFixed(2)}</td><td>${t.stop.toFixed(2)}</td><td>${t.tgt.toFixed(2)}</td><td>${t.exit} ${fmt(t.t1)}</td><td class="${t.net > 0 ? 'pos' : 'neg'}">${t.net > 0 ? '+' : ''}${t.net}</td></tr>`).join('');
+}
+sel.onchange = () => show(+sel.value);
+document.getElementById('prev').onclick = () => show(Math.max(0, +sel.value - 1));
+document.getElementById('next').onclick = () => show(Math.min(DAYS.length - 1, +sel.value + 1));
+show(0);
+</script>
+</body>
+</html>
