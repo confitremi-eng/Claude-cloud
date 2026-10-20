@@ -150,6 +150,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `gex_night.py` | v3 每筆單（含夜盤）對照當時 QQQ gamma flip（ZeroGEX 每小時，2026-06-29 起）：朝 flip 走 / 離開，NQ 2m / 5m |
 | `gex_regime.py` | v3 2m / 5m、NQ RTH 1m 的單按 Short / Long gamma（NQ 在 QQQ flip 下 / 上）× 買賣分組，2026-06-29 起 |
 | `gex_both.py` | SPY / QQQ net GEX 都 Long / 都 Short / 不一致，門檻 0 / ±1B / ±2B，v3 2m、NQ RTH 1m，2026-06-29 起 |
+| `gex_gap.py` | GEX setup 按開盤跳空大小、大高開 / 大低開、順跳空 / 回補、第一小時分組 |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
