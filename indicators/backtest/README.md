@@ -138,6 +138,8 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `calib.py` | Trend Judge 門檻要不要跟著 NQ 點數校正：`mech` 依訊號時差值（點、換算後）分組逐年看虧在哪；`calib` 門檻依價格 / 過去 20 天日振幅 / 差值大小調整，NQ 2m / 5m / 3m / NQ RTH 逐年 |
 | `year_th.py` | 每年固定一個 Trend Judge 門檻（4–20 點）：NQ 2m / 5m 逐年整張表、事後最好的、用前一年最好的、依年初價格換算 |
 | `tf_years.py` | 同一套 v3 規則套到 NQ 1 / 2 / 3 / 5 分 K，趨勢 + MIX / 只有趨勢 / 只有 MIX × 1R / 2R / 3R，五年逐年 |
+| `stop_target.py` | v3（NQ 2m）訊號不變，停損改兩根 K 極值 / 固定 15–60 點 / 1.5、2 ATR（只換趨勢或 MIX 也換）× 目標 1 / 1.5 / 2 / 3R，五年逐年 |
+| `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
 | `two_lots.py` | 每個訊號下兩口：都 2R、1R+2R、1R+3R、2R+3R、到 1R 保本、留一口跑，以及同時 2 筆 |
