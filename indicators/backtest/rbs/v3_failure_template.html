@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v3 前幾年怎麼虧</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root { --bg:#f7f7f5; --card:#fff; --fg:#1d1d1f; --muted:#6b6b70; --line:#e3e3e0; --oos:#d9534f; --is:#2b7de9; --amber:#e0a030; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#16171a; --card:#1f2024; --fg:#ececec; --muted:#9a9aa2; --line:#33343a; } }
+:root[data-theme="dark"] { --bg:#16171a; --card:#1f2024; --fg:#ececec; --muted:#9a9aa2; --line:#33343a; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.6 -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; }
+main { max-width:980px; margin:0 auto; padding:20px 16px 48px; }
+h1 { font-size:22px; margin:4px 0 4px; } p.sub { color:var(--muted); margin:0 0 18px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 14px 10px; }
+.card h2 { font-size:15px; margin:0 0 2px; } .card p { color:var(--muted); font-size:13px; margin:0 0 8px; }
+.wide { grid-column:1 / -1; } canvas { width:100% !important; }
+.kpi { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:14px; }
+.kpi div { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+.kpi b { display:block; font-size:20px; } .kpi span { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<main>
+<h1>v3 前幾年怎麼虧（NQ 2 分 K）</h1>
+<p class="sub">規則凍結、一次一筆、目標 3R、每筆扣 1 點。樣本外 = 2021-10 到 2025-10；v3 那年 = 2025-10 到 2026-10。</p>
+<div class="kpi" id="kpi"></div>
+<div class="grid">
+  <div class="card wide"><h2>累積 R</h2><p>灰底是 v3 那一年。前四年一路往下，只有最後一年往上。</p><canvas id="eq" height="110"></canvas></div>
+  <div class="card"><h2>每年怎麼出場</h2><p>打到目標、停損、時間到 / 休市的比例（%）</p><canvas id="exit" height="220"></canvas></div>
+  <div class="card"><h2>被停損的單，停損前最多走對多少</h2><p>停損單的最大浮盈分布（%）</p><canvas id="mfe" height="220"></canvas></div>
+  <div class="card"><h2>每年：趨勢訊號 vs MIX 突破</h2><p>各自的全年 R</p><canvas id="kind" height="220"></canvas></div>
+  <div class="card"><h2>依進場時間（美東）</h2><p>每筆平均 R，筆數少於 15 的時段不畫</p><canvas id="hour" height="220"></canvas></div>
+</div>
+</main>
+<script>
+const D = /*DATA*/null;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+Chart.defaults.color = css('--muted'); Chart.defaults.borderColor = css('--line');
+Chart.defaults.font.family = '-apple-system, "PingFang TC", "Noto Sans TC", sans-serif';
+const S = D.summary;
+document.getElementById('kpi').innerHTML = [
+  ['樣本外每筆', S.OOS.per.toFixed(3) + 'R'], ['v3 那年每筆', S.IS.per.toFixed(3) + 'R'],
+  ['勝率 樣本外 / v3 那年', S.OOS.win + '% / ' + S.IS.win + '%'], ['打到目標', S.OOS.tgt + '% / ' + S.IS.tgt + '%'],
+  ['停損前持有（中位數）', D.stop_bars.OOS + ' / ' + D.stop_bars.IS + ' 根']
+].map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('');
+const isStart = D.eq.x.findIndex(d => d >= '2025-10-15');
+new Chart(eq, { type:'line', data:{ labels:D.eq.x, datasets:[{ data:D.eq.y, borderColor:css('--is'), pointRadius:0, borderWidth:1.6 }] },
+  options:{ plugins:{ legend:{display:false} }, scales:{ x:{ ticks:{ maxTicksLimit:10 } }, y:{ title:{display:true, text:'R'} } } },
+  plugins:[{ id:'shade', beforeDraw(c){ const x=c.scales.x, a=c.chartArea; const x0=x.getPixelForValue(isStart);
+    c.ctx.save(); c.ctx.fillStyle='rgba(128,128,128,0.12)'; c.ctx.fillRect(x0, a.top, a.right-x0, a.bottom-a.top); c.ctx.restore(); } }] });
+const col = { '目標':'#3aa76d', '停損':css('--oos'), '時間 / 休市':css('--amber') };
+new Chart(exit, { type:'bar', data:{ labels:D.years, datasets:Object.keys(D.exit).map(k => ({ label:k, data:D.exit[k], backgroundColor:col[k] })) },
+  options:{ scales:{ x:{stacked:true}, y:{stacked:true, max:100} } } });
+new Chart(mfe, { type:'bar', data:{ labels:D.mfe_bins, datasets:[{ label:'樣本外', data:D.mfe.OOS, backgroundColor:css('--oos') }, { label:'v3 那年', data:D.mfe.IS, backgroundColor:css('--is') }] } });
+new Chart(kind, { type:'bar', data:{ labels:D.years, datasets:[{ label:'趨勢訊號', data:D.kind['趨勢'], backgroundColor:css('--oos') }, { label:'MIX 突破', data:D.kind['MIX'], backgroundColor:css('--amber') }] } });
+new Chart(hour, { type:'line', data:{ labels:D.hours, datasets:[{ label:'樣本外', data:D.hourR.OOS, borderColor:css('--oos'), spanGaps:false }, { label:'v3 那年', data:D.hourR.IS, borderColor:css('--is') }] },
+  options:{ scales:{ y:{ title:{display:true, text:'每筆 R'} } } } });
+</script>
+</body>
+</html>
