@@ -41,6 +41,17 @@ def main(tf=2):
         R(z[z.fast <= 0], '已經回到快線另一邊')
         for lo, hi in ((-99, -0.5), (-0.5, 0), (0, 0.5), (0.5, 1), (1, 99)):
             R(z[(z.fast >= lo) & (z.fast < hi)], f'　離快線 {"" if lo == -99 else format(lo, "+g")}～{"" if hi == 99 else format(hi, "+g")} ATR')
+    print('\n## 逐年（10 月到 10 月）：1R 勝率 / 3R 每筆（快線順向 | 已回到另一邊）')
+    for nm, a, b in oc.YEARS:
+        z = s[(s.date >= a) & (s.date <= b)]
+        g, w = z[z.fast > 0], z[z.fast <= 0]
+        f = lambda y: f'{len(y):4d} 筆 {100 * (y.r1 > 0).mean():4.1f}% {(y.r3 - 1.0 / y.risk).mean():+.2f}R'
+        print(f'   {nm:<16} 順向 {f(g)}   |   另一邊 {f(w)}')
+    mix0 = oc.mix_list(C)
+    print(f'\n## 逐年放回 v3（趨勢 + MIX，一次一筆，{R_main:g}R）：每年 R / 回撤')
+    for lab, T in (('v3 現在', s), ('加條件：快線順向', s[s.fast > 0])):
+        t = oc.sim(C, T, mix0, R_main, R_main)
+        print(f'   {lab:<14} ' + '  '.join(f'{nm[:2]} {oc.year_stats(t[(t.date >= a) & (t.date <= b)])["tot"]:+6.1f} / {oc.year_stats(t[(t.date >= a) & (t.date <= b)])["dd"]:4.1f}' for nm, a, b in oc.YEARS))
     print(f'\n## 放回 v3（趨勢 + MIX，一次一筆，{R_main:g}R）：趨勢訊號只做在快線順向那邊的；每段的合計 R / 回撤')
     mix = oc.mix_list(C)
     for lab, T in (('v3 現在', s), ('加條件：快線順向', s[s.fast > 0])):
