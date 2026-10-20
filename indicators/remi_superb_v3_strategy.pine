@@ -51,6 +51,7 @@ atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk")
 avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpR, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00")
 mixPmOff  = input.bool(true, "MIX 突破不做美東 16–20（收盤後）", group=grpR, tooltip="K 棒收盤時間在美東 16:00–20:00（台灣時間夏令 04:00–08:00、冬令 05:00–09:00）不掛 MIX 突破單；碰到突破價區間照樣作廢")
 mixClose  = input.bool(false, "MIX 突破等收線才進場（目標 2R）", group=grpR, tooltip="預設關：在突破價掛停損單，碰到就成交，目標同週期（2 分 K 3R、5 分 K 2R）。打開：K 棒收在突破價外才在那根收盤市價進場，目標 2R，停損一樣在中線；只碰到、沒收出去不算，區間繼續有效；那根在事件時段或美東 16–20 就不做、區間作廢。回測一年（v3 預設規則）：2 分 K 每年 +166R → +146R、回撤差不多；5 分 K +90R → +83R、回撤 10.7R → 13.6R")
+fomcDay   = input.bool(true, "FOMC 當天整天不做", group=grpR, tooltip="FOMC 利率決議當天（美東日期，看下面的 FOMC 日期清單）趨勢訊號和 MIX 突破都不做，已有持倉照常出場。原本只避開 13:58–15:00。回測 NQ 2m 五年每一年都改善（+2 / +1 / +8 / +11 / +5R，v3 那年 +159R → +164R）；5m 大約持平")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpR, tooltip="利率決議公布日（美東），逗號分開。回測更早的期間，要把那段時間的 FOMC 日期加進來")
 
 // ═════════════════ 訊號參數 ═════════════════
@@ -189,6 +190,8 @@ bool haltNxt = flatHalt and isCME and etMinN == 1020
 bool pmNext  = mixPmOff and etMinN >= 960 and etMinN < 1200
 bool pmNow   = mixPmOff and etMin >= 960 and etMin < 1200
 bool friLate = friAt(tClose)
+bool fomcSkip = fomcDay and str.contains(fomcDates, str.format_time(tClose, "yyyy-MM-dd", "America/New_York"))
+bool fomcNext = fomcDay and str.contains(fomcDates, str.format_time(tNext, "yyyy-MM-dd", "America/New_York"))
 bool friNext = friAt(tNext)
 // 每段交易時間的最後一根：TXF 日盤 13:45、夜盤 05:00（台灣時間）；QQQ / SPY / NQ RTH 美東 16:00
 bool sessEnd = isTX ? (twMin == 825 or twMin == 300 or session.islastbar) : isETF ? (etMin >= 960 or session.islastbar) : false
@@ -219,8 +222,8 @@ float atrPrev  = ta.atr(atrLen)[1]
 float atrNow   = ta.atr(atrLen)
 float buyStop  = math.min(low, low[1])
 float sellStop = math.max(high, high[1])
-bool trBuy  = active and useTrend and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate
-bool trSell = active and useTrend and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate
+bool trBuy  = active and useTrend and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate and not fomcSkip
+bool trSell = active and useTrend and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate and not fomcSkip
 
 // ═════════════════ MIX 區間（只有 NQ 2、5 分 K）═════════════════
 float tfMin   = tfSec / 60.0
@@ -291,7 +294,7 @@ if bxLive and not mbForm and bar_index > bxForm
     else if mixClose
         if close > bxUpL or close < bxDnL
             bxLive := false
-            if not evtNow and not pmNow
+            if not evtNow and not pmNow and not fomcSkip
                 mxUpC := close > bxUpL
                 mxDnC := close < bxDnL
     else if high >= bxUpL or low <= bxDnL
@@ -374,7 +377,7 @@ if goShort
     posTgt  := tgtS
 
 // MIX 突破：區間有效、空手，而且下一根不在事件時段、美東 16–20、休市那根、週五截止後，才在上下突破價掛停損單
-bool mixArm = not mixClose and active and mixUse and useMix and canEnter and not goLong and not goShort and bxLive and bar_index >= bxForm and bar_index < bxEnd and not evtNext and not pmNext and not haltNxt and not friNext and not friLate
+bool mixArm = not mixClose and active and mixUse and useMix and canEnter and not goLong and not goShort and bxLive and bar_index >= bxForm and bar_index < bxEnd and not evtNext and not pmNext and not haltNxt and not friNext and not friLate and not fomcNext
 if mixArm
     strategy.entry("M L", strategy.long, qty=qtyUse, stop=bxUpL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 上破", alert_message=entryMsg("buy", "MIX 突破", bxUpL, bxMid, bxUpT))
     strategy.entry("M S", strategy.short, qty=qtyUse, stop=bxDnL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 下破", alert_message=entryMsg("sell", "MIX 突破", bxDnL, bxMid, bxDnT))

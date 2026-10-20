@@ -45,6 +45,7 @@ atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", toolt
 avoidEvt  = input.bool(true, "避開數據、開收盤、Globex 時段", group=grpR, tooltip="美東時間，看 K 棒收盤時間：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30；FOMC 日 13:58–15:00。所有商品都一樣（回測也是）")
 mixPmOff  = input.bool(true, "MIX 突破不做美東 16–20（收盤後）", group=grpR, tooltip="只影響 NQ 2、5 分 K 的 MIX 突破：K 棒收盤時間在美東 16:00–20:00（台灣時間夏令 04:00–08:00、冬令 05:00–09:00）碰到突破價就不做，這個區間作廢（跟事件時段一樣）。趨勢訊號照常。回測一年：2 分 K 每年 +162R → +168R、回撤 16R → 12.5R；5 分 K +82R → +94R、回撤 14R → 11R，前後半年都一樣")
 mixClose  = input.bool(false, "MIX 突破等收線才進場（目標 2R）", group=grpR, tooltip="預設關：價格碰到突破價就進場（掛停損單），目標同週期（2 分 K 3R、5 分 K 2R）。打開：要等 K 棒收在突破價外，才在那根收盤進場，目標 2R，停損一樣在中線；只碰到、沒收出去不算，區間繼續有效。回測一年（v3 預設規則，一次一筆）：2 分 K 每年 +166R → +146R、回撤 12.5R → 12.6R；5 分 K +90R → +83R、回撤 10.7R → 13.6R。單獨看 MIX 時等收線的回撤比較小，放進 v3 後就沒有了")
+fomcDay   = input.bool(true, "FOMC 當天整天不做", group=grpR, tooltip="FOMC 利率決議當天（美東日期，看下面的 FOMC 日期清單）趨勢訊號和 MIX 突破都不做，已有持倉照常出場。原本只避開 13:58–15:00。回測 NQ 2m 五年每一年都改善（+2 / +1 / +8 / +11 / +5R，v3 那年 +159R → +164R）；5m 大約持平")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpR, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程更新")
 
 // ═════════════════ GEX（手動輸入）═════════════════
@@ -237,6 +238,7 @@ int  etMin   = hour(tClose, "America/New_York") * 60 + minute(tClose, "America/N
 int  etDow   = dayofweek(tClose, "America/New_York")
 bool isWkday = etDow >= dayofweek.monday and etDow <= dayofweek.friday
 bool isFomc  = str.contains(fomcDates, str.format_time(tClose, "yyyy-MM-dd", "America/New_York"))
+bool fomcSkip = fomcDay and isFomc                                  // FOMC 當天整天不做（趨勢和 MIX）
 bool inEvt   = (isWkday and ((etMin >= 508 and etMin < 540) or (etMin >= 598 and etMin < 615))) or (isFomc and etMin >= 838 and etMin < 900) or (etMin >= 570 and etMin < 600) or (etMin >= 945 and etMin < 975) or (etMin >= 1005 and etMin < 1020) or (etMin >= 1080 and etMin < 1110)
 bool evtNow  = avoidEvt and inEvt
 bool haltBar = flatHalt and isCME and etMin == 1020                 // 美東 17:00 收盤那根，接著休市
@@ -275,8 +277,8 @@ float atrPrev  = ta.atr(atrLen)[1]
 float atrNow   = ta.atr(atrLen)
 float buyStop  = math.min(low, low[1])
 float sellStop = math.max(high, high[1])
-bool trBuy  = active and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate
-bool trSell = active and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate
+bool trBuy  = active and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate and not fomcSkip
+bool trSell = active and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate and not fomcSkip
 
 // ═════════════════ GEX：QQQ 現價跟手動輸入的 gamma flip 比（只顯示）═════════════════
 float qqqPx   = isQQ ? close : request.security(qqqSym, timeframe.period, close)
@@ -400,7 +402,7 @@ if bxLive and not mbForm and bar_index > bxForm
         bool dnHit = mixClose ? close < bxDnL and barstate.isconfirmed : low <= bxDnL
         if upHit or dnHit
             bxLive := false
-            if not (upHit and dnHit) and not evtNow and not mixPm
+            if not (upHit and dnHit) and not evtNow and not mixPm and not fomcSkip
                 mxBuy  := active and mixUse and upHit
                 mxSell := active and mixUse and dnHit
 var line bxUpLine = na
@@ -618,6 +620,8 @@ if barstate.islast and showTbl
         warn := compact ? "請關延長時段" : "請關掉延長交易時段，回測只用美股盤 09:30–16:00"
     else if isTX
         warn := compact ? "邊緣，成本高" : "回測只小賺，成本 4 點時接近打平；結算日夜盤到隔天不要做"
+    else if active and fomcSkip
+        warn := compact ? "FOMC 日不做" : "FOMC 當天整天不做（交易規則設定）"
     else if active and mixUse and mixPm
         warn := compact ? "16–20 不做 MIX" : "美東 16:00–20:00 不做 MIX 突破，趨勢訊號照常（交易規則設定）"
     if warn != ""
