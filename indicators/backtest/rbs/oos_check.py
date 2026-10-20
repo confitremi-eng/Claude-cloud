@@ -194,8 +194,8 @@ class Market:
         return sim(C, T, M, R, R, friday)
 
 
-def nq_rth(one, scale=None):
-    """NQ RTH 1m (QQQ setting) with the NQ 2m not-opposite filter from the 24-hour chart."""
+def nq_rth(one, scale=None, detail=False):
+    """NQ RTH 1m (QQQ setting) with the NQ 2m not-opposite filter from the 24-hour chart. detail: (chart, taken signals)."""
     cash = mm.cash_only(one); tdq = mm.minute_trend(cash); Hq = mm.hourly(cash, True)
     sc = None if scale is None else scale
     df = chart(cash, tdq, 1, 20.0, 40.0, sc)
@@ -217,6 +217,7 @@ def nq_rth(one, scale=None):
     tw = pd.DatetimeIndex(tw); tw = tw.tz_localize('UTC').tz_convert('Asia/Taipei') if tw.tz is None else tw
     s = s[~((tw.weekday == 5) & (tw.hour * 60 + tw.minute >= 120))]
     t = ss.seq(s.sort_values('i'), 3.0)
+    if detail: return df, t
     return pd.DataFrame({'kind': '趨勢', 'date': t.date.values, 'R': t.r3.values, 'net': t.r3.values - COST / t.risk.values})
 
 
