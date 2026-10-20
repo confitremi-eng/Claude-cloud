@@ -66,6 +66,10 @@ def main():
     L, O = t[t.lunch], t[~t.lunch]
     print(f'全部 {len(t)} 筆；台北 00:00–01:05 {len(L)} 筆 勝 {100 * (L.net > 0).mean():.0f}% 合計 {L.net.sum():+.1f}R 每筆 {L.net.mean():+.2f}R；'
           f'其他 {len(O)} 筆 勝 {100 * (O.net > 0).mean():.0f}% 每筆 {O.net.mean():+.2f}R')
+    w1 = lambda z: 100 * float(((z.side * (z.exit_px - z.entry) > 0) | (z.net > 0)).mean())
+    for lab, z in (('台北 00:00–01:05', L), ('其他時間', O)):
+        for sl, zz in (('全部', z), ('買', z[z.side == 1]), ('賣', z[z.side == -1])):
+            print(f'   {lab:<16} {sl}  {len(zz):3d} 筆  3R 勝 {100 * (zz.net > 0).mean():3.0f}%  每筆 {zz.net.mean():+.2f}R  停損 {100 * (zz.exit == "停損").mean():3.0f}%  目標 {100 * (zz.exit == "目標").mean():3.0f}%')
     days = []
     for d in sorted(L.day.unique()):
         idx = np.where(nyd == d)[0]
