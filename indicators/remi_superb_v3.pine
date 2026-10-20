@@ -61,11 +61,11 @@ gsEma     = input.int(8, "Ema number", minval=1, group=grpG, inline="gs", toolti
 gsBuyTxt  = input.string("🧲", "GEX setup　買", group=grpG, inline="gm")
 gsSellTxt = input.string("🧲", "賣", group=grpG, inline="gm")
 gsSize    = input.string("小", "大小", options=["小", "中", "大"], group=grpG, inline="gm", tooltip="GEX setup 自己的記號（價格被 flip 吸過去，所以用磁鐵）：沒有底色，緊貼在訊號那根 K 的低點下方（買）/ 高點上方（賣）。可以換成任何 Emoji 或文字（文字用 flip 線的顏色）")
-gsLunch   = input.bool(true, "GEX setup：台灣時間", group=grpG, inline="glt")
+gsLunchMd = input.string("只做賣", "GEX setup：台灣時間", options=["只做賣", "都不做", "照做"], group=grpG, inline="glt")
 gsLH1     = input.int(0, "", minval=0, maxval=23, group=grpG, inline="glt")
 gsLM1     = input.int(0, ":", minval=0, maxval=59, group=grpG, inline="glt")
 gsLH2     = input.int(1, "到", minval=0, maxval=23, group=grpG, inline="glt")
-gsLM2     = input.int(5, ":", minval=0, maxval=59, group=grpG, inline="glt", tooltip="這段時間（看 K 棒收盤的台灣時間，含頭尾）GEX setup 不發 🧲 和快訊；已經在持倉中的照常出場。只影響 GEX setup，v3 原本的訊號不受影響。預設 00:00–01:05 = 美東 12:00–13:05（夏令）/ 11:00–12:05（冬令）。注意回測（2026-07 .. 10-14）：這段的 GEX setup 13 筆、1R 勝率 69%、3R 每筆 +1.07R，反而比其他時間好；去掉後一次一筆 3R +56R → +42R、回撤 6.7R → 4.8R")
+gsLM2     = input.int(5, ":", minval=0, maxval=59, group=grpG, inline="glt", tooltip="這段時間（看 K 棒收盤的台灣時間，含頭尾）的 GEX setup：只做賣（預設，買單不發 🧲 和快訊）、都不做、或照做；已經在持倉中的照常出場。只影響 GEX setup，v3 原本的訊號不受影響。00:00–01:05 = 美東 12:00–13:05。回測（2026-06-29 .. 10-19，每筆單獨算）：這段 16 筆，買 10 筆 3R 勝率 20%、每筆 −0.30R；賣 6 筆勝率 83%、每筆 +2.28R；其他時間買 +0.46R、賣 +1.05R。只有 16 筆，買單虧損集中在 3 天，要繼續觀察")
 
 // ═════════════════ 外觀 ═════════════════
 grpA      = "外觀"
@@ -311,10 +311,12 @@ else if gNewHigh
 bool gsEnd  = etMin >= 960 or session.islastbar                 // 美東 16:00 收盤（同回測只用到 16:00）
 int  gsLS   = gsLH1 * 60 + gsLM1
 int  gsLE   = gsLH2 * 60 + gsLM2
-bool gsLunchNow = gsLunch and (gsLS <= gsLE ? twMin >= gsLS and twMin <= gsLE : twMin >= gsLS or twMin <= gsLE)   // 台灣時間這段不發 GEX 訊號
+bool gsInLunch  = gsLunchMd != "照做" and (gsLS <= gsLE ? twMin >= gsLS and twMin <= gsLE : twMin >= gsLS or twMin <= gsLE)   // 台灣時間這段：只做賣 / 都不做
+bool gsNoBuyL   = gsInLunch
+bool gsNoSellL  = gsInLunch and gsLunchMd == "都不做"
 string gsLunchTxt = str.format("{0,number,00}:{1,number,00}–{2,number,00}:{3,number,00}", gsLH1, gsLM1, gsLH2, gsLM2)
-bool gsBuy  = gsActive and gsReady and gTrigBuy and close > gEma and barstate.isconfirmed and tjLinked and tjDirI >= 1 and qqqPx < gexFlip and not friLate and not gsEnd and not gsLunchNow
-bool gsSell = gsActive and gsReady and gTrigSell and close < gEma and barstate.isconfirmed and tjLinked and tjDirI <= -1 and qqqPx > gexFlip and not friLate and not gsEnd and not gsLunchNow
+bool gsBuy  = gsActive and gsReady and gTrigBuy and close > gEma and barstate.isconfirmed and tjLinked and tjDirI >= 1 and qqqPx < gexFlip and not friLate and not gsEnd and not gsNoBuyL
+bool gsSell = gsActive and gsReady and gTrigSell and close < gEma and barstate.isconfirmed and tjLinked and tjDirI <= -1 and qqqPx > gexFlip and not friLate and not gsEnd and not gsNoSellL
 var int   gsPos   = 0
 var float gsEntry = na
 var float gsStop  = na
@@ -601,11 +603,13 @@ if barstate.islast and showTbl
             string flipTxt = "QQQ 在 flip " + (wantBuy ? "下 → 只等買" : "上 → 只等賣")
             bool   trOk    = tjLinked and (wantBuy ? tjDirI >= 1 : tjDirI <= -1)
             string tjNow   = not tjLinked ? "沒資料" : tjDirI == 2 ? "強UP" : tjDirI == 1 ? "UP" : tjDirI == -2 ? "強Down" : tjDirI == -1 ? "DOWN" : "MIX"
-            string timeBad = friLate ? "週五截止後" : gsEnd ? "16:00 後" : gsLunchNow ? "台灣 " + gsLunchTxt + " " : ""
+            bool   lunchNo = wantBuy ? gsNoBuyL : gsNoSellL
+            string timeBad = friLate ? "週五截止後" : gsEnd ? "16:00 後" : lunchNo ? "台灣 " + gsLunchTxt + " " : ""
+            bool   sellOnly = lunchNo and not friLate and not gsEnd and gsLunchMd == "只做賣"
             bool   armed   = wantBuy ? gArmBuy : gArmSell
             float  trigPx  = wantBuy ? gRefHigh : gRefLow
             if timeBad != ""
-                gsTxt := compact ? timeBad + "不做" : flipTxt + "；" + timeBad + "不發新訊號"
+                gsTxt := sellOnly ? (compact ? timeBad + "只做賣" : flipTxt + "；" + timeBad + "只做賣單，不發買訊號") : compact ? timeBad + "不做" : flipTxt + "；" + timeBad + "不發新訊號"
             else if not trOk
                 gsTxt := compact ? sideTxt + "｜趨勢 " + tjNow + " ✗" : flipTxt + "；趨勢 " + tjNow + "，要 " + (wantBuy ? "UP" : "DOWN") + " 才做 ✗"
             else
