@@ -35,7 +35,8 @@ DEFAULTS = {
     "ib_host": "127.0.0.1", "ib_port": 7497, "ib_client_id": 17, "account": "", "allow_live": False,
     "symbol": "MNQ", "exchange": "CME", "qty": 2, "tick": 0.25, "allowed_roots": ["NQ", "MNQ"],
     "max_entry_delay_sec": 15, "max_alert_age_sec": 30, "max_stop_points": 120,
-    "max_trades_per_day": 20, "max_daily_loss_usd": 600, "max_hold_minutes": 125,
+    "max_trades_per_day": 20, "max_daily_loss_usd": 600,
+    "allowed_tfs": ["2", "5"], "default_tf": "2", "max_hold_minutes": {"2": 125, "5": 305},
     "flat_time_et": "16:58", "reopen_time_et": "18:00", "roll_days": 8, "tradingview_ips_only": False, "client_ip_header": "",
     "discord_webhook_url": "", "point_value": 2.0, "disconnect_alert_min": 5, "summary_time_et": "17:00",
 }
@@ -121,7 +122,7 @@ def admin_app(engine: Engine) -> web.Application:
 
     async def flatten(_):
         res = await engine.b.flatten("手動平倉")
-        engine.entry_time = None
+        engine._set_owner(None, None)
         engine._event("manual_flatten", result=res)
         return web.json_response(res)
 
@@ -182,7 +183,7 @@ async def main_async(cfg: dict, dry: bool):
         notifier.on_fill(f)
 
     broker.on_fill = fills
-    engine = Engine(broker, cfg, events=events)
+    engine = Engine(broker, cfg, events=events, state_path=HERE / "state.json")
     queue: asyncio.Queue = asyncio.Queue()
 
     runners = []

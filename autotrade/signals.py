@@ -25,6 +25,7 @@ class Signal:
     target: Optional[float] = None
     price: Optional[float] = None
     signal: str = ""
+    tf: Optional[str] = None       # 圖表週期（"2"、"5"）；舊格式沒有
     tv_time: Optional[datetime] = None
     received: Optional[datetime] = None
     raw: str = ""
@@ -97,7 +98,8 @@ def parse_payload(text: str, received: datetime) -> Signal:
     if not root:
         raise ValueError(f"認不出商品：ticker={ticker!r} contract={cc!r}")
 
-    sig = Signal(action=action, root=root, contract_month=month, signal=str(d.get("signal", "")),
+    tf = str(d["tf"]).strip() if d.get("tf") not in (None, "") else None
+    sig = Signal(action=action, root=root, contract_month=month, signal=str(d.get("signal", "")), tf=tf,
                  tv_time=_tv_time(d.get("tv_time")), received=received, raw=text)
     if action != "exit":
         sig.stop = _num(d.get("stop"))

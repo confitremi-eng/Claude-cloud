@@ -31,11 +31,13 @@ def et(y, mo, d, h, mi, s=0):
     return datetime(y, mo, d, h, mi, s, tzinfo=ET).astimezone(timezone.utc)
 
 
-def msg(action="buy", stop=24990.0, target=25030.0, price=25000.0, contract="NQZ2026", tv_time="{{timenow}}"):
+def msg(action="buy", stop=24990.0, target=25030.0, price=25000.0, contract="NQZ2026", tv_time="{{timenow}}", tf=None):
     d = {"strategy": "Remi Superb v3", "ticker": "NQ1!", "contract": contract, "action": action, "qty": 1,
          "signal": "趨勢", "stop": stop, "target": target, "price": price, "tv_time": tv_time}
     if action == "exit":
         d = {"strategy": "Remi Superb v3", "ticker": "NQ1!", "contract": contract, "action": "exit"}
+    if tf is not None:
+        d["tf"] = tf
     return json.dumps(d, ensure_ascii=False)
 
 
@@ -158,6 +160,52 @@ class TestEngine(unittest.IsolatedAsyncioTestCase):
         await self.e.handle(self.sig())
         self.assertEqual(self.b.log[-1][0], "bracket")
 
+    async def test_two_charts_share_one_position(self):
+        await self.e.handle(self.sig(tf="5"))                     # 5 分先進場，倉位歸 5 分
+        await self.e.handle(self.sig(tf="2"))                     # 2 分的進場：不理
+        await self.e.handle(self.sig("exit", tf="2"))             # 2 分的出場：不理
+        self.assertEqual([x[0] for x in self.b.log], ["bracket"])
+        self.assertEqual((self.b.pos, self.e.owner_tf), (2, "5"))
+        await self.e.handle(self.sig("exit", tf="5"))             # 5 分的出場：平倉
+        self.assertEqual(self.b.pos, 0)
+        self.assertIsNone(self.e.owner_tf)
+        await self.e.handle(self.sig(tf="2"))                     # 空手了，2 分可以進
+        self.assertEqual(self.e.owner_tf, "2")
+
+    async def test_old_format_is_2m(self):
+        await self.e.handle(self.sig())                           # 沒有 tf：當 2 分
+        self.assertEqual(self.e.owner_tf, "2")
+        await self.e.handle(self.sig("exit", tf="5"))
+        self.assertEqual(self.b.pos, 2)
+
+    async def test_tf_not_allowed(self):
+        await self.e.handle(self.sig(tf="1"))
+        self.assertEqual(self.b.log, [])
+
+    async def test_max_hold_per_tf(self):
+        await self.e.handle(self.sig(tf="5"))
+        self.clock.t += timedelta(minutes=200)
+        await self.e.tick()
+        self.assertEqual(self.b.pos, 2)                           # 2 分的 125 分鐘不適用
+        self.clock.t += timedelta(minutes=106)
+        await self.e.tick()
+        self.assertEqual(self.b.pos, 0)
+
+    async def test_owner_cleared_when_broker_flat(self):
+        await self.e.handle(self.sig(tf="5"))
+        self.b.pos, self.b.orders = 0, 0                          # IBKR 上停損成交
+        await self.e.tick()
+        self.assertIsNone(self.e.owner_tf)
+
+    async def test_state_survives_restart(self):
+        path = Path(tempfile.mkdtemp()) / "state.json"
+        e1 = Engine(self.b, cfg(), clock=self.clock, state_path=path)
+        await e1.handle(self.sig(tf="5"))
+        e2 = Engine(self.b, cfg(), clock=self.clock, state_path=path)
+        self.assertEqual((e2.owner_tf, e2.entry_time), ("5", self.clock.t))
+        await e2.handle(self.sig("exit", tf="2"))
+        self.assertEqual(self.b.pos, 2)
+
     def test_trading_day(self):
         self.assertEqual(trading_day(et(2026, 10, 19, 17, 59)), "2026-10-19")
         self.assertEqual(trading_day(et(2026, 10, 19, 18, 0)), "2026-10-20")
@@ -194,7 +242,7 @@ class TestNotify(unittest.IsolatedAsyncioTestCase):
     async def test_reject_message(self):
         self.e.paused = True
         await self.e.handle(parse_payload(msg(), self.clock()))
-        self.assertTrue(self.sent[0].startswith("⛔ 沒下單（買 趨勢）"))
+        self.assertTrue(self.sent[0].startswith("⛔ 沒下單（2 分 買 趨勢）"))
 
     def test_disconnect_and_summary(self):
         self.n.tick(False)

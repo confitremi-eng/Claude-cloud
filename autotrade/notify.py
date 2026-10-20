@@ -112,7 +112,7 @@ class Notifier:
             fill, px = r.get("fill"), e.get("price")
             d = 1 if e["side"] == "BUY" else -1
             lines = [f"{'🟢' if d > 0 else '🔴'} **進場 {SIDE[e['side']]} {e['qty']} 口 {r.get('contract', '')}**（{self.label}）"
-                     f" @ {_fmt(fill)}　{e.get('signal', '')}"]
+                     f" @ {_fmt(fill)}　{e.get('tf', '')} 分 {e.get('signal', '')}"]
             if fill:
                 lines.append(f"停損 {_fmt(e['stop'])}（{abs(fill - e['stop']):.2f} 點）｜目標 {_fmt(e['target'])}"
                              f"（{abs(e['target'] - fill):.2f} 點）")
@@ -125,7 +125,7 @@ class Notifier:
             self.send("\n".join(lines))
         elif k == "reject":
             what = {"buy": "買", "sell": "賣", "exit": "出場"}.get(e.get("action"), e.get("action"))
-            self.send(f"⛔ 沒下單（{what} {e.get('signal') or ''}）：{e.get('reason')}")
+            self.send(f"⛔ 沒下單（{e.get('tf', '')} 分 {what} {e.get('signal') or ''}）：{e.get('reason')}")
         elif k == "safety_exit":
             self.send(f"⚠️ 安全網平倉：{e.get('reason')}")
         elif k == "halt":
