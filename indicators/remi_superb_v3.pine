@@ -12,7 +12,6 @@
 //   ES / MES：回測每種做法都虧，預設不發
 // 趨勢訊號 = 原版訊號 + Trend Judge 同向 + 1 小時 EMA20 同向 + 停損 ≥ 0.95 ATR + 離 15 秒 EMA1130 不太遠 + 避開事件時段和 FOMC 日
 //   訊號 K 收盤進場，停損在訊號 K 和前一根的極值
-// NQ 2m 15s 規則（預設開）：超過 15s 線的趨勢訊號，同一段趨勢裡先有 15s 內的趨勢單被停損才做
 // NQ 5m 不逆日線 SMA5（預設開）：買要在日 K SMA5 上方、賣要在下方（趨勢和 MIX）
 // MIX 區間突破（NQ 2、5 分 K）：Trend Judge 連續 MIX 60 分 → 區間；之後 60 分內第一次突破 10% 就在突破價進場，停損在中線
 //   預設不做美東 16–20（收盤後）；可選「等收線才進場」（目標 2R）
@@ -66,7 +65,6 @@ atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", toolt
 qNqOn     = input.bool(true, "QQQ / NQ RTH：NQ 2 分 K 不反向", group=grpR, inline="qnq")
 nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpR, inline="qnq", tooltip="只影響 QQQ 和 NQ RTH：上一根已收完的 NQ 2 分 K（24 小時盤）Trend Judge 跟訊號反向就不做（買時 DOWN / 強Down、賣時 UP / 強UP）。回測：每年一樣 +66R，回撤 24R → 17R。讀不到 NQ 時不擋")
 d5On      = input.bool(true, "NQ 5m：不逆日線 SMA5（趨勢和 MIX）", group=grpR, tooltip="只在 NQ / MNQ 5 分 K：日 K（CME 交易日）SMA5 用前 5 個完整交易日的收盤（今天不算），買要在 SMA5 上方、賣要在下方；趨勢訊號看訊號 K 收盤，MIX 突破看突破價。回測 NQ 5m 五年每一年都比較好（前四年每年少虧 8–37R，v3 那年 +84R → +91R、勝率 45% → 54%）；2m 沒有一致的幫助，所以只用在 5m")
-s15On     = input.bool(true, "NQ 2m：超過 15s 線的訊號要先有停損才做", group=grpR, tooltip="只在 NQ / MNQ 2 分 K：趨勢訊號收在 15 秒 EMA1130（慢線）順勢側（買在上、賣在下）照做；已經超過慢線的訊號，要同一段趨勢（Trend Judge 連續同方向，MIX 就重新算）裡先有一筆慢線順勢側的趨勢單被停損才做，第一個訊號就超過慢線不做。回測 v3 那年：超過慢線的趨勢單 56 筆、勝率 32%、每筆 +0.08R（慢線內 +0.32R），規則一年擋掉約 26 筆，+204R → +208R；前 4 年超過慢線的單反而比較好，加規則每年多虧 5–8R")
 
 // ═════════════════ 5. 不交易的時間（趨勢訊號和 MIX 共用）═════════════════
 grpN      = "不交易的時間（趨勢訊號和 MIX 共用）"
@@ -485,15 +483,6 @@ var float vEntry = na
 var float vStop  = na
 var float vTgt   = na
 var int   vBar   = na
-// NQ 2m 15s 規則：超過 15s 線的趨勢訊號，同一段趨勢裡先有 15s 內的趨勢單被停損才做
-bool s15Use = s15On and isNQ and tfp == "2"
-var int runId = 0
-if trendDir == 0 or trendDir != nz(trendDir[1])
-    runId += 1
-var int s15Run  = na
-var int s15Side = 0
-var bool  vIns   = false      // 趨勢單進場時在 15s 線順勢側
-var int   vRun   = na
 var int   vKind  = 0          // 1 趨勢、2 MIX 突破、3 停損後再進場
 // 停損後再進場（只有 NQ 2m）：記下被停損那筆的方向、進場價和期限（5 根）
 bool reUse = reOn and isNQ and tfp == "2"
@@ -505,9 +494,6 @@ if vPos != 0 and bar_index > vBar
     bool hitTgt  = vPos == 1 ? high >= vTgt : low <= vTgt
     if hitStop or hitTgt or bar_index - vBar >= holdBars or haltBar or mbHole
         reSide  := hitStop and vKind != 3 and not haltBar and not mbHole ? vPos : 0
-        if hitStop and vKind == 1 and vIns
-            s15Run  := vRun
-            s15Side := vPos
         reEntry := vEntry
         reUntil := bar_index + 5
         vPos := 0
@@ -545,10 +531,8 @@ if goMixBuy or goMixSell
         reUntil := bar_index + 5
         vPos := 0
 bool flatClose = not onlyOne or vPos == 0
-bool s15BuyOk  = not s15Use or close > tjMaSlow or (s15Run == runId and s15Side == 1)
-bool s15SellOk = not s15Use or close < tjMaSlow or (s15Run == runId and s15Side == -1)
-bool goTrBuy  = trBuy and flatClose and not haltBar and s15BuyOk
-bool goTrSell = trSell and flatClose and not haltBar and not goTrBuy and s15SellOk
+bool goTrBuy  = trBuy and flatClose and not haltBar
+bool goTrSell = trSell and flatClose and not haltBar and not goTrBuy
 if goTrBuy or goTrSell
     reSide := 0
     vPos   := goTrBuy ? 1 : -1
@@ -557,8 +541,6 @@ if goTrBuy or goTrSell
     vTgt   := close + tgtR * (close - vStop)
     vBar   := bar_index
     vKind  := 1
-    vIns   := (close - tjMaSlow) * vPos > 0
-    vRun   := runId
 
 bool tradeBuy  = goMixBuy or goTrBuy or goReBuy
 bool tradeSell = goMixSell or goTrSell or goReSell
