@@ -10,6 +10,7 @@
 //   MIX 突破：區間形成後 60 分鐘內，在上下突破價（區間高度 10%）掛停損單，一邊成交就取消另一邊，停損在中線；
 //             下一根 K 在事件時段、美東 16:00–20:00、休市那根、週五截止後就不掛；第一次碰到突破價（不論有沒有成交）區間就作廢
 //             選項「等收線才進場」：改成 K 棒收在突破價外才在收盤市價進場，目標 2R（預設關）
+//   NQ 5m 不逆日線 SMA5（預設開）：買要在日 K SMA5 上方、賣要在下方（趨勢和 MIX）
 //   NQ 2m 停損後再進場（預設開）：停損後 5 根內 Trend Judge 同方向、收回原進場價就同方向再進一次（R L / R S），兩根 K 停損、3R
 //   一次一筆；持有 60 根 K 還沒出場就收盤平倉；NQ / ES 美東 17:00 休市前平倉；TXF、QQQ、SPY、NQ RTH 在每段交易時間最後一根平倉
 //   不開新倉：事件時段、垃圾時間（美東 12:00–13:05）、FOMC 日、週五台灣時間週六 02:00 以後
@@ -52,6 +53,7 @@ riskMult  = input.float(0.95, "停損至少（ATR 倍數）", minval=0, step=0.0
 atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）；停損距離小於「倍數 × 上一根的 ATR」就不做。預設 0.95（NQ 2m 回測 0.9–1.1 結果都一樣）。所有商品共用")
 qNqOn     = input.bool(true, "QQQ / NQ RTH：NQ 2 分 K 不反向", group=grpR, inline="qnq")
 nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpR, inline="qnq", tooltip="只影響 QQQ 和 NQ RTH：上一根已收完的 NQ 2 分 K（24 小時盤）Trend Judge 跟訊號反向就不做。讀不到 NQ 時不擋")
+d5On      = input.bool(true, "NQ 5m：不逆日線 SMA5（趨勢和 MIX）", group=grpR, tooltip="只在 NQ / MNQ 5 分 K：日 K（CME 交易日）SMA5 用前 5 個完整交易日的收盤（今天不算），買要在 SMA5 上方、賣要在下方；趨勢訊號看訊號 K 收盤，MIX 突破看突破價。回測 NQ 5m 五年每一年都比較好（前四年每年少虧 8–37R，v3 那年 +84R → +91R、勝率 45% → 54%）；2m 沒有一致的幫助，所以只用在 5m")
 
 // ═════════════════ 6. 不交易的時間（趨勢訊號和 MIX 共用）═════════════════
 grpN      = "不交易的時間（趨勢訊號和 MIX 共用）"
@@ -288,10 +290,13 @@ h1Vals() =>
 [h1Close, h1Ema] = request.security(syminfo.tickerid, "60", h1Vals(), lookahead=barmerge.lookahead_on)
 float atrPrev  = ta.atr(atrLen)[1]
 float atrNow   = ta.atr(atrLen)
+// NQ 5m：日 K SMA5（前 5 個完整交易日，今天不算），買要在上方、賣要在下方
+float d5    = request.security(syminfo.tickerid, "D", ta.sma(close, 5)[1], lookahead=barmerge.lookahead_on)
+bool  d5Use = d5On and nq5 and not na(d5)
 float buyStop  = math.min(low, low[1])
 float sellStop = math.max(high, high[1])
-bool trBuy  = active and useTrend and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate and not fomcSkip
-bool trSell = active and useTrend and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate and not fomcSkip
+bool trBuy  = active and useTrend and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate and not fomcSkip and (not d5Use or close > d5)
+bool trSell = active and useTrend and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate and not fomcSkip and (not d5Use or close < d5)
 
 // ═════════════════ MIX 區間（只有 NQ 2、5 分 K）═════════════════
 float tfMin   = tfSec / 60.0
@@ -363,8 +368,8 @@ if bxLive and not mbForm and bar_index > bxForm
         if close > bxUpL or close < bxDnL
             bxLive := false
             if not evtNow and not pmNow and not fomcSkip
-                mxUpC := close > bxUpL
-                mxDnC := close < bxDnL
+                mxUpC := close > bxUpL and (not d5Use or bxUpL > d5)
+                mxDnC := close < bxDnL and (not d5Use or bxDnL < d5)
     else if high >= bxUpL or low <= bxDnL
         bxLive := false
 var line bxUpLine = na
@@ -509,10 +514,18 @@ if goGsS
 // MIX 突破：區間有效、空手，而且下一根不在事件時段、美東 16–20、休市那根、週五截止後，才在上下突破價掛停損單
 bool mixArm = not mixClose and active and mixUse and useMix and canEnter and not reGo and not goLong and not goShort and bxLive and bar_index >= bxForm and bar_index < bxEnd and not evtNext and not pmNext and not haltNxt and not friNext and not friLate and not fomcNext
 if mixArm
-    strategy.entry("M L", strategy.long, qty=qtyIn, stop=bxUpL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 上破", alert_message=entryMsg("buy", "MIX 突破", bxUpL, bxMid, bxUpT))
-    strategy.entry("M S", strategy.short, qty=qtyIn, stop=bxDnL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 下破", alert_message=entryMsg("sell", "MIX 突破", bxDnL, bxMid, bxDnT))
-    placeExits("M L", bxMid, bxUpL, bxUpT)
-    placeExits("M S", bxMid, bxDnL, bxDnT)
+    bool mlOk = not d5Use or bxUpL > d5                                 // 5m 不逆日線 SMA5：只掛順日線那一邊
+    bool msOk = not d5Use or bxDnL < d5
+    if mlOk
+        strategy.entry("M L", strategy.long, qty=qtyIn, stop=bxUpL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 上破", alert_message=entryMsg("buy", "MIX 突破", bxUpL, bxMid, bxUpT))
+        placeExits("M L", bxMid, bxUpL, bxUpT)
+    else
+        strategy.cancel("M L")
+    if msOk
+        strategy.entry("M S", strategy.short, qty=qtyIn, stop=bxDnL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 下破", alert_message=entryMsg("sell", "MIX 突破", bxDnL, bxMid, bxDnT))
+        placeExits("M S", bxMid, bxDnL, bxDnT)
+    else
+        strategy.cancel("M S")
 else
     strategy.cancel("M L")
     strategy.cancel("M S")

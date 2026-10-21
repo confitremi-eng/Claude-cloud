@@ -12,6 +12,7 @@
 //   ES / MES：回測每種做法都虧，預設不發
 // 趨勢訊號 = 原版訊號 + Trend Judge 同向 + 1 小時 EMA20 同向 + 停損 ≥ 0.95 ATR + 離 15 秒 EMA1130 不太遠 + 避開事件時段和 FOMC 日
 //   訊號 K 收盤進場，停損在訊號 K 和前一根的極值
+// NQ 5m 不逆日線 SMA5（預設開）：買要在日 K SMA5 上方、賣要在下方（趨勢和 MIX）
 // MIX 區間突破（NQ 2、5 分 K）：Trend Judge 連續 MIX 60 分 → 區間；之後 60 分內第一次突破 10% 就在突破價進場，停損在中線
 //   預設不做美東 16–20（收盤後）；可選「等收線才進場」（目標 2R）
 // 一次一筆：指標自己記一筆虛擬持倉，碰到停損 / 目標、持有 60 根、美東 17:00 休市前（NQ / ES）或資料中斷才出場
@@ -54,6 +55,7 @@ riskMult  = input.float(0.95, "停損至少（ATR 倍數）", minval=0, step=0.0
 atrLen    = input.int(14, "ATR 長度", minval=1, group=grpR, inline="rk", tooltip="停損 = 訊號 K 和前一根的最低點（買）/ 最高點（賣）；停損距離小於「倍數 × 上一根的 ATR」就不做。預設 0.95（2026-10-21 從 1.0 改）：NQ 2m 回測 0.9–1.1 結果都一樣、勝率 40%。所有商品共用")
 qNqOn     = input.bool(true, "QQQ / NQ RTH：NQ 2 分 K 不反向", group=grpR, inline="qnq")
 nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpR, inline="qnq", tooltip="只影響 QQQ 和 NQ RTH：上一根已收完的 NQ 2 分 K（24 小時盤）Trend Judge 跟訊號反向就不做（買時 DOWN / 強Down、賣時 UP / 強UP）。回測：每年一樣 +66R，回撤 24R → 17R。讀不到 NQ 時不擋")
+d5On      = input.bool(true, "NQ 5m：不逆日線 SMA5（趨勢和 MIX）", group=grpR, tooltip="只在 NQ / MNQ 5 分 K：日 K（CME 交易日）SMA5 用前 5 個完整交易日的收盤（今天不算），買要在 SMA5 上方、賣要在下方；趨勢訊號看訊號 K 收盤，MIX 突破看突破價。回測 NQ 5m 五年每一年都比較好（前四年每年少虧 8–37R，v3 那年 +84R → +91R、勝率 45% → 54%）；2m 沒有一致的幫助，所以只用在 5m")
 
 // ═════════════════ 5. 不交易的時間（趨勢訊號和 MIX 共用）═════════════════
 grpN      = "不交易的時間（趨勢訊號和 MIX 共用）"
@@ -296,10 +298,13 @@ h1Vals() =>
 [h1Close, h1Ema] = request.security(syminfo.tickerid, "60", h1Vals(), lookahead=barmerge.lookahead_on)
 float atrPrev  = ta.atr(atrLen)[1]
 float atrNow   = ta.atr(atrLen)
+// NQ 5m：日 K SMA5（前 5 個完整交易日，今天不算），買要在上方、賣要在下方
+float d5    = request.security(syminfo.tickerid, "D", ta.sma(close, 5)[1], lookahead=barmerge.lookahead_on)
+bool  d5Use = d5On and nq5 and not na(d5)
 float buyStop  = math.min(low, low[1])
 float sellStop = math.max(high, high[1])
-bool trBuy  = active and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate and not fomcSkip
-bool trSell = active and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate and not fomcSkip
+bool trBuy  = active and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate and not fomcSkip and (not d5Use or close > d5)
+bool trSell = active and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate and not fomcSkip and (not d5Use or close < d5)
 
 // ═════════════════ GEX：QQQ 現價跟手動輸入的 gamma flip 比（只顯示）═════════════════
 float qqqPx   = isQQ ? close : request.security(qqqSym, timeframe.period, close)
@@ -420,8 +425,8 @@ if bxLive and not mbForm and bar_index > bxForm
         if upHit or dnHit
             bxLive := false
             if not (upHit and dnHit) and not evtNow and not mixPm and not fomcSkip
-                mxBuy  := active and mixUse and upHit
-                mxSell := active and mixUse and dnHit
+                mxBuy  := active and mixUse and upHit and (not d5Use or bxUpL > d5)
+                mxSell := active and mixUse and dnHit and (not d5Use or bxDnL < d5)
 var line bxUpLine = na
 var line bxDnLine = na
 if active and mixUse and mbForm and bxLive and showBox and not na(bxTop) and not na(bxBot)
