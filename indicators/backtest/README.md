@@ -114,6 +114,8 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `bought_raw_backtest.py` | 同一支指標的原始觸發（100 根新低、收盤站回、不看 EMA）多年回測：`nq 2`、`nq 5`（NQ_1m_5y）、`txf 2 *.sql`，逐年、盤別、連發、EMA200 / 89 上下 |
 | `rise_points.py` | 三種起漲點（慢跌收復、急跌反轉、中繼急殺，來自 🦀 / 🍦）在 NQ 2 / 5 分 K 五年：21 種條件分組（固定 1 ATR 停損，對照隨機漫步）、前後兩段；`--search` 兩兩組合並用打亂結果檢驗是不是運氣 |
 | `v4_check.py` | V4 候選：v3 現行規則（同 `reentry.py`）只把原版訊號換成 Remi 圖上的 (8, 0, 9, 1)，跟 (20, 0, 8, 1) 逐年比 1 / 1.5 / 2 / 3R 的 R 和勝率、最近半年；NQ 2m、5m |
+| `v4_winrate.py` | V4 高勝率研究：v3 會做的趨勢 / MIX 訊號，目標 0.25–1.5R、停損 ×1 / 1.5 / 2，對照隨機漫步；條件分組、兩兩組合打亂檢驗（`search`）、一次一筆的出場比較（`exits`：小目標、分批、保本）、溫和過濾 × 出場逐年（`v4`）；結果在 `../v4_high_winrate.md` |
+| `v4_reference.py` | V4 策略版（`../remi_superb_v4_strategy.pine`）的 Python 重跑：每筆 4 口、0.33R ×2 / 0.6R / 3R、保本、高開低走 0.33R，一次一筆照 Pine，成本照 TradingView 屬性；逐月筆數、勝率、TV 筆數 / 勝率、淨利（美元）和最近 20 筆，給策略測試器對照 |
 | `one_minute.py` | NQ 1 分 K：1m 和 2m 同時出訊號（只用進場當下已知的資訊）、等 2m 確認再進、2m 還沒出訊號的 1m 訊號贏輸特徵、過濾訊號依趨勢已持續多久（1/2/3/5 分，MIX 長短、反轉或延續）、30–120 分鐘窗口的穩定性和一次一筆結果 |
 | `v2_port.py` | Remi Superb v2 照指標逐根重算：趨勢訊號（30–120 分）、MIX 突破、一次一筆虛擬持倉（停損、目標、60 根、17:00 休市、資料中斷），3R / 2R、不限趨勢時間 |
 | `trend_time_tf.py` | 3 / 5 分 K（2 分 K 參考）的過濾訊號依指標的趨勢已持續分鐘數：30 分鐘分段、範圍掃描（前後半年都賺）、一次一筆 |
@@ -175,6 +177,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `qqq_2m.py` | QQQ 2 分 K（NQ 美股盤代替）套 NQ 2m / ETF 規則，趨勢 / 加 MIX、3R / 1R，對照 NQ RTH 1m |
 | `mix_stop.py` | MIX 突破換比較近的停損（0.4H、0.3H、1 / 1.5 ATR），目標照 R 或維持原價，NQ 2m / 5m 每年勝率和點數 |
 | `mix_sma5_dist.py` | 5m MIX 突破依離日線 SMA5 的距離分組（順 / 逆日線），1R / 2R 命中和每筆 R |
+| `scale_in.py` | 分批進場：第一口訊號進、第二口等回檔 0.25 / 0.5 / 0.75R，或兩口都等回檔，NQ 2m / 5m 點數和勝率 |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
