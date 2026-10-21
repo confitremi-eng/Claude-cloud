@@ -159,6 +159,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `breakeven.py` | v3 保本停損：賺到 1 / 1.5 / 2R 後移到保本，或 2 / 2.5R 鎖 1R，NQ 2m / 5m 五年逐年 |
 | `fast_dist.py` | v3 距離條件：離 15 秒慢線 vs 離 5 秒快線（ATR），NQ 2m / 5m 五年逐年＋依距離分組 |
 | `fixed_points.py` | v3 訊號改用固定停損 60 點、目標 50 / 100 點（只換趨勢單或連 MIX），以點數比較 |
+| `reentry.py` | 被停損後 N 根內趨勢沒變、收回進場價就再進場一次（兩根 K 停損或原停損），NQ 2m / 5m 五年逐年 |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
