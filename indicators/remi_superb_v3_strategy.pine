@@ -17,6 +17,7 @@
 //   不開新倉：事件時段、收盤後美東 15:45–18:30（NQ / ES）、垃圾時間（美東 12:00–13:05）、FOMC 日、週五台灣時間週六 02:00 以後
 // Trend Judge 用 1 分 K 收盤推算（同回測）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
 // 出場管理（預設兩組）：每筆進「口數 × 2」，第一組 1R 先出，第二組照原停損和目標
+// 開盤高開低走（預設開，NQ RTH 1 / 2 分 K）：高開 ≥ 0.75%、第一根 2 分鐘收黑還在昨收上 → 09:32 收盤做空、1R（O S）
 // GEX setup（預設關，NQ RTH 1 分 K）：(35, 0, 8, 1) + Trend Judge 順勢 + 朝手動輸入的 QQQ flip 走，目標 3R；垃圾時間只做賣
 //   跟 v3 的單共用一個倉位（空手才進場）；回測整段歷史都用同一個 flip，所以 GEX setup 的歷史回測不準
 strategy("Remi Superb v3 策略", overlay=true, pyramiding=0, process_orders_on_close=true, calc_on_every_tick=false, default_qty_type=strategy.fixed, default_qty_value=1, initial_capital=50000, currency=currency.USD, commission_type=strategy.commission.cash_per_contract, commission_value=2.5, slippage=2, margin_long=0, margin_short=0, max_boxes_count=500, max_lines_count=500)
@@ -46,6 +47,12 @@ gsOn      = input.bool(false, "做 GEX setup（目標 3R）", group=grpX, toolti
 gsStage   = input.int(35, "階段", minval=2, group=grpX, inline="gs")
 gsEma     = input.int(8, "Ema number", minval=1, group=grpX, inline="gs", tooltip="預設 (35, 0, 8, 1)，同指標版")
 gsJunkSell = input.bool(true, "垃圾時間照做 GEX 賣單", group=grpX, tooltip="垃圾時間（「不交易的時間」設定）所有單都不做，只有 GEX setup 的賣單例外，同指標版")
+
+// ═════════════════ 4b. 開盤高開低走（NQ RTH）═════════════════
+grpU      = "開盤高開低走 setup（NQ RTH）"
+goOn      = input.bool(true, "做開盤高開低走（做空，目標 1R）", group=grpU, tooltip="只在 NQ RTH 1 或 2 分 K：09:30 開盤比前一天 16:00 收盤高開 ≥ 下面的 %，第一根 2 分鐘 K（09:30–09:32）收黑、還在昨收之上，就在 09:32 收盤市價做空（訂單 O S），停損第一根 2 分鐘最高點上 1 跳，目標 1R，16:00 收盤平倉。跟 v3 的單共用倉位（空手才進場）。回測（五年，缺口 ≥ 0.75%）：94 筆、1R 勝率 65%、每筆 +0.27R")
+goGap     = input.float(0.75, "最小高開（%）", minval=0, step=0.05, group=grpU, inline="go")
+goR       = input.float(1.0, "目標（R）", minval=0.1, step=0.5, group=grpU, inline="go")
 
 // ═════════════════ 5. 趨勢訊號過濾 ═════════════════
 grpR      = "趨勢訊號過濾"
@@ -287,6 +294,21 @@ else if gNewHigh
 bool gsEnd   = etMin >= 960 or session.islastbar
 bool junkNow = junkAt(tClose)
 bool gsBuy   = gsActive and gsReady and gTrigBuy and close > gEma and tjLinked and tjDirI >= 1 and qqqPx < gexFlip and not friLate and not gsEnd and not junkNow
+// 開盤高開低走（NQ RTH）：高開 ≥ goGap%，第一根 2 分鐘收黑還在昨收之上
+var float goPrevC = na
+var float goLastC = na
+var float goO     = na
+var float goH     = na
+if etMin == 960
+    goLastC := close
+if barEtMin == 570
+    goPrevC := goLastC
+    goO     := open
+    goH     := high
+else if barEtMin == 571
+    goH := math.max(goH, high)
+float goGapP = na(goPrevC) or na(goO) ? na : (goO - goPrevC) / goPrevC * 100
+bool  goSig  = goOn and isNqR and (tfp == "1" or tfp == "2") and etMin == 572 and not na(goGapP) and goGapP >= goGap and close < goO and close > goPrevC
 bool gsSell  = gsActive and gsReady and gTrigSell and close < gEma and tjLinked and tjDirI <= -1 and qqqPx > gexFlip and not friLate and not gsEnd and (not junkNow or gsJunkSell)
 
 // ═════════════════ 趨勢訊號 ═════════════════
@@ -533,6 +555,16 @@ if goGsS
     placeExits("G S", sellStop, close, tgtGS)
     posStop := sellStop
     posTgt  := tgtGS
+
+// 開盤高開低走：空手、這根沒有其他單時，收盤市價做空
+bool goOS = canEnter and goSig and not reGo and not goLong and not goShort and not goMixL and not goMixS and not goGsL and not goGsS
+if goOS
+    float goStp = goH + syminfo.mintick
+    float goTg  = close - goR * (goStp - close)
+    strategy.entry("O S", strategy.short, qty=qtyIn, comment="高開低走賣", alert_message=entryMsg("sell", "開盤高開低走", close, goStp, goTg))
+    placeExits("O S", goStp, close, goTg)
+    posStop := goStp
+    posTgt  := goTg
 
 // MIX 突破：區間有效、空手，而且下一根不在事件時段、美東 16–20、休市那根、週五截止後，才在上下突破價掛停損單
 bool mixArm = not mixClose and active and mixUse and useMix and canEnter and not reGo and not goLong and not goShort and bxLive and bar_index >= bxForm and bar_index < bxEnd and not evtNext and not pmNext and not haltNxt and not friNext and not friLate and not fomcNext
