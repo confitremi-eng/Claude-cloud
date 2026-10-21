@@ -184,6 +184,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `th_sweep_now.py` | 現在的 v3 規則下 Trend Judge 門檻 6–12 點，NQ 2m / 5m 五年逐年 |
 | `rth_stage.py` | NQ RTH 1m（QQQ 做法）原版訊號階段 15–60 × EMA 5 / 8 / 13，五年逐年；`nojunk` 不套垃圾時間 |
 | `rth_dip.py` | QQQ（NQ 美股盤 1m）強上升趨勢中買回檔：回到 15s 慢線掛買、回檔 2 / 3 ATR 後第一根收紅買，對照強下降賣反彈 |
+| `rth_strong_stage.py` | NQ RTH 1m 強勢（> 40）時另外做階段 15–30 的訊號，五年逐年 |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
