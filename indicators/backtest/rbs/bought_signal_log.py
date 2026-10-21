@@ -119,8 +119,10 @@ def main():
         later = [n for n, d in enumerate(frames) if n > first and d.t.iat[0] <= s.t <= d.t.iat[-1]]
         gone = [n for n in later if n not in s.src]
         i = idx[s.t]
+        o, c = bars.open.iat[i], bars.close.iat[i]
         r = {'訊號K(台北)': s.t.strftime('%Y-%m-%d %H:%M'), '符號': s.sym,
-             '盤別': part(s.t, a.mkt), '進場(收盤)': bars.close.iat[i],
+             'K棒': '陽' if c > o else '陰' if c < o else '平',
+             '盤別': part(s.t, a.mkt), '進場(收盤)': c,
              'ATR': round(atr[i], 1), '狀態': '消失' if gone else '有效',
              '首次出現': os.path.basename(a.files[first])}
         f = bars.iloc[i + 1:i + 31]
@@ -142,8 +144,15 @@ def main():
     ok = log[log.狀態 == '有效']
     print(f'K 線 {bars.t.iat[0]:%Y-%m-%d %H:%M} .. {bars.t.iat[-1]:%Y-%m-%d %H:%M}（台北），'
           f'訊號 {len(log)} 個，消失 {(log.狀態 == "消失").sum()} 個；全部當作做多，成本 {a.cost:g} 點')
-    for grp, g in [('全部', ok)] + [(s, ok[ok.符號 == s]) for s in cols.values()] + \
-                  [(p, ok[ok.盤別 == p]) for p in parts]:
+    groups = [('全部', ok)]
+    for s in cols.values():
+        groups.append((s, ok[ok.符號 == s]))
+        for k in ('陽', '陰'):
+            g = ok[(ok.符號 == s) & (ok.K棒 == k)]
+            if 0 < len(g) < (ok.符號 == s).sum():         # only when the symbol comes in both colours
+                groups.append((f'{s} {k}線', g))
+    groups += [(p, ok[ok.盤別 == p]) for p in parts]
+    for grp, g in groups:
         print(f'\n== {grp}（{len(g)} 筆）')
         print(f'{"停損":<6}{"平均點數":>8}  {"1R 命中":>8}{"1.5R 命中":>10}{"2R 命中":>8}{"3R 命中":>8}   '
               f'{"每筆R: 1R":>9}{"1.5R":>7}{"2R":>7}{"3R":>7}')
