@@ -170,6 +170,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `line_only.py` | 趨勢訊號不用 Trend Judge 門檻，改只看 5s / 15s 線（位置、斜率、快慢線同側），NQ 2m / 5m 五年逐年 |
 | `slow_side.py` | Remi 的 15s 規則：超過 15s 線的趨勢訊號，同一段趨勢裡先有 15s 內的單被停損才做，NQ 2m / 5m 五年逐年 |
 | `avoid_window.py` | 避開某段時間（台北 / 美東 03:00–07:00）不進場，NQ 2m / 5m 五年逐年，和這段自己的結果 |
+| `open_gap.py` | Globex 18:00 開盤跳空、第一根反向收（低開收紅 / 高開收黑）做反向，依缺口大小、週日、收回幅度分組 |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
