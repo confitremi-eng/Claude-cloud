@@ -4,6 +4,7 @@
 //   NQ / MNQ 3 分 K：趨勢訊號（趨勢 90–120 分），目標 1R
 //   NQ / MNQ 5 分 K：趨勢訊號（趨勢 0–180 分）+ MIX 區間突破，目標 2R
 //   QQQ / SPY 1 分 K、NQ 1 分 K 只開美股盤（RTH）：(35, 0, 8, 1)，目標 3R（QQQ、NQ RTH 另加 NQ 2 分 K 不反向）
+//   QQQ / NQ RTH 2 分 K：同上，目標 1R
 //   TXF / MXF 2、3 分 K：趨勢訊號（趨勢 60–120 分），目標 3R；ES / MES 預設不做
 // 下單：
 //   趨勢訊號：訊號 K 收盤市價進場，停損在訊號 K 和前一根的極值
@@ -24,7 +25,7 @@ strategy("Remi Superb v3 策略", overlay=true, pyramiding=0, process_orders_on_
 // ═════════════════ 1. 商品 ═════════════════
 grpP      = "商品"
 profSel   = input.string("自動", "商品", options=["自動", "NQ", "NQ RTH（代替 QQQ）", "ES", "TXF", "QQQ", "SPY"], group=grpP, tooltip="自動：依圖上的商品選做法（NQ / MNQ、ES / MES、TXF / MXF / TMF、QQQ、SPY）。NQ 圖只開美股盤時自動改用「NQ RTH」，做法同 QQQ。也可以手動指定")
-otherTf   = input.bool(false, "不是建議週期也交易", group=grpP, tooltip="建議週期：NQ 2、3、5 分 K；TXF 2、3 分 K；QQQ、SPY、NQ RTH 1 分 K。關（預設）：其他週期不交易。開：用最接近的做法（沒有回測過）")
+otherTf   = input.bool(false, "不是建議週期也交易", group=grpP, tooltip="建議週期：NQ 2、3、5 分 K；TXF 2、3 分 K；QQQ、NQ RTH 1、2 分 K（2 分 K 目標 1R）；SPY 1 分 K。關（預設）：其他週期不交易。開：用最接近的做法（沒有回測過）")
 esOn      = input.bool(false, "ES 也交易（回測是虧的）", group=grpP, tooltip="ES / MES 2、3 分 K 回測每一種做法都虧，所以預設不做。打開會用 NQ 2 分 K 的做法（門檻 4 點、不做 MIX）")
 
 // ═════════════════ 2. 下單 ═════════════════
@@ -135,7 +136,7 @@ bool   isETF    = isQQ or isSP or isNqR
 bool   isStock  = isQQ or isSP
 bool   isCME    = isNQ or isES
 string tfp      = timeframe.period
-bool   okTf     = isNQ ? (tfp == "2" or tfp == "3" or tfp == "5") : (isTX or isES) ? (tfp == "2" or tfp == "3") : isETF ? tfp == "1" : false
+bool   okTf     = isNQ ? (tfp == "2" or tfp == "3" or tfp == "5") : (isTX or isES) ? (tfp == "2" or tfp == "3") : isETF ? (tfp == "1" or (tfp == "2" and (isQQ or isNqR))) : false
 bool   profOn   = isES ? esOn : (isNQ or isTX or isETF)
 bool   active   = profOn and (okTf or otherTf)
 bool   nq3      = isNQ and tfp == "3"
@@ -150,7 +151,8 @@ bool   useWin   = not isETF
 int    winLo    = nq3 ? 90 : isTX ? 60 : 0
 int    winHi    = nq3 ? 120 : isTX ? 120 : isNQ and tfp == "2" ? 400 : 180   // NQ 2m 2026-10-21 從 180 放寬到 400（trend_cap.py）
 bool   mixUse   = isNQ and not nq3
-float  tgtR     = nq3 ? 1.0 : nq5 ? 2.0 : 3.0
+bool   etf2m    = (isQQ or isNqR) and tfp == "2"                    // QQQ / NQ RTH 2 分 K：(35, 0, 8, 1)、ETF 過濾、目標 1R（2026-10-22）
+float  tgtR     = nq3 ? 1.0 : nq5 ? 2.0 : etf2m ? 1.0 : 3.0
 int    qtyUse   = isStock ? qtyEtf : qtyFut
 bool   splitOn  = exitMode != "全部照目標"
 int    qtyIn    = splitOn ? 2 * qtyUse : qtyUse                 // 兩組時每筆進「口數 × 2」

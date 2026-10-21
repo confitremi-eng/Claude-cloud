@@ -7,6 +7,7 @@
 //   NQ / MNQ 5 分 K：趨勢訊號（趨勢 0–180 分）+ MIX 區間突破，目標 2R            每年 +90R，回撤 11R
 //   NQ RTH 1 分 K（NQ 只開美股盤，代替 QQQ）：(35, 0, 8, 1)、門檻 20 點、離慢線 ≤ 7 ATR、NQ 2m 不反向，目標 3R
 //   QQQ 1 分 K：同 NQ RTH 的做法，門檻 0.5                                      每年 +66R，回撤 17R
+//   QQQ / NQ RTH 2 分 K：同上的做法，目標 1R                                      v3 那年勝率 63%、+37R（2026-10-22 新增）
 //   SPY 1 分 K：(35, 0, 8, 1)、門檻 0.8、離慢線 ≤ 7 ATR，目標 3R                  每年 +67R，回撤 21R
 //   TXF / MXF 2、3 分 K：趨勢訊號（趨勢 60–120 分），目標 3R                     邊緣：每年 +10R / +5R（成本 2 點）
 //   ES / MES：回測每種做法都虧，預設不發
@@ -29,7 +30,7 @@ indicator("Remi Superb v3", overlay=true, max_labels_count=500, max_boxes_count=
 // ═════════════════ 1. 商品 ═════════════════
 grpP      = "商品"
 profSel   = input.string("自動", "商品", options=["自動", "NQ", "NQ RTH（代替 QQQ）", "ES", "TXF", "QQQ", "SPY"], group=grpP, tooltip="自動：依圖上的商品選做法（NQ / MNQ、ES / MES、TXF / MXF / TMF、QQQ、SPY）。NQ 圖只開美股盤時（最近 1500 根 K 都在美東 09:30–16:15 之內）自動改用「NQ RTH」，做法同 QQQ。也可以手動指定")
-otherTf   = input.bool(false, "不是建議週期也發訊號", group=grpP, tooltip="建議週期：NQ 2、3、5 分 K；TXF 2、3 分 K；QQQ、SPY、NQ RTH 1 分 K。關（預設）：其他週期只顯示表格。開：用最接近的做法發訊號（沒有回測過）")
+otherTf   = input.bool(false, "不是建議週期也發訊號", group=grpP, tooltip="建議週期：NQ 2、3、5 分 K；TXF 2、3 分 K；QQQ、NQ RTH 1、2 分 K（2 分 K 目標 1R）；SPY 1 分 K。關（預設）：其他週期只顯示表格。開：用最接近的做法發訊號（沒有回測過）")
 esOn      = input.bool(false, "ES 也發訊號（回測是虧的）", group=grpP, tooltip="ES / MES 2、3 分 K 回測每一種做法都虧，所以預設不發。打開會用 NQ 2 分 K 的做法（門檻 4 點、不做 MIX）")
 
 // ═════════════════ 2. GEX（每天手動更新 flip）═════════════════
@@ -158,7 +159,7 @@ bool   isSP     = prof == "SPY"
 bool   isETF    = isQQ or isSP or isNqR       // 美股盤、ETF 設定
 bool   isCME    = isNQ or isES
 string tfp      = timeframe.period
-bool   okTf     = isNQ ? (tfp == "2" or tfp == "3" or tfp == "5") : (isTX or isES) ? (tfp == "2" or tfp == "3") : isETF ? tfp == "1" : false
+bool   okTf     = isNQ ? (tfp == "2" or tfp == "3" or tfp == "5") : (isTX or isES) ? (tfp == "2" or tfp == "3") : isETF ? (tfp == "1" or (tfp == "2" and (isQQ or isNqR))) : false
 bool   profOn   = isES ? esOn : (isNQ or isTX or isETF)
 bool   active   = profOn and (okTf or otherTf)
 bool   nq3      = isNQ and tfp == "3"
@@ -174,7 +175,8 @@ bool   useWin   = not isETF
 int    winLo    = nq3 ? 90 : isTX ? 60 : 0
 int    winHi    = nq3 ? 120 : isTX ? 120 : isNQ and tfp == "2" ? 400 : 180   // NQ 2m 2026-10-21 從 180 放寬到 400（trend_cap.py）
 bool   mixUse   = isNQ and not nq3
-float  tgtR     = nq3 ? 1.0 : nq5 ? 2.0 : 3.0
+bool   etf2m    = (isQQ or isNqR) and tfp == "2"                    // QQQ / NQ RTH 2 分 K：(35, 0, 8, 1)、ETF 過濾、目標 1R（2026-10-22）
+float  tgtR     = nq3 ? 1.0 : nq5 ? 2.0 : etf2m ? 1.0 : 3.0
 string ruleTxt  = isETF ? "ETF 設定 " + sigTxt + "，" + str.tostring(tgtR) + "R" + ((isQQ or isNqR) and qNqOn ? "，NQ 2m 不反向" : "") + (isNqR ? "（代替 QQQ）" : "") : "趨勢 " + str.tostring(winLo) + "–" + str.tostring(winHi) + " 分" + (mixUse ? " + MIX 突破" + (mixClose ? "（收線 2R）" : "") : "") + "，" + str.tostring(tgtR) + "R，訊號 " + sigTxt
 string gradeTxt = not profOn and isES ? "不建議（回測都虧）" : prof == "無" ? "不支援" : not okTf ? "不是建議週期" : isNQ and tfp == "2" ? "主力" : isTX ? "邊緣" : "可做"
 
@@ -637,7 +639,7 @@ if barstate.islast and showTbl
     else if isNQ and tfp == "1" and profSel == "自動"
         warn := compact ? "1m 請開 RTH 或選 NQ RTH" : "NQ 1 分 K 要用 NQ RTH：圖表時段切 RTH（" + (na(lastNight) ? "已經 " + str.tostring(bar_index) + " 根 K，要 1500 根才會自動切換" : "最近一根美股盤外的 K 在 " + str.tostring(bar_index - lastNight) + " 根前，要超過 1500 根") + "），或在「商品」選「NQ RTH（代替 QQQ）」"
     else if not okTf
-        warn := compact ? "建議 " + (isETF ? "1" : isNQ ? "2、3 或 5" : "2 或 3") + " 分 K" : "建議週期：" + (isETF ? "1 分 K" : isNQ ? "2、3 或 5 分 K" : "2 或 3 分 K") + "，目前 " + tfp + (otherTf ? "（照設定仍發訊號，沒有回測過）" : "（不發訊號）")
+        warn := compact ? "建議 " + ((isQQ or isNqR) ? "1 或 2" : isETF ? "1" : isNQ ? "2、3 或 5" : "2 或 3") + " 分 K" : "建議週期：" + ((isQQ or isNqR) ? "1 或 2 分 K" : isETF ? "1 分 K" : isNQ ? "2、3 或 5 分 K" : "2 或 3 分 K") + "，目前 " + tfp + (otherTf ? "（照設定仍發訊號，沒有回測過）" : "（不發訊號）")
     else if (isQQ or isSP) and syminfo.session == session.extended
         warn := compact ? "請關延長時段" : "請關掉延長交易時段，回測只用美股盤 09:30–16:00"
     else if isTX
