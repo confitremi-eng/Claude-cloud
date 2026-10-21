@@ -16,7 +16,7 @@ import market_matrix as mm
 import oos_check as oc
 import daily_sma5 as d5
 
-WINDOWS = (('台北 03:00–07:00（美東 15:00–19:00）', 'Asia/Taipei', 180, 420), ('美東 03:00–07:00（台北 15:00–19:00）', 'America/New_York', 180, 420))
+WINDOWS = (('台北 03:00–07:00（美東 15:00–19:00）', 'Asia/Taipei', 180, 420), ('美東 03:00–07:00（台北 15:00–19:00）', 'America/New_York', 180, 420), ('台北 03:45–06:30（美東 15:45–18:30）', 'Asia/Taipei', 225, 390))
 
 
 def main():
