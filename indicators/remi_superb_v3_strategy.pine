@@ -10,6 +10,7 @@
 //   MIX 突破：區間形成後 60 分鐘內，在上下突破價（區間高度 10%）掛停損單，一邊成交就取消另一邊，停損在中線；
 //             下一根 K 在事件時段、美東 16:00–20:00、休市那根、週五截止後就不掛；第一次碰到突破價（不論有沒有成交）區間就作廢
 //             選項「等收線才進場」：改成 K 棒收在突破價外才在收盤市價進場，目標 2R（預設關）
+//   NQ 2m 停損後再進場（預設開）：停損後 5 根內 Trend Judge 同方向、收回原進場價就同方向再進一次（R L / R S），兩根 K 停損、3R
 //   一次一筆；持有 60 根 K 還沒出場就收盤平倉；NQ / ES 美東 17:00 休市前平倉；TXF、QQQ、SPY、NQ RTH 在每段交易時間最後一根平倉
 //   不開新倉：事件時段、垃圾時間（美東 12:00–13:05）、FOMC 日、週五台灣時間週六 02:00 以後
 // Trend Judge 用 1 分 K 收盤推算（同回測）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
@@ -73,6 +74,7 @@ mixClose  = input.bool(false, "等收線才進場（目標 2R）", group=grpM, t
 grpO      = "持倉和出場"
 holdBars  = input.int(60, "最多持有幾根 K", minval=1, group=grpO, tooltip="停損和目標都沒碰到，持有這麼多根 K 後收盤平倉（回測都是 60 根）")
 flatHalt  = input.bool(true, "NQ / ES 在美東 17:00 休市前平倉", group=grpO, tooltip="美東 17:00 收盤那根 K 平倉，也不讓 MIX 突破單掛過休市。假日提早收盤不會自動處理")
+reOn      = input.bool(true, "NQ 2m：停損後再進場一次", group=grpO, tooltip="只在 NQ / MNQ 2 分 K：趨勢單或 MIX 單停損出場後 5 根 K 內，Trend Judge 還在同方向、收盤收回原進場價之外，就同方向收盤市價再進場一次（訂單代號 R L / R S），停損在那根和前一根的極值（要 ≥ 停損 ATR 倍數），目標 3R。事件時段、垃圾時間、FOMC 日、週五截止後不做；再進場的單停損後不會再進。同指標版")
 
 // ═════════════════ 9. 線和表格 ═════════════════
 grpA      = "線和表格"
@@ -402,9 +404,47 @@ if not flat
 
 bool canEnter = flat and not haltBar and not sessEnd
 
+// 停損後再進場（只有 NQ 2m）：剛停損出場的趨勢 / MIX 單，5 根內 Trend Judge 同方向、收盤收回原進場價之外，就同方向再進一次
+bool reUse = reOn and isNQ and tfp == "2"
+var int   reSide  = 0
+var float reEntry = na
+var int   reUntil = na
+if strategy.closedtrades > nz(strategy.closedtrades[1])
+    int    ctN  = strategy.closedtrades - 1
+    string ceid = strategy.closedtrades.entry_id(ctN)
+    bool   cStp = strategy.closedtrades.exit_comment(ctN) == "停損"
+    reSide  := cStp and ceid != "R L" and ceid != "R S" and ceid != "G L" and ceid != "G S" ? (strategy.closedtrades.size(ctN) > 0 ? 1 : -1) : 0
+    reEntry := strategy.closedtrades.entry_price(ctN)
+    reUntil := bar_index + 5
+if mbHole or (reSide != 0 and (bar_index > reUntil or (tjLinked and trendDir == -reSide)))
+    reSide := 0
+float reStop  = reSide == 1 ? math.min(low, low[1]) : reSide == -1 ? math.max(high, high[1]) : na
+bool  reReady = reUse and active and useTrend and canEnter and reSide != 0 and tjLinked and trendDir == reSide and (close - reEntry) * reSide > 0 and not evtNow and not fomcSkip and not friLate
+bool  goReL   = reReady and reSide == 1 and close - reStop >= riskMult * atrPrev
+bool  goReS   = reReady and reSide == -1 and reStop - close >= riskMult * atrPrev
+if reReady
+    reSide := 0
+if goReL
+    float tgtRL = close + tgtR * (close - reStop)
+    strategy.cancel("M L")
+    strategy.cancel("M S")
+    strategy.entry("R L", strategy.long, qty=qtyUse, comment="再進場買", alert_message=entryMsg("buy", "再進場", close, reStop, tgtRL))
+    strategy.exit("R L x", "R L", stop=reStop, limit=tgtRL, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
+    posStop := reStop
+    posTgt  := tgtRL
+if goReS
+    float tgtRS = close - tgtR * (reStop - close)
+    strategy.cancel("M L")
+    strategy.cancel("M S")
+    strategy.entry("R S", strategy.short, qty=qtyUse, comment="再進場賣", alert_message=entryMsg("sell", "再進場", close, reStop, tgtRS))
+    strategy.exit("R S x", "R S", stop=reStop, limit=tgtRS, comment_loss="停損", comment_profit="目標", alert_message=exitMsg)
+    posStop := reStop
+    posTgt  := tgtRS
+bool reGo = goReL or goReS
+
 // MIX 等收線進場：K 棒收在突破價外，這根收盤市價進場，目標 2R（訂單代號跟掛單版分開，下面取消掛單時不會取消到）
-bool goMixL = mixClose and active and mixUse and useMix and canEnter and mxUpC and not friLate
-bool goMixS = mixClose and active and mixUse and useMix and canEnter and mxDnC and not friLate and not goMixL
+bool goMixL = mixClose and active and mixUse and useMix and canEnter and mxUpC and not friLate and not reGo
+bool goMixS = mixClose and active and mixUse and useMix and canEnter and mxDnC and not friLate and not goMixL and not reGo
 if goMixL
     float tgtML = close + mixTgtR * (close - bxMid)
     strategy.entry("MC L", strategy.long, qty=qtyUse, comment="MIX 上破（收線）", alert_message=entryMsg("buy", "MIX 突破", close, bxMid, tgtML))
@@ -419,8 +459,8 @@ if goMixS
     posTgt  := tgtMS
 
 // 趨勢訊號：這根收盤市價進場
-bool goLong   = canEnter and trBuy and not goMixL and not goMixS
-bool goShort  = canEnter and trSell and not goLong and not goMixL and not goMixS
+bool goLong   = canEnter and trBuy and not goMixL and not goMixS and not reGo
+bool goShort  = canEnter and trSell and not goLong and not goMixL and not goMixS and not reGo
 if goLong
     float tgtL = close + tgtR * (close - buyStop)
     strategy.cancel("M L")
@@ -439,8 +479,8 @@ if goShort
     posTgt  := tgtS
 
 // GEX setup：空手、這根 v3 沒有單時，收盤市價進場
-bool goGsL = canEnter and gsBuy and not goLong and not goShort and not goMixL and not goMixS
-bool goGsS = canEnter and gsSell and not goGsL and not goLong and not goShort and not goMixL and not goMixS
+bool goGsL = canEnter and gsBuy and not reGo and not goLong and not goShort and not goMixL and not goMixS
+bool goGsS = canEnter and gsSell and not reGo and not goGsL and not goLong and not goShort and not goMixL and not goMixS
 if goGsL
     float tgtGL = close + 3.0 * (close - buyStop)
     strategy.entry("G L", strategy.long, qty=qtyUse, comment="GEX 買", alert_message=entryMsg("buy", "GEX setup", close, buyStop, tgtGL))
@@ -455,7 +495,7 @@ if goGsS
     posTgt  := tgtGS
 
 // MIX 突破：區間有效、空手，而且下一根不在事件時段、美東 16–20、休市那根、週五截止後，才在上下突破價掛停損單
-bool mixArm = not mixClose and active and mixUse and useMix and canEnter and not goLong and not goShort and bxLive and bar_index >= bxForm and bar_index < bxEnd and not evtNext and not pmNext and not haltNxt and not friNext and not friLate and not fomcNext
+bool mixArm = not mixClose and active and mixUse and useMix and canEnter and not reGo and not goLong and not goShort and bxLive and bar_index >= bxForm and bar_index < bxEnd and not evtNext and not pmNext and not haltNxt and not friNext and not friLate and not fomcNext
 if mixArm
     strategy.entry("M L", strategy.long, qty=qtyUse, stop=bxUpL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 上破", alert_message=entryMsg("buy", "MIX 突破", bxUpL, bxMid, bxUpT))
     strategy.entry("M S", strategy.short, qty=qtyUse, stop=bxDnL, oca_name="MIX", oca_type=strategy.oca.cancel, comment="MIX 下破", alert_message=entryMsg("sell", "MIX 突破", bxDnL, bxMid, bxDnT))

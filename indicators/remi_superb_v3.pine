@@ -15,6 +15,7 @@
 // MIX 區間突破（NQ 2、5 分 K）：Trend Judge 連續 MIX 60 分 → 區間；之後 60 分內第一次突破 10% 就在突破價進場，停損在中線
 //   預設不做美東 16–20（收盤後）；可選「等收線才進場」（目標 2R）
 // 一次一筆：指標自己記一筆虛擬持倉，碰到停損 / 目標、持有 60 根、美東 17:00 休市前（NQ / ES）或資料中斷才出場
+// NQ 2m 停損後再進場（預設開）：停損後 5 根內 Trend Judge 同方向、收回原進場價就同方向再進一次，兩根 K 停損、3R
 // Trend Judge 用 1 分 K 收盤推算（同回測）；沒有 1 分資料的舊 K 棒改用圖表 K 棒
 // GEX（預設關）：手動輸入 QQQ gamma flip，表格顯示買 / 賣是不是朝 flip 走（只顯示，不擋 v3 的訊號）
 // GEX setup（預設關，NQ RTH 1 分 K）：(35, 0, 8, 1) + Trend Judge 順勢 + 朝 flip 走，目標 3R，記號 🧲
@@ -78,6 +79,7 @@ grpO      = "持倉和出場"
 onlyOne   = input.bool(true, "一次一筆（持倉中不發新訊號）", group=grpO, tooltip="指標自己記一筆虛擬持倉，要等碰到停損、目標、持有時間到、休市前或資料中斷出場，才發下一個訊號。回測都是一次一筆，建議保持開")
 holdBars  = input.int(60, "最多持有幾根 K", minval=1, group=grpO, tooltip="停損和目標都沒碰到，持有這麼多根 K 後收盤出場（回測都是 60 根）")
 flatHalt  = input.bool(true, "NQ / ES 在美東 17:00 休市前出場", group=grpO, tooltip="虛擬持倉在美東 17:00 收盤那根 K 出場。TXF、SPY、QQQ 在收盤後的資料中斷自動出場")
+reOn      = input.bool(true, "NQ 2m：停損後再進場一次", group=grpO, tooltip="只在 NQ / MNQ 2 分 K：趨勢單或 MIX 單停損出場後 5 根 K 內，Trend Judge 還在同方向、收盤收回原進場價之外（買：之上，賣：之下），就同方向再進場一次（記號同趨勢訊號）。停損在那根和前一根的極值（要 ≥ 停損 ATR 倍數），目標 3R。事件時段、垃圾時間、FOMC 日、週五截止後不做；再進場的單停損後不會再進。回測（v3 那年）：+218R → +228R、回撤 16R → 12R，一年約 29 筆、勝率 48%、每筆 +0.52R；前幾年沒有變差")
 
 // ═════════════════ 8. 記號和線 ═════════════════
 grpA      = "記號和線"
@@ -437,17 +439,42 @@ var float vEntry = na
 var float vStop  = na
 var float vTgt   = na
 var int   vBar   = na
-var int   vKind  = 0          // 1 趨勢、2 MIX 突破
+var int   vKind  = 0          // 1 趨勢、2 MIX 突破、3 停損後再進場
+// 停損後再進場（只有 NQ 2m）：記下被停損那筆的方向、進場價和期限（5 根）
+bool reUse = reOn and isNQ and tfp == "2"
+var int   reSide  = 0
+var float reEntry = na
+var int   reUntil = na
 if vPos != 0 and bar_index > vBar
     bool hitStop = vPos == 1 ? low <= vStop : high >= vStop
     bool hitTgt  = vPos == 1 ? high >= vTgt : low <= vTgt
     if hitStop or hitTgt or bar_index - vBar >= holdBars or haltBar or mbHole
+        reSide  := hitStop and vKind != 3 and not haltBar and not mbHole ? vPos : 0
+        reEntry := vEntry
+        reUntil := bar_index + 5
         vPos := 0
+// 停損後再進場：5 根內、Trend Judge 還在同方向、收盤收回原進場價之外
+if mbHole or (reSide != 0 and (bar_index > reUntil or (tjLinked and trendDir == -reSide)))
+    reSide := 0
+float reStop  = reSide == 1 ? math.min(low, low[1]) : reSide == -1 ? math.max(high, high[1]) : na
+bool  reReady = reUse and active and reSide != 0 and vPos == 0 and barstate.isconfirmed and tjLinked and trendDir == reSide and (close - reEntry) * reSide > 0 and not evtNow and not fomcSkip and not friLate and not haltBar
+bool  goReBuy  = reReady and reSide == 1 and close - reStop >= riskMult * atrPrev
+bool  goReSell = reReady and reSide == -1 and reStop - close >= riskMult * atrPrev
+if reReady
+    reSide := 0                                                      // 只試一次（停損不夠遠也作廢）
+if goReBuy or goReSell
+    vPos   := goReBuy ? 1 : -1
+    vEntry := close
+    vStop  := reStop
+    vTgt   := close + tgtR * (close - reStop)
+    vBar   := bar_index
+    vKind  := 3
 bool flatNow = not onlyOne or vPos == 0
 bool goMixBuy  = mxBuy and flatNow and not haltBar and not friLate
 bool goMixSell = mxSell and flatNow and not haltBar and not friLate and not goMixBuy
 float mxEntry = goMixBuy ? (mixClose ? close : math.max(open, bxUpL)) : goMixSell ? (mixClose ? close : math.min(open, bxDnL)) : na
 if goMixBuy or goMixSell
+    reSide := 0
     vPos   := goMixBuy ? 1 : -1
     vEntry := mxEntry
     vStop  := bxMid
@@ -455,11 +482,15 @@ if goMixBuy or goMixSell
     vBar   := bar_index
     vKind  := 2
     if not mixClose and ((vPos == 1 and low <= vStop) or (vPos == -1 and high >= vStop))     // 掛單進場：同一根碰到停損就出場
+        reSide  := vPos
+        reEntry := vEntry
+        reUntil := bar_index + 5
         vPos := 0
 bool flatClose = not onlyOne or vPos == 0
 bool goTrBuy  = trBuy and flatClose and not haltBar
 bool goTrSell = trSell and flatClose and not haltBar and not goTrBuy
 if goTrBuy or goTrSell
+    reSide := 0
     vPos   := goTrBuy ? 1 : -1
     vEntry := close
     vStop  := goTrBuy ? buyStop : sellStop
@@ -467,10 +498,10 @@ if goTrBuy or goTrSell
     vBar   := bar_index
     vKind  := 1
 
-bool tradeBuy  = goMixBuy or goTrBuy
-bool tradeSell = goMixSell or goTrSell
-float sigEntry = goTrBuy or goTrSell ? close : mxEntry
-float sigStop  = goTrBuy ? buyStop : goTrSell ? sellStop : (goMixBuy or goMixSell) ? bxMid : na
+bool tradeBuy  = goMixBuy or goTrBuy or goReBuy
+bool tradeSell = goMixSell or goTrSell or goReSell
+float sigEntry = goTrBuy or goTrSell or goReBuy or goReSell ? close : mxEntry
+float sigStop  = goTrBuy ? buyStop : goTrSell ? sellStop : (goReBuy or goReSell) ? reStop : (goMixBuy or goMixSell) ? bxMid : na
 float sigTgt   = na(sigEntry) or na(sigStop) ? na : sigEntry + ((goMixBuy or goMixSell) ? mixTgtR : tgtR) * (sigEntry - sigStop)
 
 // ═════════════════ 圖上標記 ═════════════════
@@ -488,9 +519,9 @@ if goMixBuy
     drawBuyMark(mBuyTxt)
 if goMixSell
     drawSellMark(mSellTxt)
-if goTrBuy
+if goTrBuy or goReBuy
     drawBuyMark(tBuyTxt)
-if goTrSell
+if goTrSell or goReSell
     drawSellMark(tSellTxt)
 // GEX setup 的記號：沒有底色，緊貼在那根 K 的低點下方（買）/ 高點上方（賣），不會跟 v3 的記號混在一起
 if gsGoBuy
@@ -585,7 +616,7 @@ if barstate.islast and showTbl
         row += 1
     // 持倉
     color  posCol = vPos == 1 ? color.new(color.green, 40) : vPos == -1 ? color.new(color.red, 40) : bg
-    string posTxt = compact ? (not active ? "不發訊號" : vPos == 0 ? "空手" : (vPos == 1 ? "多" : "空") + " 停 " + fmtP(vStop) + " 標 " + fmtP(vTgt)) : not active ? "這個商品 / 週期不發訊號" : vPos == 0 ? "空手，可以接訊號" : (vPos == 1 ? "多單" : "空單") + (vKind == 2 ? "（MIX 突破）" : "（趨勢）") + "　進 " + fmtP(vEntry) + "　停 " + fmtP(vStop) + "　標 " + fmtP(vTgt) + "　已 " + str.tostring(bar_index - vBar) + " 根"
+    string posTxt = compact ? (not active ? "不發訊號" : vPos == 0 ? "空手" : (vPos == 1 ? "多" : "空") + " 停 " + fmtP(vStop) + " 標 " + fmtP(vTgt)) : not active ? "這個商品 / 週期不發訊號" : vPos == 0 ? "空手，可以接訊號" : (vPos == 1 ? "多單" : "空單") + (vKind == 2 ? "（MIX 突破）" : vKind == 3 ? "（再進場）" : "（趨勢）") + "　進 " + fmtP(vEntry) + "　停 " + fmtP(vStop) + "　標 " + fmtP(vTgt) + "　已 " + str.tostring(bar_index - vBar) + " 根"
     if not mini
         addRow(row, compact ? "持倉" : "持倉（虛擬）", posTxt, posCol, ha)
         row += 1
