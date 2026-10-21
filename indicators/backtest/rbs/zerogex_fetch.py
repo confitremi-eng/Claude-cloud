@@ -1,7 +1,7 @@
 """Download ZeroGEX history for SPY / QQQ into data/zerogex/ (needs a ZeroGEX Pro API key; history starts 2026-06-29).
 
   cd indicators/backtest
-  python3 -I rbs/zerogex_fetch.py "../../ZEROGEX API.txt" [range] [frames] [regime]
+  python3 -I rbs/zerogex_fetch.py "../../ZEROGEX API.txt" [range] [frames] [regime] [hourly] [syms=SPX,SPY,QQQ]
 
 The key is read from the file given (keep it out of git). Writes, per symbol:
   zerogex/{SYM}_minute.csv   every minute (replay/range): ts (UTC, minute start), gamma_flip, call_wall, put_wall,
@@ -144,11 +144,14 @@ def fetch_hourly(api, sym, start='2026-06-29'):
 
 def main():
     api = Api(sys.argv[1])
-    what = set(sys.argv[2:]) or {'range', 'frames', 'regime'}
+    args = sys.argv[2:]
+    syms = [a.split('=', 1)[1].upper() for a in args if a.startswith('syms=')]
+    syms = syms[0].split(',') if syms else list(SYMS)
+    what = {a for a in args if not a.startswith('syms=')} or {'range', 'frames', 'regime'}
     os.makedirs(OUT, exist_ok=True)
     now = datetime.now(NY); today = now.strftime('%Y-%m-%d')
     done_today = now.hour * 60 + now.minute >= 16 * 60 + 5                     # today's session is over after 16:05 ET
-    for sym in SYMS:
+    for sym in syms:
         days = [d for d in sessions(api, sym) if d < today or (d == today and done_today)]   # finished sessions only
         if 'hourly' in what: fetch_hourly(api, sym)
         if 'regime' in what: fetch_regime(api, sym)
