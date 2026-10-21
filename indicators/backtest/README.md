@@ -110,6 +110,8 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `limit_entry.py` | 進場改用限價單（掛在停損點或一半、新停損、等幾分鐘、碰價或穿價成交）跟市價進場比較，全部在 1 分 K 上模擬；`DATA 門檻 成本`，ES、NQ 都能跑 |
 | `trend_mix_matrix.py` | Trend（過濾快訊）和 MIX 突破的 2 分 K 勝率矩陣（1R / 1.5R / 2R / 3R、多空、前後、合起來），`nq` / `es` / `txf` 用各自的預設門檻和成本；TXF 另有逐年 |
 | `nq_follow.py` | 用 NQ 2 分 K 的 Remi Superb 訊號（Trend、MIX）做 ES 或 TXF：可下單比例、報酬相關、輸贏一致率，停損用 ATR 換算 / 跟 NQ 出場 / 自己兩根 K，分時段、多空、自己 Trend Judge 同向、晚 1 分鐘、成本；TXF 另有只做夜盤和逐月 |
+| `bought_signal_log.py` | 買來的指標 es 3m 2026 v2.1（🦀🍦，沒有原始碼）的勝率紀錄：吃 TradingView 圖表匯出 CSV，多份依時間合併、標出重繪消失的訊號，四種停損的 1 / 1.5 / 2 / 3R 命中與每筆 R；`--mkt nq` 換 NQ；輸出 `signal_log/` |
+| `bought_raw_backtest.py` | 同一支指標的原始觸發（100 根新低、收盤站回、不看 EMA）多年回測：`nq 2`、`nq 5`（NQ_1m_5y）、`txf 2 *.sql`，逐年、盤別、連發、EMA200 / 89 上下 |
 | `one_minute.py` | NQ 1 分 K：1m 和 2m 同時出訊號（只用進場當下已知的資訊）、等 2m 確認再進、2m 還沒出訊號的 1m 訊號贏輸特徵、過濾訊號依趨勢已持續多久（1/2/3/5 分，MIX 長短、反轉或延續）、30–120 分鐘窗口的穩定性和一次一筆結果 |
 | `v2_port.py` | Remi Superb v2 照指標逐根重算：趨勢訊號（30–120 分）、MIX 突破、一次一筆虛擬持倉（停損、目標、60 根、17:00 休市、資料中斷），3R / 2R、不限趨勢時間 |
 | `trend_time_tf.py` | 3 / 5 分 K（2 分 K 參考）的過濾訊號依指標的趨勢已持續分鐘數：30 分鐘分段、範圍掃描（前後半年都賺）、一次一筆 |
