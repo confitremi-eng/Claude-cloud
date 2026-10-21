@@ -190,6 +190,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `spx_gamma.py` | v3 的買賣單依 SPX long / short gamma（ZeroGEX SPX）分組，NQ 2m、NQ RTH 1m |
 | `rth_fastline.py` | NQ RTH 1m 強勢時離快線近就不看慢線距離、再加縮短階段，五年逐年 |
 | `qqq2m_strong_grid.py` | QQQ 2m（NQ 美股盤）強趨勢、不加其他過濾，階段 × EMA 格子的 1R / 2R / 3R 每筆，和一次一筆每年 |
+| `qqq2m_filtered.py` | QQQ 2m 加 v3 的 ETF 過濾，階段 35 / 40 / 50、只強勢與否、1R / 2R / 3R，對照 NQ RTH 1m |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
