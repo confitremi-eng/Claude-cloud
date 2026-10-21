@@ -188,6 +188,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `qqq2m_sell_gamma.py` | QQQ 2m (20, 0, 11, 1) 賣訊按 Short / Long gamma、加 Trend Judge / 1h 空方分組，1 / 1.5 / 2 / 3R 命中 |
 | `far_confirm.py` | NQ RTH 1m：離慢線太遠的訊號，前 N 根內已有同向原版訊號就例外照做，五年逐年 |
 | `spx_gamma.py` | v3 的買賣單依 SPX long / short gamma（ZeroGEX SPX）分組，NQ 2m、NQ RTH 1m |
+| `rth_fastline.py` | NQ RTH 1m 強勢時離快線近就不看慢線距離、再加縮短階段，五年逐年 |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
