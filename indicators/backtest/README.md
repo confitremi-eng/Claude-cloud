@@ -173,6 +173,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `open_gap.py` | Globex 18:00 開盤跳空、第一根反向收（低開收紅 / 高開收黑）做反向，依缺口大小、週日、收回幅度分組 |
 | `rth_open_gap.py` | 美股 09:30 開盤跳空、第一根（1m / 2m）反向收：低開高走做多 / 高開低走做空，依缺口大小、各年 |
 | `qqq_2m.py` | QQQ 2 分 K（NQ 美股盤代替）套 NQ 2m / ETF 規則，趨勢 / 加 MIX、3R / 1R，對照 NQ RTH 1m |
+| `mix_stop.py` | MIX 突破換比較近的停損（0.4H、0.3H、1 / 1.5 ATR），目標照 R 或維持原價，NQ 2m / 5m 每年勝率和點數 |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
