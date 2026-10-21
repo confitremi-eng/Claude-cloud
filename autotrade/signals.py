@@ -18,7 +18,7 @@ _CONT_RE = re.compile(r"^(?:[A-Z_]+:)?([A-Z]{1,4})\d!$")
 
 @dataclass
 class Signal:
-    action: str                  # buy / sell / exit
+    action: str                  # buy / sell / exit / partial（策略版 1R 先出一組；IBKR 上的掛單已經處理，略過）
     root: str                    # 圖上的商品：NQ、MNQ
     contract_month: Optional[str]  # YYYYMM，快訊沒給就是 None
     stop: Optional[float] = None
@@ -83,7 +83,7 @@ def parse_payload(text: str, received: datetime) -> Signal:
         raise ValueError("JSON 不是物件")
 
     action = str(d.get("action", "")).lower()
-    if action not in ("buy", "sell", "exit"):
+    if action not in ("buy", "sell", "exit", "partial"):
         raise ValueError(f"action 不對：{action!r}")
 
     ticker = str(d.get("ticker", ""))
@@ -101,7 +101,7 @@ def parse_payload(text: str, received: datetime) -> Signal:
     tf = str(d["tf"]).strip() if d.get("tf") not in (None, "") else None
     sig = Signal(action=action, root=root, contract_month=month, signal=str(d.get("signal", "")), tf=tf,
                  tv_time=_tv_time(d.get("tv_time")), received=received, raw=text)
-    if action != "exit":
+    if action in ("buy", "sell"):
         sig.stop = _num(d.get("stop"))
         sig.target = _num(d.get("target"))
         sig.price = _num(d.get("price"))

@@ -143,6 +143,31 @@ class IBBroker:
         return {"contract": con.localSymbol, "order_id": parent.orderId, "fill": fill,
                 "status": trades[0].orderStatus.status}
 
+    async def place_split(self, side: str, q1: int, q2: int, stop: float, t1: float, target: float,
+                          month: Optional[str]) -> dict:
+        """兩組出場：市價進 q1 + q2 口，成交後掛兩組 OCA（q1 口：停損 + t1；q2 口：停損 + 目標）。
+        不用 parentId 綁在進場單上：同一張母單的子單會被 IBKR 當成同一組 OCA，第一組出場會連第二組一起取消。
+        5 秒內沒有全部成交：取消剩下的，照已成交的口數掛（≥ 2 口分兩組，1 口就一組到原目標）。"""
+        ibl, ib = self.ibl, self.ib
+        con = await self.contract(month)
+        rev = "SELL" if side == "BUY" else "BUY"
+        common = dict(account=self.account, orderRef=ORDER_REF)
+        entry = ib.placeOrder(con, ibl.MarketOrder(side, q1 + q2, tif="DAY", **common))
+        fill = await self._wait_fill(entry, 5)
+        got = int(entry.orderStatus.filled or 0)
+        if got < q1 + q2 and entry.orderStatus.status not in DONE:
+            ib.cancelOrder(entry.order)
+            await asyncio.sleep(0.5)
+            got = int(entry.orderStatus.filled or 0)
+        legs = [(got // 2, t1), (got - got // 2, target)] if got >= 2 else [(got, target)] if got else []
+        for n, (q, tgt) in enumerate(legs, 1):
+            oca = f"RA{entry.order.orderId}-{n}"
+            for o in (ibl.LimitOrder(rev, q, tgt, tif="GTC", outsideRth=True, ocaGroup=oca, ocaType=1, **common),
+                      ibl.StopOrder(rev, q, stop, tif="GTC", outsideRth=True, ocaGroup=oca, ocaType=1, **common)):
+                ib.placeOrder(con, o)
+        return {"contract": con.localSymbol, "order_id": entry.order.orderId, "fill": fill, "filled": got,
+                "status": entry.orderStatus.status, "legs": [{"qty": q, "target": t} for q, t in legs]}
+
     async def _wait_fill(self, trade, secs: float) -> Optional[float]:
         for _ in range(int(secs * 10)):
             if trade.orderStatus.status in DONE:
@@ -218,6 +243,17 @@ class DryRunBroker:
         if self.on_fill:
             self.on_fill({"side": "BOT" if side == "BUY" else "SLD", "qty": qty, "price": self.last_px, "kind": "市價"})
         return {"dry_run": True, "contract": f"{self.cfg['symbol']} {month or '近月'}", "fill": self.last_px}
+
+    async def place_split(self, side, q1, q2, stop, t1, target, month) -> dict:
+        qty = q1 + q2
+        self.pos = qty if side == "BUY" else -qty
+        self.orders = 4
+        self.log.append(("split", side, q1, q2, stop, t1, target, month))
+        self.last_px = round((stop + target) / 2, 2)   # 假的成交價（同 place_bracket）
+        if self.on_fill:
+            self.on_fill({"side": "BOT" if side == "BUY" else "SLD", "qty": qty, "price": self.last_px, "kind": "市價"})
+        return {"dry_run": True, "contract": f"{self.cfg['symbol']} {month or '近月'}", "fill": self.last_px,
+                "legs": [{"qty": q1, "target": t1}, {"qty": q2, "target": target}]}
 
     async def flatten(self, why: str) -> dict:
         self.log.append(("flatten", why, self.pos))

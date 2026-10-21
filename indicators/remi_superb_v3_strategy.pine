@@ -29,7 +29,7 @@ esOn      = input.bool(false, "ES 也交易（回測是虧的）", group=grpP, t
 grpQ      = "下單"
 qtyFut    = input.int(1, "期貨口數", minval=1, group=grpQ, tooltip="NQ / MNQ / ES / MES / TXF / MXF 每筆幾口。NQ 1 點 = 20 美元，MNQ 1 點 = 2 美元。手續費（每口每邊）和滑價（跳動點）在「屬性」分頁改：預設 2.5 美元、2 跳；MNQ 建議手續費改約 0.6")
 qtyEtf    = input.int(100, "QQQ / SPY 股數", minval=1, group=grpQ, tooltip="QQQ / SPY 每筆幾股。「屬性」分頁的手續費是每口（= 每股）計，回測 QQQ / SPY 時請改成每股約 0.005 美元，否則成本會被高估很多")
-exitMode  = input.string("兩組：1R 先出一組，另一組照原停損和目標", "出場管理", options=["兩組：1R 先出一組，另一組照原停損和目標", "全部照目標"], group=grpQ, tooltip="兩組（預設，2026-10-21）：每筆進場「口數 × 2」，第一組到 1R 先出，第二組照原本的停損和目標（2m 3R、5m 2R）；第一組出場後第二組打到原停損也只是打平。回測 NQ 2m v3 那年（每筆 2 口）：賺錢 42%、打平 16%、虧 42%，+8466 點、回撤 871 點；全部照目標是賺錢 40%、+11598 點、回撤 1074 點。注意：1R 先出那一組的快訊 action 是 partial，autotrade 目前不認得（會略過），自動下單還是整筆照 3R 目標")
+exitMode  = input.string("兩組：1R 先出一組，另一組照原停損和目標", "出場管理", options=["兩組：1R 先出一組，另一組照原停損和目標", "全部照目標"], group=grpQ, tooltip="兩組（預設，2026-10-21）：每筆進場「口數 × 2」，第一組到 1R 先出，第二組照原本的停損和目標（2m 3R、5m 2R）；第一組出場後第二組打到原停損也只是打平。回測 NQ 2m v3 那年（每筆 2 口）：賺錢 42%、打平 16%、虧 42%，+8466 點、回撤 871 點；全部照目標是賺錢 40%、+11598 點、回撤 1074 點。1R 先出那一組的快訊 action 是 partial；autotrade（split_first_r = 1）進場時就在 IBKR 掛好兩組出場單，所以會略過 partial 快訊")
 useTrend  = input.bool(true, "做趨勢訊號", group=grpQ)
 useMix    = input.bool(true, "做 MIX 區間突破（NQ 2、5 分 K）", group=grpQ)
 

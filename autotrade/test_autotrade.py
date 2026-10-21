@@ -77,11 +77,53 @@ class TestSignals(unittest.TestCase):
                 parse_payload(bad, now)
 
 
-class TestEngine(unittest.IsolatedAsyncioTestCase):
+class TestSplit(unittest.IsolatedAsyncioTestCase):
+    """兩組出場（預設 split_first_r = 1）：一半在 1R、一半在原目標。"""
     def setUp(self):
         self.clock = Clock(et(2026, 10, 19, 10, 0))
         self.b = DryRunBroker(cfg())
         self.e = Engine(self.b, cfg(), clock=self.clock)
+
+    def sig(self, *a, **kw):
+        return parse_payload(msg(*a, **kw), self.clock())
+
+    async def test_buy_split(self):
+        await self.e.handle(self.sig(stop=24990, target=25030, price=25000))
+        self.assertEqual(self.b.log, [("split", "BUY", 1, 1, 24990.0, 25010.0, 25030.0, "202612")])
+        self.assertEqual(self.b.pos, 2)
+
+    async def test_sell_split(self):
+        await self.e.handle(self.sig("sell", stop=25012.1, target=24963.6, price=25000))
+        self.assertEqual(self.b.log, [("split", "SELL", 1, 1, 25012.0, 24988.0, 24963.5, "202612")])
+
+    async def test_one_lot_no_split(self):
+        e = Engine(self.b, cfg(qty=1), clock=self.clock)
+        await e.handle(self.sig())
+        self.assertEqual(self.b.log[0][:3], ("bracket", "BUY", 1))
+
+    async def test_target_inside_1r_no_split(self):
+        await self.e.handle(self.sig(stop=24990, target=25010, price=25000))     # 目標就是 1R（3 分 K）
+        self.assertEqual(self.b.log[0][0], "bracket")
+
+    async def test_three_lots(self):
+        e = Engine(self.b, cfg(qty=3), clock=self.clock)
+        await e.handle(self.sig())
+        self.assertEqual(self.b.log[0][:4], ("split", "BUY", 1, 2))
+
+    async def test_partial_alert_ignored(self):
+        await self.e.handle(self.sig())
+        p = parse_payload(msg().replace('"action": "buy"', '"action": "partial"'), self.clock())
+        self.assertEqual(p.action, "partial")
+        await self.e.handle(p)
+        self.assertEqual([x[0] for x in self.b.log], ["split"])
+        self.assertEqual(self.b.pos, 2)
+
+
+class TestEngine(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.clock = Clock(et(2026, 10, 19, 10, 0))
+        self.b = DryRunBroker(cfg(split_first_r=0))
+        self.e = Engine(self.b, cfg(split_first_r=0), clock=self.clock)
 
     def sig(self, *a, **kw):
         return parse_payload(msg(*a, **kw), self.clock())

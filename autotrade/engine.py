@@ -4,6 +4,8 @@
 - 一次一筆：IBKR 上已經有 MNQ 部位或自動下單的掛單，就不再進場
 - 多張圖（2 分、5 分）共用一個倉位：誰先進場倉位就歸誰（owner_tf），持倉期間另一張圖的進場、出場快訊都不理
 - 進場用市價，同時掛停損和目標（OCA，一邊成交另一邊取消），價格用快訊給的
+- 兩組出場（split_first_r > 0、qty ≥ 2，預設 1R）：一半的口數在 1R 出、另一半在快訊的目標出，兩組都用快訊的停損；
+  第一組出場後第二組打到停損也只是打平。策略版第一組出場的 partial 快訊不用理（IBKR 上的掛單已經處理）
 - 出場快訊：取消自動下單的掛單，部位市價平掉（已經被停損 / 目標出掉就什麼都不做）
 - 安全網（TradingView 的出場快訊沒到也會做）：持有太久平倉、美東休市前平倉、當日虧損上限
 """
@@ -112,6 +114,9 @@ class Engine:
         if tf not in self.cfg["allowed_tfs"]:
             return self._event("reject", reason=f"{tf} 分不在 allowed_tfs", **base)
 
+        if sig.action == "partial":
+            return self._event("ignore", reason="1R 先出一組：IBKR 上的掛單已經處理", **base)
+
         if sig.action == "exit":
             if self.owner_tf and tf != self.owner_tf:
                 # 倉位是另一張圖的單：這張圖自己（策略測試器裡）的出場，跟 IBKR 上的倉位無關
@@ -127,10 +132,27 @@ class Engine:
         tick = self.cfg["tick"]
         stop, target = round_tick(sig.stop, tick), round_tick(sig.target, tick)
         side = "BUY" if sig.action == "buy" else "SELL"
-        res = await self.b.place_bracket(side, self.cfg["qty"], stop, target, sig.contract_month)
+        qty = self.cfg["qty"]
+        t1 = self.first_target(sig, stop, target, qty)
+        if t1 is None:
+            res = await self.b.place_bracket(side, qty, stop, target, sig.contract_month)
+        else:
+            q1 = qty // 2
+            res = await self.b.place_split(side, q1, qty - q1, stop, t1, target, sig.contract_month)
         self.trades_today += 1
         self._set_owner(tf, now)
-        self._event("entry", side=side, qty=self.cfg["qty"], result=res, **base)
+        self._event("entry", side=side, qty=qty, first_target=t1, result=res, **base)
+
+    def first_target(self, sig: Signal, stop: float, target: float, qty: int) -> Optional[float]:
+        """兩組出場的第一個目標（進場價 ± split_first_r × 停損距離）；不分兩組時回 None。"""
+        r = float(self.cfg.get("split_first_r") or 0)
+        if r <= 0 or qty < 2 or sig.price is None:
+            return None
+        d = 1 if sig.action == "buy" else -1
+        t1 = round_tick(sig.price + r * (sig.price - stop), self.cfg["tick"])
+        if (t1 - sig.price) * d <= 0 or (target - t1) * d <= 0:   # 第一個目標要在進場價和原目標之間
+            return None
+        return t1
 
     def _entry_block(self, sig: Signal, now: datetime, delay: Optional[float]) -> Optional[str]:
         c = self.cfg

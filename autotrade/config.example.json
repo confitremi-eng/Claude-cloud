@@ -29,5 +29,6 @@
   "allowed_tfs": [
     "2",
     "5"
-  ]
+  ],
+  "split_first_r": 1.0
 }

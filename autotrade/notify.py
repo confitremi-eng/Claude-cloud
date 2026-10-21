@@ -116,6 +116,8 @@ class Notifier:
             if fill:
                 lines.append(f"停損 {_fmt(e['stop'])}（{abs(fill - e['stop']):.2f} 點）｜目標 {_fmt(e['target'])}"
                              f"（{abs(e['target'] - fill):.2f} 點）")
+                if e.get("first_target"):
+                    lines.append(f"兩組出場：{e['qty'] // 2} 口在 {_fmt(e['first_target'])}（1R）先出，其餘到目標")
             if fill and px:
                 lines.append(f"滑價 {(fill - px) * d:+.2f} 點（策略價 {_fmt(px)}）")
             if e.get("tv_delay_sec") is not None:
@@ -124,7 +126,7 @@ class Notifier:
                 lines.append(f"⚠️ 5 秒內沒有成交回報，狀態 {r.get('status')}")
             self.send("\n".join(lines))
         elif k == "reject":
-            what = {"buy": "買", "sell": "賣", "exit": "出場"}.get(e.get("action"), e.get("action"))
+            what = {"buy": "買", "sell": "賣", "exit": "出場", "partial": "1R 先出"}.get(e.get("action"), e.get("action"))
             self.send(f"⛔ 沒下單（{e.get('tf', '')} 分 {what} {e.get('signal') or ''}）：{e.get('reason')}")
         elif k == "safety_exit":
             self.send(f"⚠️ 安全網平倉：{e.get('reason')}")
