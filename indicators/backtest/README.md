@@ -180,6 +180,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `scale_in.py` | 分批進場：第一口訊號進、第二口等回檔 0.25 / 0.5 / 0.75R，或兩口都等回檔，NQ 2m / 5m 點數和勝率 |
 | `early_cut.py` | 回檔到 0.25 / 0.5 / 0.75R 的單後來怎麼結束，和回檔到 X R 就先出場的回測，NQ 2m / 5m |
 | `tj_params.py` | Trend Judge EMA 長度、快 / 慢秒數換其他組合（門檻按趨勢時間比例換算），NQ 2m / 5m 五年逐年 |
+| `orb_filter.py` | 開盤 30 分鐘區間（Globex 18:00 / 美股 09:30）的方向、ORH / ORL、中線當 v3 過濾，NQ 2m / 5m 五年逐年 |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
