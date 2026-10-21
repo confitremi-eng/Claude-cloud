@@ -18,7 +18,8 @@ import market_matrix as mm
 import oos_check as oc
 
 
-def sim(C, trend, mix, R, P, be):
+def sim(C, trend, mix, R, P, be, PR=None):
+    """P: first contract out at +P points; PR: or at +PR x the stop distance."""
     df = C.df; h, l, c = C.h, C.l, C.c
     holeb = np.r_[False, (df.datetime.diff() > pd.Timedelta(minutes=30)).values[1:]]
     trad = df.tradable.values
@@ -33,7 +34,7 @@ def sim(C, trend, mix, R, P, be):
         if pos != 0 and j > vb:
             hs = (l[j] <= vs) if pos == 1 else (h[j] >= vs)
             ht = (h[j] >= vt) if pos == 1 else (l[j] <= vt)
-            hp = got1 is None and P is not None and ((h[j] >= vp) if pos == 1 else (l[j] <= vp))
+            hp = got1 is None and vp is not None and ((h[j] >= vp) if pos == 1 else (l[j] <= vp))
             if hs or ht or j - vb >= 60 or C.halt[j] or holeb[j]:
                 px = vs if hs else vt if ht else (c[j - 1] if holeb[j] else c[j])
                 if not hs and hp: got1 = (vp - ve) * pos
@@ -45,13 +46,13 @@ def sim(C, trend, mix, R, P, be):
         if pos == 0 and j in mx:
             k, px, st = mx[j]
             pos, ve, vs, vt, vb, d0, got1 = k, px, st, px + R * (px - st), j, C.date[j], None
-            vp = ve + k * min(P, abs(vt - ve)) if P else None
+            vp = (ve + k * min(P, abs(vt - ve)) if P else None) if PR is None else ve + k * PR * abs(ve - vs)
             if (pos == 1 and l[j] <= vs) or (pos == -1 and h[j] >= vs):
                 close_all(vs)
         if pos == 0 and j in tr:
             k = tr[j]; st = min(l[j - 1], l[j]) if k == 1 else max(h[j - 1], h[j])
             pos, ve, vs, vt, vb, d0, got1 = k, c[j], st, c[j] + R * (c[j] - st), j, C.date[j], None
-            vp = ve + k * min(P, abs(vt - ve)) if P else None
+            vp = (ve + k * min(P, abs(vt - ve)) if P else None) if PR is None else ve + k * PR * abs(ve - vs)
     return pd.DataFrame(out, columns=['date', 'pts'])
 
 
