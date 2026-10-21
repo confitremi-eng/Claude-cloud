@@ -135,7 +135,7 @@ def main():
             r[f'{name}結果'] = ('未完成' if not done else '停損' if hit else '時間出場') if best < 1 else \
                 f'先到{max(k for k in RS if best >= k)}R'
             for k in RS:
-                r[f'{name}_{k}R'] = round(res[k], 3) if done else np.nan
+                r[f'{name}_{k}R'] = round(res[k], 3) if done or best >= k else np.nan   # a reached target is final
         rows.append(r)
     log = pd.DataFrame(rows).sort_values('訊號K(台北)')
     os.makedirs(os.path.dirname(out), exist_ok=True)
