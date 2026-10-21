@@ -14,7 +14,7 @@
 //   NQ 5m 不逆日線 SMA5（預設開）：買要在日 K SMA5 上方、賣要在下方（趨勢和 MIX）
 //   NQ 2m 停損後再進場（預設開）：停損後 5 根內 Trend Judge 同方向、收回原進場價就同方向再進一次（R L / R S），兩根 K 停損、3R
 //   一次一筆；持有 60 根 K 還沒出場就收盤平倉；NQ / ES 美東 17:00 休市前平倉；TXF、QQQ、SPY、NQ RTH 在每段交易時間最後一根平倉
-//   不開新倉：事件時段、垃圾時間（美東 12:00–13:05）、FOMC 日、週五台灣時間週六 02:00 以後
+//   不開新倉：事件時段、收盤後美東 15:45–18:30（NQ / ES）、垃圾時間（美東 12:00–13:05）、FOMC 日、週五台灣時間週六 02:00 以後
 // Trend Judge 用 1 分 K 收盤推算（同回測）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
 // 出場管理（預設兩組）：每筆進「口數 × 2」，第一組 1R 先出，第二組照原停損和目標
 // GEX setup（預設關，NQ RTH 1 分 K）：(35, 0, 8, 1) + Trend Judge 順勢 + 朝手動輸入的 QQQ flip 走，目標 3R；垃圾時間只做賣
@@ -65,6 +65,7 @@ junkH1    = input.int(12, "", minval=0, maxval=23, group=grpN, inline="junk")
 junkM1    = input.int(0, ":", minval=0, maxval=59, group=grpN, inline="junk")
 junkH2    = input.int(13, "到", minval=0, maxval=23, group=grpN, inline="junk")
 junkM2    = input.int(5, ":", minval=0, maxval=59, group=grpN, inline="junk", tooltip="這段時間（美東，看 K 棒收盤，含頭尾；預設 12:00–13:05 = 台灣 00:00–01:05）趨勢訊號和 MIX 都不做（MIX 碰到突破價區間作廢，同事件時段），持倉照常出場。所有商品適用")
+pmAvoid   = input.bool(true, "收盤後避開：美東 15:45–18:30（台灣 03:45–06:30）", group=grpN, tooltip="NQ / ES：K 棒收盤在美東 15:45–18:30（台灣 03:45–06:30）不發新訊號（趨勢、MIX、再進場），持倉照常出場。v3 原本就避開其中的收盤前後、休市前、休市、Globex 開盤，這條多擋掉美東 16:15–16:45 的單。回測 NQ 2m v3 那年 +204R → +209R（一年約擋掉 23 筆，勝率 29%），前 4 年每年 0～−9R；5m 幾乎沒差（2026-10-21 Remi 決定）")
 fomcDay   = input.bool(true, "FOMC 當天整天不做", group=grpN, tooltip="FOMC 利率決議當天（美東日期，用下面的清單）趨勢訊號和 MIX 都不做，持倉照常出場。回測 NQ 2m 五年每一年都改善（+1～+11R）；5m 大約持平")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpN, tooltip="利率決議公布日（美東），逗號分開。回測更早的期間，要把那段時間的 FOMC 日期加進來；2027 年還沒加")
 friCut    = input.bool(true, "週五：台灣時間週六", group=grpN, inline="fri")
@@ -218,6 +219,9 @@ evtAt(int tc) =>
 junkAt(int tc) =>
     int m = hour(tc, "America/New_York") * 60 + minute(tc, "America/New_York")
     junkOn and m >= junkH1 * 60 + junkM1 and m <= junkH2 * 60 + junkM2
+pmAt(int tc) =>
+    int m = hour(tc, "America/New_York") * 60 + minute(tc, "America/New_York")
+    pmAvoid and m >= 945 and m < 1110
 friAt(int tc) =>
     int tw = hour(tc, "Asia/Taipei") * 60 + minute(tc, "Asia/Taipei")
     friCut and dayofweek(tc, "Asia/Taipei") == dayofweek.saturday and tw >= friCutH * 60 + friCutM
@@ -227,8 +231,8 @@ int  tNext   = tClose + tfMs
 int  etMin   = hour(tClose, "America/New_York") * 60 + minute(tClose, "America/New_York")
 int  etMinN  = hour(tNext, "America/New_York") * 60 + minute(tNext, "America/New_York")
 int  twMin   = hour(tClose, "Asia/Taipei") * 60 + minute(tClose, "Asia/Taipei")
-bool evtNow  = (avoidEvt and evtAt(tClose)) or junkAt(tClose)     // 事件時段或垃圾時間
-bool evtNext = (avoidEvt and evtAt(tNext)) or junkAt(tNext)
+bool evtNow  = (avoidEvt and evtAt(tClose)) or junkAt(tClose) or (isCME and pmAt(tClose))     // 事件時段、垃圾時間、收盤後 15:45–18:30
+bool evtNext = (avoidEvt and evtAt(tNext)) or junkAt(tNext) or (isCME and pmAt(tNext))
 bool haltBar = flatHalt and isCME and etMin == 1020
 bool haltNxt = flatHalt and isCME and etMinN == 1020
 bool pmNext  = mixPmOff and etMinN >= 960 and etMinN < 1200
