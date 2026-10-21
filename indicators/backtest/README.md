@@ -168,6 +168,7 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `hit_rates.py` | 各做法（NQ 2/3/5m 趨勢、MIX、NQ RTH、GEX setup）停損前先到 1 / 1.5 / 2 / 3R 的比例 |
 | `daily_sma5.py` | 趨勢 / MIX 不逆日線 SMA5（價格在上下、斜率、兩者），NQ 2m / 5m 五年逐年勝率和 R |
 | `line_only.py` | 趨勢訊號不用 Trend Judge 門檻，改只看 5s / 15s 線（位置、斜率、快慢線同側），NQ 2m / 5m 五年逐年 |
+| `slow_side.py` | Remi 的 15s 規則：超過 15s 線的趨勢訊號，同一段趨勢裡先有 15s 內的單被停損才做，NQ 2m / 5m 五年逐年 |
 | `v3_failure.py`、`v3_kline.py` | 前幾年怎麼虧的圖：出場方式、停損前走多遠、時段（`v3_failure.html`）；虧最多的日子的 K 線和進出場（`v3_kline.html`） |
 | `long_short.py` | 過濾快訊多空分開，1/2/3/5 分 × 1R/2R，全時段和避開事件時段；`--th 15,35` 換門檻 |
 | `th_sweep.py` | 2 分 K Trend Judge「有趨勢」門檻掃描（0–60 點、多空分開、加上限），前後半年 |
