@@ -23,7 +23,7 @@
 //   自己一次一筆、另外兩個快訊，不影響 v3 的訊號
 // 收盤後避開：美東 15:45–18:30（台灣 03:45–06:30）不進場（NQ / ES，預設開）
 // 開盤高開低走 setup（預設開，NQ RTH 1 / 2 分 K）：高開 ≥ 0.75%、第一根 2 分鐘收黑還在昨收上 → 09:32 收盤做空、1R，記號 🌅
-// 垃圾時間：美東 12:00–13:05（台灣 00:00–01:05）所有訊號都不發，只有 GEX setup 的賣單例外（可改、可關）
+// 垃圾時間：美東 12:00–13:05（台灣 00:00–01:05）NQ / ES 24 小時盤不發訊號；QQQ、SPY、NQ RTH 照做，GEX setup 只做賣（可改、可關）
 indicator("Remi Superb v3", overlay=true, max_labels_count=500, max_boxes_count=500, max_lines_count=500)
 
 // ═════════════════ 1. 商品 ═════════════════
@@ -74,7 +74,7 @@ junkOn    = input.bool(true, "垃圾時間：美東", group=grpN, inline="junk")
 junkH1    = input.int(12, "", minval=0, maxval=23, group=grpN, inline="junk")
 junkM1    = input.int(0, ":", minval=0, maxval=59, group=grpN, inline="junk")
 junkH2    = input.int(13, "到", minval=0, maxval=23, group=grpN, inline="junk")
-junkM2    = input.int(5, ":", minval=0, maxval=59, group=grpN, inline="junk", tooltip="這段時間（美東，看 K 棒收盤，含頭尾；預設 12:00–13:05 = 台灣 00:00–01:05）所有訊號都不發：趨勢訊號、MIX 突破（碰到突破價區間作廢，同事件時段）、GEX setup 買單；GEX setup 賣單例外（在 GEX setup 設定可關）。持倉照常出場。所有商品適用（2026-10-21 Remi 定義）")
+junkM2    = input.int(5, ":", minval=0, maxval=59, group=grpN, inline="junk", tooltip="這段時間（美東，看 K 棒收盤，含頭尾；預設 12:00–13:05 = 台灣 00:00–01:05）所有訊號都不發：趨勢訊號、MIX 突破（碰到突破價區間作廢，同事件時段）、GEX setup 買單；GEX setup 賣單例外（在 GEX setup 設定可關）。持倉照常出場。只套用在 NQ / ES 24 小時盤；QQQ、SPY、NQ RTH 不套（回測 NQ RTH 1m 這段的訊號是賺的，套了 v3 那年 +71R → +25R），GEX setup 在這段只做賣（2026-10-21 Remi 定義）")
 pmAvoid   = input.bool(true, "收盤後避開：美東 15:45–18:30（台灣 03:45–06:30）", group=grpN, tooltip="NQ / ES：K 棒收盤在美東 15:45–18:30（台灣 03:45–06:30）不發新訊號（趨勢、MIX、再進場），持倉照常出場。v3 原本就避開其中的收盤前後、休市前、休市、Globex 開盤，這條多擋掉美東 16:15–16:45 的單。回測 NQ 2m v3 那年 +204R → +209R（一年約擋掉 23 筆，勝率 29%），前 4 年每年 0～−9R；5m 幾乎沒差（2026-10-21 Remi 決定）")
 fomcDay   = input.bool(true, "FOMC 當天整天不做", group=grpN, tooltip="FOMC 利率決議當天（美東日期，用下面的清單）趨勢訊號和 MIX 都不做，持倉照常出場。回測 NQ 2m 五年每一年都改善（+1～+11R）；5m 大約持平")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpN, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程補上（2027 年還沒加）")
@@ -272,7 +272,8 @@ bool fomcSkip = fomcDay and isFomc                                  // FOMC 當�
 bool inEvt   = (isWkday and ((etMin >= 508 and etMin < 540) or (etMin >= 598 and etMin < 615))) or (isFomc and etMin >= 838 and etMin < 900) or (etMin >= 570 and etMin < 600) or (etMin >= 945 and etMin < 975) or (etMin >= 1005 and etMin < 1020) or (etMin >= 1080 and etMin < 1110)
 int    junkS   = junkH1 * 60 + junkM1
 int    junkE   = junkH2 * 60 + junkM2
-bool   junkNow = junkOn and etMin >= junkS and etMin <= junkE           // 垃圾時間（美東，含頭尾）：趨勢、MIX、GEX setup 都不發
+bool   junkT   = junkOn and etMin >= junkS and etMin <= junkE           // 垃圾時間（美東，含頭尾）
+bool   junkNow = junkT and isCME                                     // v3 的趨勢、MIX：只在 NQ / ES 24 小時盤（QQQ、SPY、NQ RTH 不套）
 string junkTxt = str.format("{0,number,00}:{1,number,00}–{2,number,00}:{3,number,00}", junkH1, junkM1, junkH2, junkM2)
 bool   pmAvNow = pmAvoid and isCME and etMin >= 945 and etMin < 1110     // 美東 15:45–18:30（台灣 03:45–06:30）不進場
 bool evtNow  = (avoidEvt and inEvt) or junkNow or pmAvNow
@@ -350,8 +351,8 @@ else if gNewHigh
     gRefLow  := low
     gArmSell := true
 bool gsEnd  = etMin >= 960 or session.islastbar                 // 美東 16:00 收盤（同回測只用到 16:00）
-bool gsBuy  = gsActive and gsReady and gTrigBuy and close > gEma and barstate.isconfirmed and tjLinked and tjDirI >= 1 and qqqPx < gexFlip and not friLate and not gsEnd and not junkNow
-bool gsSell = gsActive and gsReady and gTrigSell and close < gEma and barstate.isconfirmed and tjLinked and tjDirI <= -1 and qqqPx > gexFlip and not friLate and not gsEnd and (not junkNow or gsJunkSell)   // 垃圾時間只有 GEX 賣單例外
+bool gsBuy  = gsActive and gsReady and gTrigBuy and close > gEma and barstate.isconfirmed and tjLinked and tjDirI >= 1 and qqqPx < gexFlip and not friLate and not gsEnd and not junkT
+bool gsSell = gsActive and gsReady and gTrigSell and close < gEma and barstate.isconfirmed and tjLinked and tjDirI <= -1 and qqqPx > gexFlip and not friLate and not gsEnd and (not junkT or gsJunkSell)   // 垃圾時間只有 GEX 賣單例外
 var int   gsPos   = 0
 var float gsEntry = na
 var float gsStop  = na
@@ -642,8 +643,7 @@ if barstate.islast and showTbl
     else if isTX
         warn := compact ? "邊緣，成本高" : "回測只小賺，成本 4 點時接近打平；結算日夜盤到隔天不要做"
     else if active and junkNow
-        bool gsExc = isNqR and gsOn and gsJunkSell
-        warn := compact ? (gsExc ? "垃圾時間只做 GEX 賣" : "垃圾時間不做") : "垃圾時間（美東 " + junkTxt + "）不發新訊號" + (gsExc ? "，只有 GEX setup 賣單照做" : "") + "（不交易的時間設定）"
+        warn := compact ? "垃圾時間不做" : "垃圾時間（美東 " + junkTxt + "）不發新訊號（不交易的時間設定）"
     else if active and fomcSkip
         warn := compact ? "FOMC 日不做" : "FOMC 當天整天不做（交易規則設定）"
     else if active and mixUse and mixPm
@@ -713,7 +713,7 @@ if barstate.islast and showTbl
             string flipTxt = "QQQ 在 flip " + (wantBuy ? "下 → 只等買" : "上 → 只等賣")
             bool   trOk    = tjLinked and (wantBuy ? tjDirI >= 1 : tjDirI <= -1)
             string tjNow   = not tjLinked ? "沒資料" : tjDirI == 2 ? "強UP" : tjDirI == 1 ? "UP" : tjDirI == -2 ? "強Down" : tjDirI == -1 ? "DOWN" : "MIX"
-            bool   junkNo  = junkNow and (wantBuy or not gsJunkSell)
+            bool   junkNo  = junkT and (wantBuy or not gsJunkSell)
             string timeBad = friLate ? "週五截止後" : gsEnd ? "16:00 後" : junkNo ? "垃圾時間 " : ""
             bool   armed   = wantBuy ? gArmBuy : gArmSell
             float  trigPx  = wantBuy ? gRefHigh : gRefLow
