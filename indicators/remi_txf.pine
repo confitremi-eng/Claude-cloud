@@ -1,0 +1,227 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Remi
+//@version=6
+// Remi TXF：台指期（TXF / MXF / TMF）2 分 K 回測有效的兩種做法，從 Remi Superb v3 拆出來的獨立指標
+//   1. 超強趨勢賣單（主力）：Trend Judge 差值低於 −90 點時，用階段 10 的原版賣訊（收盤 < EMA8），
+//      不看 1h EMA20、離慢線距離、停損 ATR 倍數；避開美東數據 / 開收盤 / Globex 時段，趨勢 400 分以內。目標 3R
+//   2. 趨勢訊號（v3 的 TXF 做法）：(20, 0, 8, 1)、Trend Judge 門檻 30、1h EMA20 同向、停損 ≥ 1 ATR、
+//      離慢線 ≤ 3 ATR、趨勢 60–120 分、避開事件時段。買賣都做，目標 3R
+//   兩種共用一個虛擬持倉（一次一筆）。進場：訊號 K 收盤；停損：訊號 K 和前一根的最高 / 最低點；
+//   出場：停損、目標、持有 60 根、或日盤 13:45 / 夜盤 05:00 收盤（台北時間）
+// 回測（TXFR1 1 分 K 2024-01 .. 2026-09，換月前後排除，每筆成本 2 點，`backtest/rbs/txf_super_trend.py`）：
+//   只做趨勢訊號 3R：119 筆，勝率 39%，+26R（2024 −10 / 2025 +11 / 2026 +25R）
+//   只做超強趨勢賣單 3R：324 筆，勝率 36%，+56R（+10 / +2 / +43R）
+//   兩種一起 3R：437 筆，勝率 37%，+76R（+0 / +13 / +62R），每年都比只做趨勢訊號好
+//   1R 沒有幫助；超強趨勢的「買單」每一種都虧（所以只做賣）
+indicator("Remi TXF（2m）", shorttitle="Remi TXF", overlay=true, max_labels_count=300, max_lines_count=300)
+
+// ═════════════════ 設定 ═════════════════
+grpA      = "做法"
+superOn   = input.bool(true, "超強趨勢賣單　TJ 低於 −", group=grpA, inline="su")
+superLv   = input.float(90, "", minval=0, step=10, group=grpA, inline="su")
+superSt   = input.int(10, "階段", minval=2, group=grpA, inline="su", tooltip="Trend Judge 差值（台指點數）低於 −這個值時，用這個階段的原版賣訊；不看 1h EMA、慢線距離、停損 ATR。回測 TJ 60–200、階段 10 / 20 的賣單 3R 幾乎都是正的；90 / 10 最好")
+trendOn   = input.bool(true, "趨勢訊號（v3 的 TXF 做法，買賣都做）", group=grpA, tooltip="(20, 0, 8, 1)、Trend Judge 門檻 30 / 強勢 60、1h EMA20 同向、停損 ≥ 1 ATR、離慢線 ≤ 3 ATR、趨勢 60–120 分。回測三年 +26R（2024 年虧 10R）")
+tgtR      = input.float(3.0, "目標（R）", minval=0.5, step=0.5, group=grpA, tooltip="回測 3R；1R 沒有優勢")
+
+grpF      = "過濾"
+thU       = input.float(30, "Trend Judge 門檻", minval=0, group=grpF, inline="th")
+stU       = input.float(60, "強勢", minval=0, group=grpF, inline="th")
+winLo     = input.int(60, "趨勢訊號：趨勢已持續", minval=0, group=grpF, inline="win")
+winHi     = input.int(120, "–", minval=1, group=grpF, inline="win", tooltip="分鐘。超強趨勢賣單只要 400 分以內")
+superCap  = input.int(400, "超強趨勢賣單：趨勢最多（分）", minval=1, group=grpF)
+h1Len     = input.int(20, "1 小時 EMA 長度", minval=1, group=grpF)
+riskMult  = input.float(1.0, "停損至少（ATR 倍數）", minval=0, step=0.05, group=grpF, inline="rk")
+atrLen    = input.int(14, "ATR", minval=1, group=grpF, inline="rk")
+distU     = input.float(3.0, "離慢線最多（ATR 倍數）", minval=0, step=0.5, group=grpF)
+avoidEvt  = input.bool(true, "避開美東數據、開收盤、Globex 時段", group=grpF, tooltip="美東時間看 K 棒收盤：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30（台北時間 = 美東 + 12 小時）")
+holdBars  = input.int(60, "最多持有幾根 K", minval=1, group=grpF)
+
+grpT      = "Trend Judge"
+tjEmaLen  = input.int(1130, "EMA 長度", minval=1, group=grpT)
+tjFastS   = input.int(5, "快線秒數", minval=1, group=grpT, inline="tjs")
+tjSlowS   = input.int(15, "慢線秒數", minval=1, group=grpT, inline="tjs")
+
+grpD      = "顯示"
+showLines = input.bool(true, "畫持倉的停損、目標線", group=grpD)
+showTbl   = input.bool(true, "狀態表格", group=grpD)
+supTxt    = input.string("🔻 超強賣", "超強趨勢賣記號", group=grpD, inline="t1")
+trBuyTxt  = input.string("▲ 趨勢買", "趨勢買", group=grpD, inline="t2")
+trSellTxt = input.string("▼ 趨勢賣", "趨勢賣", group=grpD, inline="t2")
+buyCol    = input.color(color.new(#089981, 0), "買", group=grpD, inline="c")
+sellCol   = input.color(color.new(#F23645, 0), "賣", group=grpD, inline="c")
+stopCol   = input.color(color.red, "停損線", group=grpD, inline="c")
+tgtCol    = input.color(color.green, "目標線", group=grpD, inline="c")
+
+// ═════════════════ 商品、週期 ═════════════════
+string root  = syminfo.root
+bool   isTX  = str.contains(root, "TXF") or str.contains(root, "MXF") or str.contains(root, "TMF")
+bool   okTf  = timeframe.period == "2"
+bool   active = isTX and okTf
+
+// ═════════════════ 原版訊號（階段 20 買賣、階段 superSt 賣）═════════════════
+float sigEma = ta.ema(close, 8)
+bool newLow  = low < ta.lowest(low, 20)[1]
+bool newHigh = high > ta.highest(high, 20)[1]
+var float refHigh = na
+var float refLow  = na
+var bool  armBuy  = false
+var bool  armSell = false
+bool trigBuy  = armBuy and close > refHigh
+bool trigSell = armSell and close < refLow
+if trigBuy
+    armBuy := false
+else if newLow
+    refHigh := high
+    armBuy  := true
+if trigSell
+    armSell := false
+else if newHigh
+    refLow  := low
+    armSell := true
+bool buySig  = trigBuy and close > sigEma and barstate.isconfirmed
+bool sellSig = trigSell and close < sigEma and barstate.isconfirmed
+bool stNewHigh = high > ta.highest(high, superSt)[1]
+var float stRefLow = na
+var bool  stArm    = false
+bool stTrig = stArm and close < stRefLow
+if stTrig
+    stArm := false
+else if stNewHigh
+    stRefLow := low
+    stArm    := true
+bool stSellSig = stTrig and close < sigEma and barstate.isconfirmed
+
+// ═════════════════ Trend Judge（1 分 K 推算，同 v3）═════════════════
+float tfSec    = timeframe.in_seconds()
+float tjAFast1 = 1 - math.pow(1 - 2.0 / (tjEmaLen + 1), 60.0 / tjFastS)
+float tjASlow1 = 1 - math.pow(1 - 2.0 / (tjEmaLen + 1), 60.0 / tjSlowS)
+float tjAFastB = 1 - math.pow(1 - 2.0 / (tjEmaLen + 1), tfSec / tjFastS)
+float tjASlowB = 1 - math.pow(1 - 2.0 / (tjEmaLen + 1), tfSec / tjSlowS)
+tjMinArr = request.security_lower_tf(syminfo.tickerid, "1", close)
+var float tjMaFast = na
+var float tjMaSlow = na
+int tjMinN = array.size(tjMinArr)
+if tjMinN > 0 and tfSec > 60
+    for k = 0 to tjMinN - 1
+        float mc = array.get(tjMinArr, k)
+        if not na(mc)
+            tjMaFast := na(tjMaFast) ? mc : tjMaFast + tjAFast1 * (mc - tjMaFast)
+            tjMaSlow := na(tjMaSlow) ? mc : tjMaSlow + tjASlow1 * (mc - tjMaSlow)
+else
+    tjMaFast := na(tjMaFast) ? close : tjMaFast + tjAFastB * (close - tjMaFast)
+    tjMaSlow := na(tjMaSlow) ? close : tjMaSlow + tjASlowB * (close - tjMaSlow)
+var float tjDiff = na
+if ta.change(time("2")) != 0 and not na(tjMaFast) and not na(tjMaSlow)
+    tjDiff := tjMaFast - tjMaSlow
+int  tjDirI   = na(tjDiff) ? 0 : tjDiff > stU ? 2 : tjDiff > thU ? 1 : tjDiff < -stU ? -2 : tjDiff < -thU ? -1 : 0
+bool tjLinked = not na(tjDiff)
+var int trendBars = 0
+int trendDir = tjDirI > 0 ? 1 : tjDirI < 0 ? -1 : 0
+if trendDir != 0 and trendDir == nz(trendDir[1])
+    trendBars += 1
+else
+    trendBars := trendDir != 0 ? 1 : 0
+float trendMin = trendBars * tfSec / 60.0
+
+// ═════════════════ 時段 ═════════════════
+int  tClose  = na(time_close) ? time + timeframe.in_seconds() * 1000 : time_close
+int  etMin   = hour(tClose, "America/New_York") * 60 + minute(tClose, "America/New_York")
+int  etDow   = dayofweek(tClose, "America/New_York")
+bool isWkday = etDow >= dayofweek.monday and etDow <= dayofweek.friday
+bool inEvt   = (isWkday and ((etMin >= 508 and etMin < 540) or (etMin >= 598 and etMin < 615))) or (etMin >= 570 and etMin < 600) or (etMin >= 945 and etMin < 975) or (etMin >= 1005 and etMin < 1020) or (etMin >= 1080 and etMin < 1110)
+bool evtNow  = avoidEvt and inEvt
+int  twMin   = hour(tClose, "Asia/Taipei") * 60 + minute(tClose, "Asia/Taipei")
+bool sessEnd = twMin == 825 or twMin == 300                       // 日盤 13:45、夜盤 05:00 收盤那根
+
+// ═════════════════ 過濾 ═════════════════
+h1Vals() =>
+    float h1e = ta.ema(close, h1Len)
+    [close[1], h1e[1]]
+[h1Close, h1Ema] = request.security(syminfo.tickerid, "60", h1Vals(), lookahead=barmerge.lookahead_on)
+float atrPrev  = ta.atr(atrLen)[1]
+float atrNow   = ta.atr(atrLen)
+float buyStop  = math.min(low, low[1])
+float sellStop = math.max(high, high[1])
+bool  inWin    = trendMin >= winLo and trendMin < winHi
+bool trBuy  = trendOn and active and buySig and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and close - tjMaSlow <= distU * atrNow and not evtNow and inWin
+bool trSell = trendOn and active and sellSig and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and tjMaSlow - close <= distU * atrNow and not evtNow and inWin
+bool suSell = superOn and active and stSellSig and tjLinked and tjDiff < -superLv and not evtNow and trendMin < superCap
+
+// ═════════════════ 虛擬持倉（一次一筆）═════════════════
+var int   vPos   = 0
+var float vEntry = na
+var float vStop  = na
+var float vTgt   = na
+var int   vBar   = na
+var string vKind = ""
+var line  lnS = na
+var line  lnT = na
+var int   nWin  = 0
+var int   nLoss = 0
+var int   nTime = 0
+string exitTxt = ""
+if vPos != 0 and bar_index > vBar
+    bool hitS = vPos == 1 ? low <= vStop : high >= vStop
+    bool hitT = vPos == 1 ? high >= vTgt : low <= vTgt
+    if hitS or hitT or bar_index - vBar >= holdBars or sessEnd
+        exitTxt := hitS ? "停損" : hitT ? "到目標" : sessEnd ? "收盤出場" : "持有 " + str.tostring(holdBars) + " 根出場"
+        if hitS
+            nLoss += 1
+        else if hitT
+            nWin += 1
+        else
+            nTime += 1
+        vPos := 0
+    else if showLines
+        line.set_x2(lnS, bar_index)
+        line.set_x2(lnT, bar_index)
+bool flat   = vPos == 0 and not sessEnd
+bool goBuy  = flat and trBuy
+bool goSell = flat and not goBuy and (trSell or suSell)
+string goKind = goBuy ? "趨勢買" : goSell ? (trSell ? "趨勢賣" : "超強趨勢賣") : ""
+if goBuy or goSell
+    vPos   := goBuy ? 1 : -1
+    vEntry := close
+    vStop  := goBuy ? buyStop : sellStop
+    vTgt   := close + tgtR * (close - vStop)
+    vBar   := bar_index
+    vKind  := goKind
+    if goBuy
+        label.new(bar_index, low, trBuyTxt, yloc=yloc.belowbar, style=label.style_label_up, color=buyCol, textcolor=color.white, size=size.small)
+    else
+        label.new(bar_index, high, trSell ? trSellTxt : supTxt, yloc=yloc.abovebar, style=label.style_label_down, color=sellCol, textcolor=color.white, size=size.small)
+    if showLines
+        lnS := line.new(bar_index, vStop, bar_index, vStop, color=stopCol)
+        lnT := line.new(bar_index, vTgt, bar_index, vTgt, color=tgtCol)
+
+// ═════════════════ 快訊 ═════════════════
+fmtP(float x) => str.tostring(x, format.mintick)
+string tNow = str.format_time(tClose, "MM/dd HH:mm", "Asia/Taipei") + " 台北"
+if goBuy or goSell
+    alert("Remi TXF " + syminfo.ticker + " " + goKind + "：" + tNow + "，進 " + fmtP(vEntry) + "，停損 " + fmtP(vStop) + "（" + str.tostring(math.abs(vEntry - vStop), "#.##") + " 點），目標 " + str.tostring(tgtR) + "R " + fmtP(vTgt) + "，TJ " + str.tostring(tjDiff, "#") + "、趨勢 " + str.tostring(trendMin, "#") + " 分", alert.freq_once_per_bar_close)
+if exitTxt != ""
+    alert("Remi TXF " + syminfo.ticker + " 出場：" + exitTxt + "（" + tNow + "）", alert.freq_once_per_bar_close)
+alertcondition(goBuy, "Remi TXF Buy", "Remi TXF：{{ticker}} 趨勢買，收盤 {{close}}")
+alertcondition(goSell, "Remi TXF Sell", "Remi TXF：{{ticker}} 賣（趨勢或超強趨勢），收盤 {{close}}")
+
+plot(goBuy or goSell ? vEntry : na, "進場", display=display.data_window)
+plot(goBuy or goSell ? vStop : na, "停損", display=display.data_window)
+plot(goBuy or goSell ? vTgt : na, "目標", display=display.data_window)
+plot(tjDiff, "TJ 差值", display=display.data_window)
+plot(trendMin, "趨勢已持續（分鐘）", display=display.data_window)
+
+// ═════════════════ 狀態表格 ═════════════════
+var table tb = table.new(position.top_right, 2, 4, border_width=1)
+if showTbl and barstate.islast
+    color bg = color.new(color.gray, 85)
+    string tjTxt = na(tjDiff) ? "—" : str.tostring(tjDiff, "#") + (tjDirI == 2 ? " 強UP" : tjDirI == 1 ? " UP" : tjDirI == -1 ? " DOWN" : tjDirI == -2 ? " 強DOWN" : " MIX")
+    color tjBg = tjDiff < -superLv ? color.new(sellCol, 20) : tjDirI < 0 ? color.new(sellCol, 70) : tjDirI > 0 ? color.new(buyCol, 70) : bg
+    table.cell(tb, 0, 0, "商品 / 週期", text_color=color.gray, bgcolor=bg, text_size=size.small)
+    table.cell(tb, 1, 0, not isTX ? "只支援 TXF / MXF / TMF" : not okTf ? "請用 2 分 K" : syminfo.ticker + " 2m", text_color=color.gray, bgcolor=bg, text_size=size.small)
+    table.cell(tb, 0, 1, "Trend Judge", text_color=color.gray, bgcolor=bg, text_size=size.small)
+    table.cell(tb, 1, 1, tjTxt + (trendDir != 0 ? "　" + str.tostring(trendMin, "#") + " 分" : "") + (tjDiff < -superLv ? "　超強！" : ""), text_color=color.white, bgcolor=tjBg, text_size=size.small)
+    table.cell(tb, 0, 2, "持倉", text_color=color.gray, bgcolor=bg, text_size=size.small)
+    table.cell(tb, 1, 2, vPos == 0 ? "空手" : vKind + "　停 " + fmtP(vStop) + "　標 " + fmtP(vTgt), text_color=color.gray, bgcolor=bg, text_size=size.small)
+    int nAll = nWin + nLoss + nTime
+    table.cell(tb, 0, 3, "圖上結果", text_color=color.gray, bgcolor=bg, text_size=size.small)
+    table.cell(tb, 1, 3, nAll == 0 ? "—" : str.tostring(nAll) + " 筆：到目標 " + str.tostring(nWin) + "、停損 " + str.tostring(nLoss) + "、其他 " + str.tostring(nTime), text_color=color.gray, bgcolor=bg, text_size=size.small)
