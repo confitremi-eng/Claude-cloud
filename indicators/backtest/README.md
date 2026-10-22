@@ -175,6 +175,8 @@ head -2 indicators/backtest/data/NQ_1m_databento.csv   # 第一行要是欄位�
 | `open_gap.py` | Globex 18:00 開盤跳空、第一根反向收（低開收紅 / 高開收黑）做反向，依缺口大小、週日、收回幅度分組 |
 | `rth_open_gap.py` | 美股 09:30 開盤跳空、第一根（1m / 2m）反向收：低開高走做多 / 高開低走做空，依缺口大小、各年 |
 | `gapdown_long.py` | QQQ 低開高走：低開後等確認做多（ORB 5 / 15 / 30、收復開盤價、收復 VWAP），停損當天低點，依缺口大小，跟沒低開的日子對照；可跑一年或五年資料 |
+| `gapdown_v3.py` | v3 QQQ / NQ RTH 1m 訊號依當天開盤缺口分組；大低開日的多 / 空、進場時段、跟 ORB 5 同一天 |
+| `gapdown_v3_longs.py` | 大低開早盤（09:45–12:00）被 v3 趨勢過濾擋掉的買訊：各過濾通過率、只留停損 / 距離 / 時段的結果，跟平開日對照 |
 | `qqq_2m.py` | QQQ 2 分 K（NQ 美股盤代替）套 NQ 2m / ETF 規則，趨勢 / 加 MIX、3R / 1R，對照 NQ RTH 1m |
 | `mix_stop.py` | MIX 突破換比較近的停損（0.4H、0.3H、1 / 1.5 ATR），目標照 R 或維持原價，NQ 2m / 5m 每年勝率和點數 |
 | `mix_sma5_dist.py` | 5m MIX 突破依離日線 SMA5 的距離分組（順 / 逆日線），1R / 2R 命中和每筆 R |
