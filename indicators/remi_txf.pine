@@ -2,7 +2,7 @@
 // © Remi
 //@version=6
 // Remi TXF：台指期（TXF / MXF / TMF）2 分 K 回測有效的兩種做法，從 Remi Superb v3 拆出來的獨立指標
-//   1. 超強趨勢賣單（主力）：Trend Judge 差值低於 −100 點時，用階段 4 的原版賣訊（收盤 < EMA8），上一根 5 分 K 收在 EMA30 下，
+//   1. 超強趨勢賣單（主力）：Trend Judge 差值低於 −100 點時，用階段 6 的原版賣訊（收盤 < EMA8），上一根 5 分 K 收在 EMA30 下，
 //      不看 1h EMA20、離慢線距離、停損 ATR 倍數；避開美東數據 / 開收盤 / Globex 時段，趨勢 600 分以內。目標 2R
 //   2. 趨勢訊號（v3 的 TXF 做法）：(20, 0, 8, 1)、Trend Judge 門檻 30、1h EMA20 同向、停損 ≥ 1 ATR、
 //      離慢線 ≤ 3 ATR、趨勢 60–120 分、避開事件時段。買賣都做，目標 3R
@@ -12,6 +12,7 @@
 //   只做趨勢訊號 3R：128 筆，勝率 41%，+33R（2024 −10 / 2025 +11 / 2026 +32R）
 //   只做超強趨勢賣單（TJ 90、階段 3）3R：621 筆，勝率 33%，+79R（+6 / +5 / +68R），1R 54%、+24R
 //   兩種一起 3R：+99R；2026-10-22 日盤 09:55、12:03 兩筆都到 3R
+//   2026-10-22 超強賣階段 4 → 6：超強賣一年 177 → 146 筆，整個指標 +137.8 → +151.0R、回撤 17.7 → 16.2R（`txf_super_stage.py`）
 //   2026-10-22 超強賣趨勢上限 400 → 600 分：兩種一起 +137.8R、回撤 17.7R（`txf_trend_cap.py`）
 //   2026-10-22 微調成 TJ 100、階段 4、5m EMA30（`txf_super_tune.py`）：+122.0R、勝率 42%、回撤 19.3R、三年都賺（+16.4 / +22.2 / +83.4R）
 //   2026-10-22 超強賣目標改 2R（趨勢訊號 3R）：兩種一起 +111.2R、勝率 41%、最長連停 10 次；10/22 日盤 09:55、11:49、13:05 都到 2R
@@ -24,7 +25,7 @@ indicator("Remi TXF（2m）", shorttitle="Remi TXF", overlay=true, max_labels_co
 grpA      = "做法"
 superOn   = input.bool(true, "超強趨勢賣單　TJ 低於 −", group=grpA, inline="su")
 superLv   = input.float(100, "", minval=0, step=10, group=grpA, inline="su")
-superSt   = input.int(4, "階段", minval=2, group=grpA, inline="su", tooltip="Trend Judge 差值（台指點數）低於 −這個值時，用這個階段的原版賣訊；不看 1h EMA、慢線距離、停損 ATR。2026-10-22 微調成 TJ 100、階段 4（`txf_super_tune.py`，趨勢 3R + 超強賣 2R、5m EMA30、冷卻 5 根）：+122.0R、勝率 42%、回撤 19.3R，三年都賺（+16.4 / +22.2 / +83.4R）。階段 3 總 R 較多（+129R）但靠 2026；TJ 90 時 2024 年虧；階段 10 一路跌的日子抓不到")
+superSt   = input.int(6, "階段", minval=2, group=grpA, inline="su", tooltip="Trend Judge 差值（台指點數）低於 −這個值時，用這個階段的原版賣訊；不看 1h EMA、慢線距離、停損 ATR。2026-10-22 改成階段 6（`txf_super_stage.py`，TJ 100、5m EMA30、600 分、2R、冷卻 5 根）：超強賣一年約 146 筆（階段 4 是 177）、勝率 46%、每筆 +0.29R，整個指標 +151.0R、回撤 16.2R，三年都賺；階段 8 一年 119 筆、回撤 11.4R、+124R；階段 10 以上一路跌的日子抓不到。階段 3 總 R 較多（+129R）但靠 2026；TJ 90 時 2024 年虧；階段 10 一路跌的日子抓不到")
 trendOn   = input.bool(true, "趨勢訊號（v3 的 TXF 做法，買賣都做）", group=grpA, tooltip="(20, 0, 8, 1)、Trend Judge 門檻 30 / 強勢 60、1h EMA20 同向、停損 ≥ 1 ATR、離慢線 ≤ 3 ATR、趨勢 60–120 分。回測到 2026-10-22 共 +33R（2024 年虧 10R）")
 tgtR      = input.float(3.0, "目標（R）　趨勢訊號", minval=0.5, step=0.5, group=grpA, inline="tg")
 supTgtR   = input.float(2.0, "超強賣", minval=0.5, step=0.5, group=grpA, inline="tg", tooltip="趨勢訊號 3R。超強趨勢賣單 2026-10-22 從 3R 改成 2R（`txf_super_2r.py`，兩種一起做、EMA20、冷卻 5 根）：總 R +100.5 → +111.2R、勝率 35% → 41%、最長連停 12 → 10 次、回撤 19.6 → 20.2R；1R 只有 +41R")
