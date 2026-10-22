@@ -1,0 +1,145 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Remi
+//@version=6
+// Remi 大低開買：美股開盤大低開，09:45 後第一根 5 分 K 收漲就在收盤買，停損當天低點
+//   用在 NQ / MNQ（24 小時或只開美股盤都可以）或 QQQ 的 1 分 K、5 分 K
+//   低開 = 09:30 開盤對前一天 16:00 收盤（美東時間）
+//   09:45–12:00 之間，第一根收漲的 5 分 K（收盤 > 開盤）收盤進場；一天只看第一根，收漲那根不符合就整天不做
+//   停損：當天美股盤到進場為止的最低點 − 1 tick；目標 1R（也畫 2R），16:00 還沒出場就平倉
+// 回測（NQ 美股盤 1 分 K 代替 QQQ，2021-10 .. 2026-10，扣 1 點，`backtest/rbs/gapdown_5m_green.py`）：
+//   低開 ≥ 0.75%：142 筆（一年約 28 筆），1R 勝率 56%、+13.7R，2R 40%、+11.7R，停損中位 59 點
+//   低開 ≥ 1%：96 筆，1R 勝率 61%、+19.1R（5 年 4 年賺），2R 45%、+17.6R，停損中位 63 點
+//   沒低開的日子同樣規則：1R 52%、−1.3R（優勢來自大低開）
+//   停損放近一點（訊號 K 低點、固定 %）都比較差（`gapdown_5m_stops.py`）；1 分 K / 2 分 K 收漲進場也比較差
+indicator("Remi 大低開買（5m 收漲）", shorttitle="Remi 大低開", overlay=true, max_labels_count=200, max_lines_count=200)
+
+// ═════════════════ 設定 ═════════════════
+grpS     = "條件"
+gapMin   = input.float(0.75, "低開至少（%）", minval=0, step=0.05, group=grpS, tooltip="09:30 開盤比前一天 16:00 收盤低至少這麼多 % 才做。回測：0.75% → 1R 勝率 56%、一年約 28 筆；1% → 61%、一年約 19 筆")
+aboveOpen = input.bool(false, "進場時要站回開盤價之上", group=grpS, tooltip="第一根收漲的 5 分 K 收盤要高於當天 09:30 開盤價才做。回測（低開 ≥ 0.75%）：站回的 70 筆 1R 60%、+14.0R（停損中位 98 點）；還在開盤價下的 72 筆 51%、−0.4R。打開等於少一半單、勝率高一點、停損大一點")
+tgtR     = input.float(1.0, "目標（R）", minval=0.5, step=0.5, group=grpS, tooltip="回測 1R 最穩；2R 低開 ≥ 0.75% 勝率 40%、+11.7R")
+showR2   = input.bool(true, "也畫 2R 線", group=grpS)
+
+grpD     = "顯示"
+showLines = input.bool(true, "畫進場、停損、目標線", group=grpD)
+showTbl  = input.bool(true, "狀態表格", group=grpD)
+buyTxt   = input.string("🌱 低開買", "買進記號文字", group=grpD)
+mkCol    = input.color(color.new(#00897B, 0), "記號顏色", group=grpD, inline="c")
+stopCol  = input.color(color.red, "停損", group=grpD, inline="c")
+tgtCol   = input.color(color.green, "目標", group=grpD, inline="c")
+
+// ═════════════════ 時間（美東）═════════════════
+string TZ = "America/New_York"
+int  etMin  = hour(time, TZ) * 60 + minute(time, TZ)            // 這根 K 的開始時間
+int  tfMin  = timeframe.isminutes ? timeframe.multiplier : 0
+bool okTf   = tfMin == 1 or tfMin == 5
+bool inRth  = etMin >= 570 and etMin < 960                      // 09:30–16:00
+bool rthBar1 = etMin == 570                                     // 09:30 那根
+bool inWin  = etMin >= 585 and etMin < 720                      // 09:45–12:00 開始的 K
+bool bStart = inWin and (etMin - 585) % 5 == 0                  // 5 分 K 的第一根
+bool bEnd   = inWin and (etMin + tfMin - 585) % 5 == 0          // 5 分 K 的最後一根
+
+// ═════════════════ 前一天 16:00 收盤、當天開盤、當天低點 ═════════════════
+var float lastRthClose = na
+var float prevClose = na
+var float dayOpen   = na
+var float dayLow    = na
+var bool  dayDone   = true                                       // 今天已經看過第一根收漲的 5 分 K
+var float bOpen     = na
+if rthBar1
+    prevClose := lastRthClose
+    dayOpen   := open
+    dayLow    := low
+    dayDone   := false
+else if inRth and not na(dayLow)
+    dayLow := math.min(dayLow, low)
+if inRth
+    lastRthClose := close
+float gapPct = na(prevClose) or na(dayOpen) ? na : (dayOpen / prevClose - 1) * 100
+bool  bigGap = not na(gapPct) and gapPct <= -gapMin
+if bStart
+    bOpen := open
+
+// ═════════════════ 訊號 ═════════════════
+bool firstUp = okTf and bEnd and not dayDone and not na(bOpen) and close > bOpen and barstate.isconfirmed
+bool buySig  = firstUp and bigGap and (not aboveOpen or close > dayOpen)
+if firstUp
+    dayDone := true
+
+// 持倉（只用來畫線和算結果）
+var int   pos    = 0
+var float pEntry = na
+var float pStop  = na
+var float pTgt   = na
+var float pTgt2  = na
+var line  lnE = na
+var line  lnS = na
+var line  lnT = na
+var line  lnT2 = na
+var int   nWin  = 0
+var int   nLoss = 0
+var int   nFlat = 0
+string exitTxt = ""
+if pos == 1
+    bool hitS = low <= pStop
+    bool hitT = high >= pTgt
+    bool eod  = etMin + tfMin >= 960 or not inRth
+    if hitS or hitT or eod
+        if hitS
+            nLoss += 1
+            exitTxt := "停損"
+        else if hitT
+            nWin += 1
+            exitTxt := "到 " + str.tostring(tgtR) + "R"
+        else
+            nFlat += 1
+            exitTxt := "16:00 平倉"
+        pos := 0
+    else if showLines
+        line.set_x2(lnE, bar_index)
+        line.set_x2(lnS, bar_index)
+        line.set_x2(lnT, bar_index)
+        if showR2
+            line.set_x2(lnT2, bar_index)
+if buySig
+    pos    := 1
+    pEntry := close
+    pStop  := dayLow - syminfo.mintick
+    pTgt   := close + tgtR * (close - pStop)
+    pTgt2  := close + 2 * (close - pStop)
+    label.new(bar_index, low, buyTxt + "\n低開 " + str.tostring(gapPct, "#.##") + "%", yloc=yloc.belowbar, style=label.style_label_up, color=color.new(mkCol, 0), textcolor=color.white, size=size.small)
+    if showLines
+        lnE := line.new(bar_index, pEntry, bar_index, pEntry, color=color.gray, style=line.style_dotted)
+        lnS := line.new(bar_index, pStop, bar_index, pStop, color=stopCol)
+        lnT := line.new(bar_index, pTgt, bar_index, pTgt, color=tgtCol)
+        if showR2
+            lnT2 := line.new(bar_index, pTgt2, bar_index, pTgt2, color=color.new(tgtCol, 50), style=line.style_dashed)
+
+// ═════════════════ 快訊 ═════════════════
+fmtP(float x) => str.tostring(x, format.mintick)
+string tNow = str.format_time(time_close, "HH:mm", TZ) + " 美東 / " + str.format_time(time_close, "HH:mm", "Asia/Taipei") + " 台北"
+if buySig
+    alert("Remi 大低開買 " + syminfo.ticker + "：低開 " + str.tostring(gapPct, "#.##") + "%，" + tNow + " 5 分 K 收漲。買 " + fmtP(pEntry) + "，停損 " + fmtP(pStop) + "（" + str.tostring(pEntry - pStop, "#.##") + "），目標 " + str.tostring(tgtR) + "R " + fmtP(pTgt) + (showR2 ? "，2R " + fmtP(pTgt2) : ""), alert.freq_once_per_bar_close)
+if exitTxt != ""
+    alert("Remi 大低開買 " + syminfo.ticker + " 出場：" + exitTxt, alert.freq_once_per_bar_close)
+alertcondition(buySig, "Remi 大低開買 Buy", "Remi 大低開買：{{ticker}} 5 分 K 收漲，收盤 {{close}} 買（停損當天低點）")
+
+// 給資料視窗看的數值
+plot(buySig ? pEntry : na, "大低開 進場", display=display.data_window)
+plot(buySig ? pStop : na, "大低開 停損", display=display.data_window)
+plot(buySig ? pTgt : na, "大低開 目標", display=display.data_window)
+plot(gapPct, "今天跳空（%）", display=display.data_window)
+plot(dayLow, "今天美股盤低點", display=display.data_window)
+
+// ═════════════════ 狀態表格 ═════════════════
+var table tb = table.new(position.top_right, 2, 3, border_width=1)
+if showTbl and barstate.islast
+    color bg = color.new(color.gray, 85)
+    string st = not okTf ? "請用 1 分或 5 分 K" : na(gapPct) ? "等 09:30 開盤" : not bigGap ? "沒有大低開，今天不做" : pos == 1 ? "持倉中：停 " + fmtP(pStop) + " 標 " + fmtP(pTgt) : dayDone ? "今天已看過第一根收漲" : etMin < 585 ? "大低開！等 09:45 後第一根 5m 收漲" : "大低開！等第一根 5m 收漲"
+    table.cell(tb, 0, 0, "今天跳空", text_color=color.gray, bgcolor=bg, text_size=size.small)
+    table.cell(tb, 1, 0, na(gapPct) ? "—" : str.tostring(gapPct, "#.##") + "%（門檻 −" + str.tostring(gapMin) + "%）", text_color=bigGap ? color.white : color.gray, bgcolor=bigGap ? color.new(mkCol, 20) : bg, text_size=size.small)
+    table.cell(tb, 0, 1, "狀態", text_color=color.gray, bgcolor=bg, text_size=size.small)
+    table.cell(tb, 1, 1, st, text_color=color.gray, bgcolor=bg, text_size=size.small)
+    table.cell(tb, 0, 2, "圖上結果", text_color=color.gray, bgcolor=bg, text_size=size.small)
+    int nAll = nWin + nLoss + nFlat
+    table.cell(tb, 1, 2, nAll == 0 ? "—" : str.tostring(nAll) + " 筆：到目標 " + str.tostring(nWin) + "、停損 " + str.tostring(nLoss) + "、平倉 " + str.tostring(nFlat), text_color=color.gray, bgcolor=bg, text_size=size.small)
