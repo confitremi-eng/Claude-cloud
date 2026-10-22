@@ -3,7 +3,7 @@
 //@version=6
 // Remi TXF：台指期（TXF / MXF / TMF）2 分 K 回測有效的兩種做法，從 Remi Superb v3 拆出來的獨立指標
 //   1. 超強趨勢賣單（主力）：Trend Judge 差值低於 −100 點時，用階段 4 的原版賣訊（收盤 < EMA8），上一根 5 分 K 收在 EMA30 下，
-//      不看 1h EMA20、離慢線距離、停損 ATR 倍數；避開美東數據 / 開收盤 / Globex 時段，趨勢 400 分以內。目標 3R
+//      不看 1h EMA20、離慢線距離、停損 ATR 倍數；避開美東數據 / 開收盤 / Globex 時段，趨勢 600 分以內。目標 2R
 //   2. 趨勢訊號（v3 的 TXF 做法）：(20, 0, 8, 1)、Trend Judge 門檻 30、1h EMA20 同向、停損 ≥ 1 ATR、
 //      離慢線 ≤ 3 ATR、趨勢 60–120 分、避開事件時段。買賣都做，目標 3R
 //   兩種共用一個虛擬持倉（一次一筆）。進場：訊號 K 收盤；停損：訊號 K 和前一根的最高 / 最低點；
@@ -12,6 +12,7 @@
 //   只做趨勢訊號 3R：128 筆，勝率 41%，+33R（2024 −10 / 2025 +11 / 2026 +32R）
 //   只做超強趨勢賣單（TJ 90、階段 3）3R：621 筆，勝率 33%，+79R（+6 / +5 / +68R），1R 54%、+24R
 //   兩種一起 3R：+99R；2026-10-22 日盤 09:55、12:03 兩筆都到 3R
+//   2026-10-22 超強賣趨勢上限 400 → 600 分：兩種一起 +137.8R、回撤 17.7R（`txf_trend_cap.py`）
 //   2026-10-22 微調成 TJ 100、階段 4、5m EMA30（`txf_super_tune.py`）：+122.0R、勝率 42%、回撤 19.3R、三年都賺（+16.4 / +22.2 / +83.4R）
 //   2026-10-22 超強賣目標改 2R（趨勢訊號 3R）：兩種一起 +111.2R、勝率 41%、最長連停 10 次；10/22 日盤 09:55、11:49、13:05 都到 2R
 //   2026-10-22 加：停損後冷卻 5 根、超強賣要 5 分 K 收在 EMA20 下 → +100.5R、最大回撤 25.2 → 19.6R（`txf_tf_super.py`）
@@ -32,8 +33,8 @@ grpF      = "過濾"
 thU       = input.float(30, "Trend Judge 門檻", minval=0, group=grpF, inline="th")
 stU       = input.float(60, "強勢", minval=0, group=grpF, inline="th")
 winLo     = input.int(60, "趨勢訊號：趨勢已持續", minval=0, group=grpF, inline="win")
-winHi     = input.int(120, "–", minval=1, group=grpF, inline="win", tooltip="分鐘。超強趨勢賣單只要 400 分以內")
-superCap  = input.int(400, "超強趨勢賣單：趨勢最多（分）", minval=1, group=grpF)
+winHi     = input.int(120, "–", minval=1, group=grpF, inline="win", tooltip="分鐘（趨勢訊號）。回測 60–120 最穩（+36R、回撤 10.9R）；60–180 多一點但 2025 年較差，更長或從 0 分開始都比較差（`txf_trend_cap.py`）")
+superCap  = input.int(600, "超強趨勢賣單：趨勢最多（分）", minval=1, group=grpF, tooltip="2026-10-22 從 400 改成 600（`txf_trend_cap.py`）：兩種一起 +122.0 → +137.8R、回撤 19.3 → 17.7R、三年都賺（+15.5 / +25.0 / +97.3R）。超強賣上限越長越好，不設上限 +149.4R、回撤 20.9R")
 h1Len     = input.int(20, "1 小時 EMA 長度", minval=1, group=grpF)
 riskMult  = input.float(1.0, "停損至少（ATR 倍數）", minval=0, step=0.05, group=grpF, inline="rk")
 atrLen    = input.int(14, "ATR", minval=1, group=grpF, inline="rk")
