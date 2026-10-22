@@ -2,7 +2,7 @@
 NQ cash-session 1m bars stand in for QQQ. Five years.
 
   cd indicators/backtest
-  python3 -I rbs/gapdown_5m_green.py [data/NQ_1m_5y.csv] [bar minutes, default 5]
+  python3 -I rbs/gapdown_5m_green.py [data/NQ_1m_5y.csv] [bar minutes, default 5 | g2 / g3 = 2 / 3 green 1m bars in a row]
 
 5-minute bars from the 1m bars (09:45-09:50, 09:50-09:55, ...). The first one with close > open is the entry (at its
 close), up to 12:00. Stop = the day's low so far, 1 tick below. Targets 1R / 1.5R / 2R, flat at 16:00, 1 point cost, one
@@ -21,25 +21,31 @@ RS = (1.0, 1.5, 2.0)
 
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'data', 'NQ_1m_5y.csv')
-    B = int(sys.argv[2]) if len(sys.argv) > 2 else 5
+    arg = sys.argv[2] if len(sys.argv) > 2 else '5'
+    G = int(arg[1:]) if arg.startswith('g') else 0; B = 0 if G else int(arg)
+    rule = f'連續 {G} 根 1 分 K 收紅' if G else f'第一根 {B} 分 K 收紅'
     one = gl.load(path); rows = []; prev = None
     for d, g in one.groupby('day', sort=True):
         o, h, l, c, m = g.open.values, g.high.values, g.low.values, g.close.values, g['min'].values
         if prev is not None:
-            for s0 in range(585, 720, B):
-                w = np.flatnonzero((m >= s0) & (m < s0 + B))
-                if len(w) < B: continue
-                k = w[-1]
-                if c[k] > o[w[0]]:
-                    stop = l[:k + 1].min() - 0.25; e = c[k]
-                    risk, rs = gl.trade(h, l, c, k, stop, len(c), [e + R * (e - stop) for R in RS])
-                    rows.append(dict(date=d, gap=100 * (o[0] / prev - 1), risk=risk, entry=s0 + B, below_open=e < o[0],
-                                     **{f'r{R:g}': r for R, r in zip(RS, rs)}, **{f'n{R:g}': r - oc.COST / risk for R, r in zip(RS, rs)}))
-                    break
+            if G:
+                green = c > o; cand = []
+                for q in np.flatnonzero((m >= 584 + G) & (m < 720)):
+                    if q >= G - 1 and m[q - G + 1] >= 585 and green[q - G + 1:q + 1].all(): cand.append((q, m[q] + 1 - B))
+            else:
+                cand = []
+                for s0 in range(585, 720, B):
+                    w = np.flatnonzero((m >= s0) & (m < s0 + B))
+                    if len(w) == B and c[w[-1]] > o[w[0]]: cand.append((w[-1], s0))
+            for k, s0 in cand[:1]:
+                stop = l[:k + 1].min() - 0.25; e = c[k]
+                risk, rs = gl.trade(h, l, c, k, stop, len(c), [e + R * (e - stop) for R in RS])
+                rows.append(dict(date=d, gap=100 * (o[0] / prev - 1), risk=risk, entry=s0 + B, below_open=e < o[0],
+                                 **{f'r{R:g}': r for R, r in zip(RS, rs)}, **{f'n{R:g}': r - oc.COST / risk for R, r in zip(RS, rs)}))
         prev = c[-1]
     t = pd.DataFrame(rows)
     yrs = list(oc.YEARS); yrs[-1] = (yrs[-1][0], yrs[-1][1], '2099-12-31')
-    print(f'{os.path.basename(path)}：09:45 後第一根 {B} 分 K 收紅，收盤買，停損當天低點。每格：勝率 / 淨 R / 筆數')
+    print(f'{os.path.basename(path)}：09:45 後{rule}，收盤買，停損當天低點。每格：勝率 / 淨 R / 筆數')
     print(f'   {"":<30}' + ''.join(f'{nm[:2] + " " + nm[3:8]:>19}' for nm, a, b in yrs) + f'{"合計":>19}{"停損中位":>9}')
     groups = (('缺口 ≤ −0.75%', t.gap <= -0.75), ('缺口 ≤ −0.5%', t.gap <= -0.5), ('缺口 ≤ −1%', t.gap <= -1.0),
               ('≤ −0.75%、進場還在開盤價下', (t.gap <= -0.75) & t.below_open), ('≤ −0.75%、進場已在開盤價上', (t.gap <= -0.75) & ~t.below_open),
