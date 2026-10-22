@@ -2,16 +2,17 @@
 // © Remi
 //@version=6
 // Remi TXF：台指期（TXF / MXF / TMF）2 分 K 回測有效的兩種做法，從 Remi Superb v3 拆出來的獨立指標
-//   1. 超強趨勢賣單（主力）：Trend Judge 差值低於 −90 點時，用階段 10 的原版賣訊（收盤 < EMA8），
+//   1. 超強趨勢賣單（主力）：Trend Judge 差值低於 −90 點時，用階段 3 的原版賣訊（收盤 < EMA8），
 //      不看 1h EMA20、離慢線距離、停損 ATR 倍數；避開美東數據 / 開收盤 / Globex 時段，趨勢 400 分以內。目標 3R
 //   2. 趨勢訊號（v3 的 TXF 做法）：(20, 0, 8, 1)、Trend Judge 門檻 30、1h EMA20 同向、停損 ≥ 1 ATR、
 //      離慢線 ≤ 3 ATR、趨勢 60–120 分、避開事件時段。買賣都做，目標 3R
 //   兩種共用一個虛擬持倉（一次一筆）。進場：訊號 K 收盤；停損：訊號 K 和前一根的最高 / 最低點；
 //   出場：停損、目標、持有 60 根、或日盤 13:45 / 夜盤 05:00 收盤（台北時間）
-// 回測（TXFR1 1 分 K 2024-01 .. 2026-09，換月前後排除，每筆成本 2 點，`backtest/rbs/txf_super_trend.py`）：
-//   只做趨勢訊號 3R：119 筆，勝率 39%，+26R（2024 −10 / 2025 +11 / 2026 +25R）
-//   只做超強趨勢賣單 3R：324 筆，勝率 36%，+56R（+10 / +2 / +43R）
-//   兩種一起 3R：437 筆，勝率 37%，+76R（+0 / +13 / +62R），每年都比只做趨勢訊號好
+// 回測（TXFR1 1 分 K 2024-01 .. 2026-09 + TradingView TXF1! 1 分 K 到 2026-10-22，每筆成本 2 點，`backtest/rbs/txf_super_grid.py`）：
+//   只做趨勢訊號 3R：128 筆，勝率 41%，+33R（2024 −10 / 2025 +11 / 2026 +32R）
+//   只做超強趨勢賣單（TJ 90、階段 3）3R：621 筆，勝率 33%，+79R（+6 / +5 / +68R），1R 54%、+24R
+//   兩種一起 3R：+99R；2026-10-22 日盤 09:55、12:03 兩筆都到 3R
+//   2026-10-22 從階段 10 改成 3：階段 10 要先反彈創 10 根新高，一路跌的日子抓不到（10/22 一筆都沒有），總 R 也比較少（+67R）
 //   1R 沒有幫助；超強趨勢的「買單」每一種都虧（所以只做賣）
 indicator("Remi TXF（2m）", shorttitle="Remi TXF", overlay=true, max_labels_count=300, max_lines_count=300)
 
@@ -19,8 +20,8 @@ indicator("Remi TXF（2m）", shorttitle="Remi TXF", overlay=true, max_labels_co
 grpA      = "做法"
 superOn   = input.bool(true, "超強趨勢賣單　TJ 低於 −", group=grpA, inline="su")
 superLv   = input.float(90, "", minval=0, step=10, group=grpA, inline="su")
-superSt   = input.int(10, "階段", minval=2, group=grpA, inline="su", tooltip="Trend Judge 差值（台指點數）低於 −這個值時，用這個階段的原版賣訊；不看 1h EMA、慢線距離、停損 ATR。回測 TJ 60–200、階段 10 / 20 的賣單 3R 幾乎都是正的；90 / 10 最好")
-trendOn   = input.bool(true, "趨勢訊號（v3 的 TXF 做法，買賣都做）", group=grpA, tooltip="(20, 0, 8, 1)、Trend Judge 門檻 30 / 強勢 60、1h EMA20 同向、停損 ≥ 1 ATR、離慢線 ≤ 3 ATR、趨勢 60–120 分。回測三年 +26R（2024 年虧 10R）")
+superSt   = input.int(3, "階段", minval=2, group=grpA, inline="su", tooltip="Trend Judge 差值（台指點數）低於 −這個值時，用這個階段的原版賣訊；不看 1h EMA、慢線距離、停損 ATR。回測（2024-01 .. 2026-10-22）TJ 90、階段 3：621 筆，3R 33%、+79R，三年都賺；階段 10 是 +67R，但一路跌、沒有反彈的日子抓不到。TJ 60 總 R 最多（階段 3 +103R）但 2024 年虧 10R")
+trendOn   = input.bool(true, "趨勢訊號（v3 的 TXF 做法，買賣都做）", group=grpA, tooltip="(20, 0, 8, 1)、Trend Judge 門檻 30 / 強勢 60、1h EMA20 同向、停損 ≥ 1 ATR、離慢線 ≤ 3 ATR、趨勢 60–120 分。回測到 2026-10-22 共 +33R（2024 年虧 10R）")
 tgtR      = input.float(3.0, "目標（R）", minval=0.5, step=0.5, group=grpA, tooltip="回測 3R；1R 沒有優勢")
 
 grpF      = "過濾"
