@@ -2,7 +2,7 @@
 NQ cash-session 1m bars stand in for QQQ. Five years.
 
   cd indicators/backtest
-  python3 -I rbs/gapdown_5m_green.py [data/NQ_1m_5y.csv] [bar minutes, default 5 | g2 / g3 = 2 / 3 green 1m bars in a row]
+  python3 -I rbs/gapdown_5m_green.py [data/NQ_1m_5y.csv] [bars: 5 = first up 5m bar (default); 2x2 = two up 2m bars in a row; g2 / g3 = 1x2 / 1x3]
 
 5-minute bars from the 1m bars (09:45-09:50, 09:50-09:55, ...). The first one with close > open is the entry (at its
 close), up to 12:00. Stop = the day's low so far, 1 tick below. Targets 1R / 1.5R / 2R, flat at 16:00, 1 point cost, one
@@ -22,21 +22,19 @@ RS = (1.0, 1.5, 2.0)
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'data', 'NQ_1m_5y.csv')
     arg = sys.argv[2] if len(sys.argv) > 2 else '5'
-    G = int(arg[1:]) if arg.startswith('g') else 0; B = 0 if G else int(arg)
-    rule = f'連續 {G} 根 1 分 K 收紅' if G else f'第一根 {B} 分 K 收紅'
+    arg = '1x' + arg[1:] if arg.startswith('g') else arg
+    B, N = (int(x) for x in arg.split('x')) if 'x' in arg else (int(arg), 1)
+    rule = f'第一根 {B} 分 K 收漲' if N == 1 else f'連續 {N} 根 {B} 分 K 收漲'
     one = gl.load(path); rows = []; prev = None
     for d, g in one.groupby('day', sort=True):
         o, h, l, c, m = g.open.values, g.high.values, g.low.values, g.close.values, g['min'].values
         if prev is not None:
-            if G:
-                green = c > o; cand = []
-                for q in np.flatnonzero((m >= 584 + G) & (m < 720)):
-                    if q >= G - 1 and m[q - G + 1] >= 585 and green[q - G + 1:q + 1].all(): cand.append((q, m[q] + 1 - B))
-            else:
-                cand = []
-                for s0 in range(585, 720, B):
-                    w = np.flatnonzero((m >= s0) & (m < s0 + B))
-                    if len(w) == B and c[w[-1]] > o[w[0]]: cand.append((w[-1], s0))
+            up, ends, starts = [], [], []
+            for s0 in range(585, 720, B):
+                w = np.flatnonzero((m >= s0) & (m < s0 + B))
+                if len(w) < B: up, ends, starts = [], [], []; continue
+                up.append(c[w[-1]] > o[w[0]]); ends.append(w[-1]); starts.append(s0)
+            cand = [(ends[q], starts[q]) for q in range(N - 1, len(up)) if all(up[q - N + 1:q + 1])]
             for k, s0 in cand[:1]:
                 stop = l[:k + 1].min() - 0.25; e = c[k]
                 risk, rs = gl.trade(h, l, c, k, stop, len(c), [e + R * (e - stop) for R in RS])
