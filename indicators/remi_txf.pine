@@ -12,6 +12,7 @@
 //   只做趨勢訊號 3R：128 筆，勝率 41%，+33R（2024 −10 / 2025 +11 / 2026 +32R）
 //   只做超強趨勢賣單（TJ 90、階段 3）3R：621 筆，勝率 33%，+79R（+6 / +5 / +68R），1R 54%、+24R
 //   兩種一起 3R：+99R；2026-10-22 日盤 09:55、12:03 兩筆都到 3R
+//   2026-10-22 加：停損後冷卻 5 根、超強賣要 5 分 K 收在 EMA20 下 → +100.5R、最大回撤 25.2 → 19.6R（`txf_tf_super.py`）
 //   2026-10-22 從階段 10 改成 3：階段 10 要先反彈創 10 根新高，一路跌的日子抓不到（10/22 一筆都沒有），總 R 也比較少（+67R）
 //   1R 沒有幫助；超強趨勢的「買單」每一種都虧（所以只做賣）
 indicator("Remi TXF（2m）", shorttitle="Remi TXF", overlay=true, max_labels_count=300, max_lines_count=300)
@@ -36,6 +37,9 @@ atrLen    = input.int(14, "ATR", minval=1, group=grpF, inline="rk")
 distU     = input.float(3.0, "離慢線最多（ATR 倍數）", minval=0, step=0.5, group=grpF)
 avoidEvt  = input.bool(true, "避開美東數據、開收盤、Globex 時段", group=grpF, tooltip="美東時間看 K 棒收盤：平日 08:28–09:00、09:58–10:15；每天 09:30–10:00、15:45–16:15、16:45–17:00、18:00–18:30（台北時間 = 美東 + 12 小時）")
 holdBars  = input.int(60, "最多持有幾根 K", minval=1, group=grpF)
+coolBars  = input.int(5, "停損後冷卻幾根 K", minval=0, group=grpF, tooltip="停損出場後這麼多根 K 內不進新單（0 = 不用）。回測（和下面的 5m EMA20 一起）：總 R +98.8 → +100.5R、最大回撤 25.2 → 19.6R、最長連停 14 → 12 次；冷卻 3–8 根都差不多，15 根以上少賺很多")
+supEmaOn  = input.bool(true, "超強賣：5 分 K 收盤要在 EMA 下", group=grpF, inline="se")
+supEmaLen = input.int(20, "", minval=1, group=grpF, inline="se", tooltip="看上一根已收完的 5 分 K：收盤要在它的 EMA20 下方才做超強趨勢賣單（趨勢訊號不受影響）。回測單獨用：總 R 不變、回撤 25 → 22R；EMA8 太嚴（少賺 30R）")
 
 grpT      = "Trend Judge"
 tjEmaLen  = input.int(1130, "EMA 長度", minval=1, group=grpT)
@@ -50,6 +54,7 @@ grpD      = "顯示"
 showLines = input.bool(true, "畫持倉的停損、目標線", group=grpD)
 showTbl   = input.bool(true, "狀態表格", group=grpD)
 supTxt    = input.string("🔻 超強賣", "超強趨勢賣記號", group=grpD, inline="t1")
+supCol    = input.color(color.new(#9C27B0, 0), "底色", group=grpD, inline="t1")
 trBuyTxt  = input.string("▲ 趨勢買", "趨勢買", group=grpD, inline="t2")
 trSellTxt = input.string("▼ 趨勢賣", "趨勢賣", group=grpD, inline="t2")
 buyCol    = input.color(color.new(#089981, 0), "買", group=grpD, inline="c")
@@ -150,7 +155,11 @@ float sellStop = math.max(high, high[1])
 bool  inWin    = trendMin >= winLo and trendMin < winHi
 bool trBuy  = trendOn and active and buySig and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and close - tjMaSlow <= distU * atrNow and not evtNow and inWin
 bool trSell = trendOn and active and sellSig and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and tjMaSlow - close <= distU * atrNow and not evtNow and inWin
-bool suSell = superOn and active and stSellSig and tjLinked and tjDiff < -superLv and not evtNow and trendMin < superCap
+f5Vals() =>
+    [close[1], ta.ema(close, supEmaLen)[1]]
+[c5, e5] = request.security(syminfo.tickerid, "5", f5Vals(), lookahead=barmerge.lookahead_on)   // 上一根已收完的 5 分 K，不重繪
+bool sup5Ok = not supEmaOn or (not na(e5) and c5 < e5)
+bool suSell = superOn and active and stSellSig and tjLinked and tjDiff < -superLv and not evtNow and trendMin < superCap and sup5Ok
 
 // ═════════════════ 虛擬持倉（一次一筆）═════════════════
 var int   vPos   = 0
@@ -164,6 +173,7 @@ var line  lnT = na
 var int   nWin  = 0
 var int   nLoss = 0
 var int   nTime = 0
+var int stopBar = na
 string exitTxt = ""
 string exitKind = vKind
 if vPos != 0 and bar_index > vBar
@@ -173,6 +183,7 @@ if vPos != 0 and bar_index > vBar
         exitTxt := hitS ? "停損" : hitT ? "到目標" : sessEnd ? "收盤出場" : "持有 " + str.tostring(holdBars) + " 根出場"
         if hitS
             nLoss += 1
+            stopBar := bar_index
         else if hitT
             nWin += 1
         else
@@ -181,7 +192,8 @@ if vPos != 0 and bar_index > vBar
     else if showLines
         line.set_x2(lnS, bar_index)
         line.set_x2(lnT, bar_index)
-bool flat   = vPos == 0 and not sessEnd
+bool coolOk = coolBars <= 0 or na(stopBar) or bar_index - stopBar >= coolBars
+bool flat   = vPos == 0 and not sessEnd and coolOk
 bool goBuy  = flat and trBuy
 bool goSell = flat and not goBuy and (trSell or suSell)
 bool goTrSell = goSell and trSell
@@ -197,7 +209,7 @@ if goBuy or goSell
     if goBuy
         label.new(bar_index, low, trBuyTxt, yloc=yloc.belowbar, style=label.style_label_up, color=buyCol, textcolor=color.white, size=size.small)
     else
-        label.new(bar_index, high, trSell ? trSellTxt : supTxt, yloc=yloc.abovebar, style=label.style_label_down, color=sellCol, textcolor=color.white, size=size.small)
+        label.new(bar_index, high, trSell ? trSellTxt : supTxt, yloc=yloc.abovebar, style=label.style_label_down, color=trSell ? sellCol : supCol, textcolor=color.white, size=size.small)
     if showLines
         lnS := line.new(bar_index, vStop, bar_index, vStop, color=stopCol)
         lnT := line.new(bar_index, vTgt, bar_index, vTgt, color=tgtCol)

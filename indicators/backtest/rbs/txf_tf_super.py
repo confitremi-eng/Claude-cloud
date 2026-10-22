@@ -6,7 +6,7 @@
 Part 1: the same rules on 2m / 3m / 5m charts: super-trend sells (Trend Judge below -90, stage S, event windows,
 trend under 400 minutes) + v3 TXF trend signals (60-120 minutes); 3R, 60 bars, one at a time, 2 points cost.
 Part 2: 2m signals (stage 3) kept only when the last completed 5-minute bar agrees: 5m close below its EMA8 / EMA20
-(sells; buys above), or the 5m EMA8 falling (rising).
+(sells; buys above), or the 5m EMA8 falling (rising); and the EMA20 filter together with a cooldown after a stop.
 Per year: 3R win rate / net R / trades; max losing streak; max drawdown.
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -70,6 +70,9 @@ def main():
     for nm, m in f.items():
         line(nm, ts.run(T[m], df2, sess))
         line(nm + '（只過濾超強賣）', ts.run(T[m | (T.kind.values == '趨勢')], df2, sess))
+    m = f['5m 收盤在 EMA20 同側'] | (T.kind.values == '趨勢')
+    for k in (3, 5, 8):
+        line(f'EMA20（只過濾超強賣）+ 冷卻 {k} 根', ts.run(T[m], df2, sess, 'cool', k))
 
 
 if __name__ == '__main__':
