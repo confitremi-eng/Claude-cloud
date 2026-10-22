@@ -14,7 +14,7 @@
 //   NQ 5m 不逆日線 SMA5（預設開）：買要在日 K SMA5 上方、賣要在下方（趨勢和 MIX）
 //   NQ 2m 停損後再進場（預設開）：停損後 5 根內 Trend Judge 同方向、收回原進場價就同方向再進一次（R L / R S），兩根 K 停損、3R
 //   一次一筆；持有 60 根 K 還沒出場就收盤平倉；NQ / ES 美東 17:00 休市前平倉；TXF、QQQ、SPY、NQ RTH 在每段交易時間最後一根平倉
-//   不開新倉：事件時段、收盤後美東 15:45–18:30（NQ / ES）、垃圾時間（美東 12:00–13:05，NQ / ES；GEX setup 只做賣）、FOMC 日、週五台灣時間週六 02:00 以後
+//   不開新倉：事件時段、收盤前後美東 15:15–18:30（NQ / ES，可調）、垃圾時間（美東 12:00–13:05，NQ / ES；GEX setup 只做賣）、FOMC 日、週五台灣時間週六 02:00 以後
 // Trend Judge 用 1 分 K 收盤推算（同回測）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
 // 出場管理（預設兩組）：每筆進「口數 × 2」，第一組 1R 先出，第二組照原停損和目標
 // NQ / TXF 2m 超強趨勢賣單（預設開）：TJ 低於 −55（TXF / MXF 2m −90、3R，2026-10-22 加入）時另用階段 10 算賣訊，不看 1h EMA / 慢線 / 停損 ATR，進場同趨勢空單
@@ -67,7 +67,7 @@ d5Near    = input.float(0.25, "NQ 5m：MIX 突破價離 SMA5 至少（%）", min
 stOn      = input.bool(true, "超強趨勢賣單（2m）　NQ：TJ 低於 −", group=grpR, inline="st")
 stTj      = input.float(55, "", minval=0, step=5, group=grpR, inline="st")
 stTjTx    = input.float(90, "TXF / MXF：TJ 低於 −", minval=0, step=10, group=grpR, inline="st2")
-stStage   = input.int(10, "階段", minval=2, group=grpR, inline="st2", tooltip="只在 NQ / MNQ 和 TXF / MXF 的 2 分 K，只做賣：Trend Judge 差值低於 −這個值（超強下跌趨勢）時，另外用較短的階段算賣訊（記號同趨勢訊號），不看 1h EMA20、離慢線距離和停損 ATR 倍數；事件時段、垃圾時間、美東 15:45–18:30、FOMC 日、週五截止後、趨勢超過 400 分照樣不做。停損在那根和前一根的高點，目標同趨勢訊號。用來抓一路跌、反彈不到 20 根新高的單邊行情（例 2026-10-22）。預設 TJ 55、階段 10（2026-10-22 從 75 改成 55，抓 10/22 那種 TJ −55～−75 的單邊跌）。回測 TJ 55（2025-10 .. 2026-10-22）：新增的賣單一年約 194 筆、1R 勝率 51%；加進 v3 2m 後 1R 56% / +79R（原本 58% / +83R）、3R +242R（原本 +222R）；前 4 年新增賣單 1R 勝率 41–54%。TJ 75：新增約 104 筆、1R 48%，加進去 1R 57% / +77R、3R 不變。最佳化的最好一格是 TJ 80、階段 12（新增 59%、v3 1R +94R）。TXF / MXF 2m（2026-10-22 加入，TJ 點數不同，預設 90）：趨勢時間用 0–400 分（不是 TXF 趨勢訊號的 60–120 分），目標 3R；回測 TXFR1 2024-01 .. 2026-09（成本 2 點）：新增賣單三年都賺（+10 / +2 / +43R，3R 勝率 36%），加進 v3 TXF 2m 後 +26R → +76R、每年都比較好；1R 沒有幫助，超強趨勢的買單每一種都虧")
+stStage   = input.int(10, "階段", minval=2, group=grpR, inline="st2", tooltip="只在 NQ / MNQ 和 TXF / MXF 的 2 分 K，只做賣：Trend Judge 差值低於 −這個值（超強下跌趨勢）時，另外用較短的階段算賣訊（記號同趨勢訊號），不看 1h EMA20、離慢線距離和停損 ATR 倍數；事件時段、垃圾時間、收盤前後（預設美東 15:15–18:30）、FOMC 日、週五截止後、趨勢超過 400 分照樣不做。停損在那根和前一根的高點，目標同趨勢訊號。用來抓一路跌、反彈不到 20 根新高的單邊行情（例 2026-10-22）。預設 TJ 55、階段 10（2026-10-22 從 75 改成 55，抓 10/22 那種 TJ −55～−75 的單邊跌）。回測 TJ 55（2025-10 .. 2026-10-22）：新增的賣單一年約 194 筆、1R 勝率 51%；加進 v3 2m 後 1R 56% / +79R（原本 58% / +83R）、3R +242R（原本 +222R）；前 4 年新增賣單 1R 勝率 41–54%。TJ 75：新增約 104 筆、1R 48%，加進去 1R 57% / +77R、3R 不變。最佳化的最好一格是 TJ 80、階段 12（新增 59%、v3 1R +94R）。TXF / MXF 2m（2026-10-22 加入，TJ 點數不同，預設 90）：趨勢時間用 0–400 分（不是 TXF 趨勢訊號的 60–120 分），目標 3R；回測 TXFR1 2024-01 .. 2026-09（成本 2 點）：新增賣單三年都賺（+10 / +2 / +43R，3R 勝率 36%），加進 v3 TXF 2m 後 +26R → +76R、每年都比較好；1R 沒有幫助，超強趨勢的買單每一種都虧")
 
 // ═════════════════ 6. 不交易的時間（趨勢訊號和 MIX 共用）═════════════════
 grpN      = "不交易的時間（趨勢訊號和 MIX 共用）"
@@ -77,7 +77,9 @@ junkH1    = input.int(12, "", minval=0, maxval=23, group=grpN, inline="junk")
 junkM1    = input.int(0, ":", minval=0, maxval=59, group=grpN, inline="junk")
 junkH2    = input.int(13, "到", minval=0, maxval=23, group=grpN, inline="junk")
 junkM2    = input.int(5, ":", minval=0, maxval=59, group=grpN, inline="junk", tooltip="這段時間（美東，看 K 棒收盤，含頭尾；預設 12:00–13:05 = 台灣 00:00–01:05）趨勢訊號和 MIX 都不做（MIX 碰到突破價區間作廢，同事件時段），持倉照常出場。只套用在 NQ / ES 24 小時盤，QQQ、SPY、NQ RTH 不套")
-pmAvoid   = input.bool(true, "收盤後避開：美東 15:45–18:30（台灣 03:45–06:30）", group=grpN, tooltip="NQ / ES：K 棒收盤在美東 15:45–18:30（台灣 03:45–06:30）不發新訊號（趨勢、MIX、再進場），持倉照常出場。v3 原本就避開其中的收盤前後、休市前、休市、Globex 開盤，這條多擋掉美東 16:15–16:45 的單。回測 NQ 2m v3 那年 +204R → +209R（一年約擋掉 23 筆，勝率 29%），前 4 年每年 0～−9R；5m 幾乎沒差（2026-10-21 Remi 決定）")
+pmAvoid   = input.bool(true, "收盤前後避開：美東", group=grpN, inline="pm")
+pmH1      = input.int(15, "", minval=0, maxval=23, group=grpN, inline="pm")
+pmM1      = input.int(15, "點　分 到 18:30", minval=0, maxval=59, group=grpN, inline="pm", tooltip="NQ / ES：K 棒收盤在美東這個時間到 18:30（台灣 = 美東 + 12 小時，預設 03:15–06:30）不發新訊號（趨勢、MIX、再進場），持倉照常出場。2026-10-23 從 15:45 提早到 15:15（`pm_start.py`）：NQ 2m v3 那年 3R +222R → +231R、前 4 年少虧，15:30–15:45 的趨勢訊號兩段都是虧的；5m 幾乎沒差。原本 15:45 開始（2026-10-21）：多擋掉美東 16:15–16:45 的單，2m +204R → +209R")
 fomcDay   = input.bool(true, "FOMC 當天整天不做", group=grpN, tooltip="FOMC 利率決議當天（美東日期，用下面的清單）趨勢訊號和 MIX 都不做，持倉照常出場。回測 NQ 2m 五年每一年都改善（+1～+11R）；5m 大約持平")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpN, tooltip="利率決議公布日（美東），逗號分開。回測更早的期間，要把那段時間的 FOMC 日期加進來；2027 年還沒加")
 friCut    = input.bool(true, "週五：台灣時間週六", group=grpN, inline="fri")
@@ -245,7 +247,7 @@ junkAt(int tc) =>
     junkOn and m >= junkH1 * 60 + junkM1 and m <= junkH2 * 60 + junkM2
 pmAt(int tc) =>
     int m = hour(tc, "America/New_York") * 60 + minute(tc, "America/New_York")
-    pmAvoid and m >= 945 and m < 1110
+    pmAvoid and m >= pmH1 * 60 + pmM1 and m < 1110
 friAt(int tc) =>
     int tw = hour(tc, "Asia/Taipei") * 60 + minute(tc, "Asia/Taipei")
     friCut and dayofweek(tc, "Asia/Taipei") == dayofweek.saturday and tw >= friCutH * 60 + friCutM
@@ -255,7 +257,7 @@ int  tNext   = tClose + tfMs
 int  etMin   = hour(tClose, "America/New_York") * 60 + minute(tClose, "America/New_York")
 int  etMinN  = hour(tNext, "America/New_York") * 60 + minute(tNext, "America/New_York")
 int  twMin   = hour(tClose, "Asia/Taipei") * 60 + minute(tClose, "Asia/Taipei")
-bool evtNow  = (avoidEvt and evtAt(tClose)) or (isCME and junkAt(tClose)) or (isCME and pmAt(tClose))     // 事件時段、垃圾時間、收盤後 15:45–18:30
+bool evtNow  = (avoidEvt and evtAt(tClose)) or (isCME and junkAt(tClose)) or (isCME and pmAt(tClose))     // 事件時段、垃圾時間、收盤前後（預設 15:15–18:30）
 bool evtNext = (avoidEvt and evtAt(tNext)) or (isCME and junkAt(tNext)) or (isCME and pmAt(tNext))
 bool haltBar = flatHalt and isCME and etMin == 1020
 bool haltNxt = flatHalt and isCME and etMinN == 1020
