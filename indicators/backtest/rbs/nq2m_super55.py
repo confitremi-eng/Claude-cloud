@@ -6,7 +6,7 @@ and skip 1h EMA20, slow line and stop size, but keep the time filters (events, F
   python3 -I rbs/nq2m_super55.py
 
 Rows: the extra signals alone (one at a time) and added to v3 2m (base + MIX, shared position). Win rate / net R / trades
-at 1R, 1.5R and 3R.
+at 1R, 1.5R and 3R, all and by side (buy / sell).
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
@@ -29,17 +29,19 @@ def main():
     print(f'   {"":<28}' + ''.join(f'{f"{R:g}R":>20}' for R in (1.0, 1.5, 3.0)))
 
     def row(lab, T, mx):
-        out = []
-        for R in (1.0, 1.5, 3.0):
-            t = oc.sim(C, T.sort_values('i'), mx, R, R); t = t[(t.date >= a) & (t.date <= b)]
-            out.append(f'{100 * (t.R > 0).mean():6.0f}% {t.net.sum():+5.0f}R {len(t):4d}筆')
-        print(f'   {lab:<28}' + ''.join(out), flush=True)
+        ts = [oc.sim(C, T.sort_values('i'), mx, R, R) for R in (1.0, 1.5, 3.0)]
+        ts = [t[(t.date >= a) & (t.date <= b)] for t in ts]
+        for side, nm_ in ((None, ''), (1, ' 買'), (-1, ' 賣')):
+            out = [f'{100 * (z.R > 0).mean():6.0f}% {z.net.sum():+5.0f}R {len(z):4d}筆' for z in (t if side is None else t[t.side == side] for t in ts)]
+            print(f'   {lab + nm_:<28}' + ''.join(out), flush=True)
 
     row('v3 2m + MIX', base, mix)
     for st in (5, 10, 20):
         x = mm.trend_signals(df, M.H, 2, st, 8); x = keep(x[x.spread > 55])
         row(f'只做 TJ>55 ({st})', x, [])
         row(f'  v3 + TJ>55 ({st})', pd.concat([base, x[~x.i.isin(base.i)]]), mix)
+        xs = x[(x.side == -1) & ~x.i.isin(base.i)]
+        row(f'  v3 + TJ>55 ({st}) 只加賣', pd.concat([base, xs]), mix)
 
 
 if __name__ == '__main__':
