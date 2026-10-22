@@ -17,7 +17,7 @@
 //   不開新倉：事件時段、收盤後美東 15:45–18:30（NQ / ES）、垃圾時間（美東 12:00–13:05，NQ / ES；GEX setup 只做賣）、FOMC 日、週五台灣時間週六 02:00 以後
 // Trend Judge 用 1 分 K 收盤推算（同回測）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
 // 出場管理（預設兩組）：每筆進「口數 × 2」，第一組 1R 先出，第二組照原停損和目標
-// NQ 2m 超強趨勢賣單（預設開）：TJ 低於 −55 時另用階段 10 算賣訊，不看 1h EMA / 慢線 / 停損 ATR，進場同趨勢空單
+// NQ / TXF 2m 超強趨勢賣單（預設開）：TJ 低於 −55（TXF / MXF 2m −90、3R，2026-10-22 加入）時另用階段 10 算賣訊，不看 1h EMA / 慢線 / 停損 ATR，進場同趨勢空單
 // 開盤高開低走（預設開，NQ RTH 1 / 2 分 K）：高開 ≥ 0.75%、第一根 2 分鐘收黑還在昨收上 → 09:32 收盤做空、1R（O S）
 // GEX setup（預設關，NQ RTH 1 分 K）：(35, 0, 8, 1) + Trend Judge 順勢 + 朝手動輸入的 QQQ flip 走，目標 3R；垃圾時間只做賣
 //   跟 v3 的單共用一個倉位（空手才進場）；回測整段歷史都用同一個 flip，所以 GEX setup 的歷史回測不準
@@ -64,9 +64,10 @@ qNqOn     = input.bool(true, "QQQ / NQ RTH：NQ 2 分 K 不反向", group=grpR, 
 nqSym     = input.symbol("CME_MINI:NQ1!", "", group=grpR, inline="qnq", tooltip="只影響 QQQ 和 NQ RTH：上一根已收完的 NQ 2 分 K（24 小時盤）Trend Judge 跟訊號反向就不做。讀不到 NQ 時不擋")
 d5On      = input.bool(true, "NQ 5m：不逆日線 SMA5（趨勢和 MIX）", group=grpR, tooltip="只在 NQ / MNQ 5 分 K：日 K（CME 交易日）SMA5 用前 5 個完整交易日的收盤（今天不算），買要在 SMA5 上方、賣要在下方；趨勢訊號看訊號 K 收盤，MIX 突破看突破價。回測 NQ 5m 五年每一年都比較好（前四年每年少虧 8–37R，v3 那年 +84R → +91R、勝率 45% → 54%）；2m 沒有一致的幫助，所以只用在 5m")
 d5Near    = input.float(0.25, "NQ 5m：MIX 突破價離 SMA5 至少（%）", minval=0, step=0.05, group=grpR, tooltip="只在 NQ / MNQ 5 分 K、MIX 突破：突破價離日 K SMA5 不到這個 %（價格的百分比）就不做，0 = 關。回測（每筆單獨算）：離 SMA5 0.25% 以內的 5m MIX 兩段期間都是最差的一組（v3 那年 2R 命中 39%、+0.25R，其他 44–55%；前 4 年 −0.28R），拿掉後 v3 那年少約 7R、前 4 年每年少虧約 8R，勝率提高")
-stOn      = input.bool(true, "NQ 2m：超強趨勢賣單　TJ 低於 −", group=grpR, inline="st")
+stOn      = input.bool(true, "超強趨勢賣單（2m）　NQ：TJ 低於 −", group=grpR, inline="st")
 stTj      = input.float(55, "", minval=0, step=5, group=grpR, inline="st")
-stStage   = input.int(10, "階段", minval=2, group=grpR, inline="st", tooltip="只在 NQ / MNQ 2 分 K，只做賣：Trend Judge 差值低於 −這個值（超強下跌趨勢）時，另外用較短的階段算賣訊（記號同趨勢訊號），不看 1h EMA20、離慢線距離和停損 ATR 倍數；事件時段、垃圾時間、美東 15:45–18:30、FOMC 日、週五截止後、趨勢超過 400 分照樣不做。停損在那根和前一根的高點，目標同趨勢訊號。用來抓一路跌、反彈不到 20 根新高的單邊行情（例 2026-10-22）。預設 TJ 55、階段 10（2026-10-22 從 75 改成 55，抓 10/22 那種 TJ −55～−75 的單邊跌）。回測 TJ 55（2025-10 .. 2026-10-22）：新增的賣單一年約 194 筆、1R 勝率 51%；加進 v3 2m 後 1R 56% / +79R（原本 58% / +83R）、3R +242R（原本 +222R）；前 4 年新增賣單 1R 勝率 41–54%。TJ 75：新增約 104 筆、1R 48%，加進去 1R 57% / +77R、3R 不變。最佳化的最好一格是 TJ 80、階段 12（新增 59%、v3 1R +94R）")
+stTjTx    = input.float(90, "TXF / MXF：TJ 低於 −", minval=0, step=10, group=grpR, inline="st2")
+stStage   = input.int(10, "階段", minval=2, group=grpR, inline="st2", tooltip="只在 NQ / MNQ 和 TXF / MXF 的 2 分 K，只做賣：Trend Judge 差值低於 −這個值（超強下跌趨勢）時，另外用較短的階段算賣訊（記號同趨勢訊號），不看 1h EMA20、離慢線距離和停損 ATR 倍數；事件時段、垃圾時間、美東 15:45–18:30、FOMC 日、週五截止後、趨勢超過 400 分照樣不做。停損在那根和前一根的高點，目標同趨勢訊號。用來抓一路跌、反彈不到 20 根新高的單邊行情（例 2026-10-22）。預設 TJ 55、階段 10（2026-10-22 從 75 改成 55，抓 10/22 那種 TJ −55～−75 的單邊跌）。回測 TJ 55（2025-10 .. 2026-10-22）：新增的賣單一年約 194 筆、1R 勝率 51%；加進 v3 2m 後 1R 56% / +79R（原本 58% / +83R）、3R +242R（原本 +222R）；前 4 年新增賣單 1R 勝率 41–54%。TJ 75：新增約 104 筆、1R 48%，加進去 1R 57% / +77R、3R 不變。最佳化的最好一格是 TJ 80、階段 12（新增 59%、v3 1R +94R）。TXF / MXF 2m（2026-10-22 加入，TJ 點數不同，預設 90）：趨勢時間用 0–400 分（不是 TXF 趨勢訊號的 60–120 分），目標 3R；回測 TXFR1 2024-01 .. 2026-09（成本 2 點）：新增賣單三年都賺（+10 / +2 / +43R，3R 勝率 36%），加進 v3 TXF 2m 後 +26R → +76R、每年都比較好；1R 沒有幫助，超強趨勢的買單每一種都虧")
 
 // ═════════════════ 6. 不交易的時間（趨勢訊號和 MIX 共用）═════════════════
 grpN      = "不交易的時間（趨勢訊號和 MIX 共用）"
@@ -345,8 +346,10 @@ float sellStop = math.max(high, high[1])
 bool trBuy  = active and useTrend and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate and not fomcSkip and (not d5Use or close > d5)
 bool trSell0 = active and useTrend and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate and not fomcSkip and (not d5Use or close < d5)
 // 超強趨勢賣單：TJ 低於 −stTj，不看 1h EMA、慢線距離、停損 ATR；時段、FOMC、週五、400 分照樣擋
-bool stUse     = stOn and isNQ and tfp == "2"
-bool superSell = stUse and active and useTrend and stSellSig and tjLinked and tjDiff < -stTj and not evtNow and inWin and not friLate and not fomcSkip
+bool stUse     = stOn and (isNQ or isTX) and tfp == "2"
+float stLv     = isTX ? stTjTx : stTj
+bool stWinOk   = isTX ? trendMin < 400 : inWin                     // TXF：0–400 分（趨勢訊號是 60–120 分）
+bool superSell = stUse and active and useTrend and stSellSig and tjLinked and tjDiff < -stLv and not evtNow and stWinOk and not friLate and not fomcSkip
 bool trSell    = trSell0 or superSell
 
 // ═════════════════ MIX 區間（只有 NQ 2、5 分 K）═════════════════
