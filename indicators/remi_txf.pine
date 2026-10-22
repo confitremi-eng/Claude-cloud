@@ -41,6 +41,10 @@ tjEmaLen  = input.int(1130, "EMA 長度", minval=1, group=grpT)
 tjFastS   = input.int(5, "快線秒數", minval=1, group=grpT, inline="tjs")
 tjSlowS   = input.int(15, "慢線秒數", minval=1, group=grpT, inline="tjs")
 
+grpL      = "快訊（任何 alert() 函數呼叫）"
+alTrend   = input.bool(true, "趨勢訊號（買、賣）", group=grpL, tooltip="「任何 alert() 函數呼叫」快訊要不要發趨勢訊號的進出場。想分開收：建兩個快訊、用下面的 alertcondition（Remi TXF 趨勢 Buy / Sell、Remi TXF 超強趨勢 Sell）")
+alSuper   = input.bool(true, "超強趨勢賣單", group=grpL)
+
 grpD      = "顯示"
 showLines = input.bool(true, "畫持倉的停損、目標線", group=grpD)
 showTbl   = input.bool(true, "狀態表格", group=grpD)
@@ -160,6 +164,7 @@ var int   nWin  = 0
 var int   nLoss = 0
 var int   nTime = 0
 string exitTxt = ""
+string exitKind = vKind
 if vPos != 0 and bar_index > vBar
     bool hitS = vPos == 1 ? low <= vStop : high >= vStop
     bool hitT = vPos == 1 ? high >= vTgt : low <= vTgt
@@ -178,7 +183,9 @@ if vPos != 0 and bar_index > vBar
 bool flat   = vPos == 0 and not sessEnd
 bool goBuy  = flat and trBuy
 bool goSell = flat and not goBuy and (trSell or suSell)
-string goKind = goBuy ? "趨勢買" : goSell ? (trSell ? "趨勢賣" : "超強趨勢賣") : ""
+bool goTrSell = goSell and trSell
+bool goSuSell = goSell and not trSell
+string goKind = goBuy ? "趨勢買" : goTrSell ? "趨勢賣" : goSuSell ? "超強趨勢賣" : ""
 if goBuy or goSell
     vPos   := goBuy ? 1 : -1
     vEntry := close
@@ -197,12 +204,14 @@ if goBuy or goSell
 // ═════════════════ 快訊 ═════════════════
 fmtP(float x) => str.tostring(x, format.mintick)
 string tNow = str.format_time(tClose, "MM/dd HH:mm", "Asia/Taipei") + " 台北"
-if goBuy or goSell
+bool alNow = (goBuy or goTrSell) ? alTrend : goSuSell ? alSuper : false
+if alNow
     alert("Remi TXF " + syminfo.ticker + " " + goKind + "：" + tNow + "，進 " + fmtP(vEntry) + "，停損 " + fmtP(vStop) + "（" + str.tostring(math.abs(vEntry - vStop), "#.##") + " 點），目標 " + str.tostring(tgtR) + "R " + fmtP(vTgt) + "，TJ " + str.tostring(tjDiff, "#") + "、趨勢 " + str.tostring(trendMin, "#") + " 分", alert.freq_once_per_bar_close)
-if exitTxt != ""
+if exitTxt != "" and (exitKind == "超強趨勢賣" ? alSuper : alTrend)
     alert("Remi TXF " + syminfo.ticker + " 出場：" + exitTxt + "（" + tNow + "）", alert.freq_once_per_bar_close)
-alertcondition(goBuy, "Remi TXF Buy", "Remi TXF：{{ticker}} 趨勢買，收盤 {{close}}")
-alertcondition(goSell, "Remi TXF Sell", "Remi TXF：{{ticker}} 賣（趨勢或超強趨勢），收盤 {{close}}")
+alertcondition(goBuy, "Remi TXF 趨勢 Buy", "Remi TXF：{{ticker}} 趨勢買，收盤 {{close}}（停損兩根低點，3R）")
+alertcondition(goTrSell, "Remi TXF 趨勢 Sell", "Remi TXF：{{ticker}} 趨勢賣，收盤 {{close}}（停損兩根高點，3R）")
+alertcondition(goSuSell, "Remi TXF 超強趨勢 Sell", "Remi TXF：{{ticker}} 超強趨勢賣，收盤 {{close}}（停損兩根高點，3R）")
 
 plot(goBuy or goSell ? vEntry : na, "進場", display=display.data_window)
 plot(goBuy or goSell ? vStop : na, "停損", display=display.data_window)
