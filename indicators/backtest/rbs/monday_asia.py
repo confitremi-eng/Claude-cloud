@@ -42,7 +42,7 @@ def main():
         print(f'   {"":<26}' + ''.join(f'{nm[:2] + " " + nm[3:8]:>15}' for nm, a, b in yrs) + f'{"合計":>15}{"少掉":>6}')
         for RR in (1.0, R):
             n0 = None
-            for lab, cut in (('v3 現在', None), ('週一台北 06–15 不做', mon), ('週一台北 06–09 不做', (tm >= 360) & (tm < 540) & (tdow == 0))):
+            for lab, cut in (('v3 現在', None), ('週一台北 06–09 不做', (tm >= 360) & (tm < 540) & (tdow == 0)), ('週一台北 06–12 不做', (tm >= 360) & (tm < 720) & (tdow == 0)), ('週一台北 06–14 不做', (tm >= 360) & (tm < 840) & (tdow == 0)), ('週一台北 06–15 不做', mon)):
                 T = base if cut is None else base[~cut[base.i.values]]
                 mix = mix0 if cut is None else [x for x in mix0 if not cut[x[0]]]
                 t = oc.sim(C, T.sort_values('i'), mix, RR, RR)
