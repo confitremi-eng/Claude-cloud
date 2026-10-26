@@ -3,7 +3,7 @@
 // 狀態：大致完成（最後調整 2026-10-21），之後只做小修。說明見 indicators/remi_superb.md
 // 各商品的做法（回測數字是 2025-10 .. 2026-10 這一年）
 //   NQ / MNQ 2 分 K：趨勢訊號（趨勢 0–400 分）+ MIX 區間突破，目標 3R            每年 +210R，回撤 17R
-//     QQQ / NQ RTH 1m 趨勢買單離 5 秒快線 ≤ 1.5 ATR（預設開，2026-10-26，賣單不限）
+//     QQQ / NQ RTH 1m 趨勢買單離 5 秒快線 ≤ 1.0 ATR（預設開，2026-10-26 加、10-27 從 1.5 改 1.0，賣單不限）
 //     QQQ / NQ RTH 1m 超強趨勢買單（預設開，2026-10-26）：TJ 超過 120（QQQ 3）時另用階段 10 算買訊，只做買、3R
 //     NQ / TXF 2m 超強趨勢賣單（預設開）：TJ 低於 −55（TXF / MXF 2m −90、3R，2026-10-22 加入）時另用階段 10 算賣訊，不看 1h EMA / 慢線 / 停損 ATR（2026-10-22）
 //   NQ / MNQ 3 分 K：趨勢訊號（趨勢 90–120 分），目標 1R                         勝率 74%，每年 +20R，回撤 2R
@@ -79,7 +79,7 @@ sbOn      = input.bool(true, "QQQ / NQ RTH 1m：超強趨勢買單　TJ 超過",
 sbTj      = input.float(120, "", minval=0, step=10, group=grpR, inline="sb")
 sbStage   = input.int(10, "階段", minval=2, group=grpR, inline="sb", tooltip="只在 QQQ 和 NQ RTH（代替 QQQ）的 1 分 K，只做買：Trend Judge 差值超過這個值（NQ RTH 點數；QQQ 圖自動除以 40，預設 120 ≈ QQQ 3.0）時，另外用這個階段的原版買訊（收盤站回參考高點、在 EMA8 上），不看 1h EMA20、離慢線距離、NQ 2m 方向和停損 ATR 倍數；事件時段、FOMC 日、週五截止後照樣不做。停損在那根和前一根的低點，目標同 QQQ 1m（3R），記號同趨勢訊號。用來抓一路漲、回檔不到 35 根新低的單邊行情（例 2026-09-21）。回測（`rth_super.py`，五年）：QQQ 1m 3R v3 那年 +68.7R → +94.3R、五年 +75.1R → +94.9R，勝率 36% 不變，一年多約 50 筆；1R / 2R 也變好。賣單版本沒有優勢，所以只做買（2026-10-26 Remi 決定）")
 fdOn      = input.bool(true, "QQQ / NQ RTH 1m：趨勢買單離快線最多（ATR）", group=grpR, inline="fd")
-fdMax     = input.float(1.5, "", minval=0, step=0.25, group=grpR, inline="fd", tooltip="只在 QQQ 和 NQ RTH 的 1 分 K、只限趨勢買單：收盤離 5 秒快線（Trend Judge 的快線）超過這麼多 ATR 就不做（追太高）。賣單不受影響（離遠的順勢賣單反而好），超強趨勢買單也不受影響。回測（`rth_fast_dist.py`，五年，3R）：前 4 年每年都變好（+1～+10R），v3 那年差不多（+68.7 → +67.5R），五年 +75.1 → +98.5R；1R 五年 −30.4 → −13.9R。一年少約 12 筆（2026-10-26 Remi 決定）")
+fdMax     = input.float(1.0, "", minval=0, step=0.25, group=grpR, inline="fd", tooltip="只在 QQQ 和 NQ RTH 的 1 分 K、只限趨勢買單：收盤離 5 秒快線（Trend Judge 的快線）超過這麼多 ATR 就不做（追太高）。賣單不受影響（離遠的順勢賣單反而好），超強趨勢買單也不受影響。回測（`rth_fast_dist.py`，五年）：預設 1.0（2026-10-27 從 1.5 改）：3R v3 那年 +68.7 → +73.6R、五年 +75.1 → +98.2R；1R v3 那年 +16.5 → +18.3R、五年 −30.4 → −7.2R，一年少約 25 筆。0.75–1.25 是平台；1.5 時 v3 那年 +67.5R")
 
 // ═════════════════ 5. 不交易的時間（趨勢訊號和 MIX 共用）═════════════════
 grpN      = "不交易的時間（趨勢訊號和 MIX 共用）"
