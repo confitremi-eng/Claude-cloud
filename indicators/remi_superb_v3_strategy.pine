@@ -567,7 +567,7 @@ if goLong
     float tgtL = close + tgtR * (close - buyStop)
     strategy.cancel("M L")
     strategy.cancel("M S")
-    strategy.entry("T L", strategy.long, qty=qtyIn, comment="趨勢買", alert_message=entryMsg("buy", "趨勢", close, buyStop, tgtL))
+    strategy.entry("T L", strategy.long, qty=qtyIn, comment=trBuy0 ? "趨勢買" : "超強趨勢買", alert_message=entryMsg("buy", trBuy0 ? "趨勢" : "超強趨勢", close, buyStop, tgtL))
     placeExits("T L", buyStop, close, tgtL)
     posStop := buyStop
     posTgt  := tgtL
@@ -575,7 +575,7 @@ if goShort
     float tgtS = close - tgtR * (sellStop - close)
     strategy.cancel("M L")
     strategy.cancel("M S")
-    strategy.entry("T S", strategy.short, qty=qtyIn, comment="趨勢賣", alert_message=entryMsg("sell", "趨勢", close, sellStop, tgtS))
+    strategy.entry("T S", strategy.short, qty=qtyIn, comment=trSell0 ? "趨勢賣" : "超強趨勢賣", alert_message=entryMsg("sell", trSell0 ? "趨勢" : "超強趨勢", close, sellStop, tgtS))
     placeExits("T S", sellStop, close, tgtS)
     posStop := sellStop
     posTgt  := tgtS

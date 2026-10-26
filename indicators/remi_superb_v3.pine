@@ -118,6 +118,8 @@ markSize  = input.string("大", "符號大小", options=["小", "中", "大"], g
 markLines = input.int(0, "離 K 棒（半行）", minval=0, maxval=12, group=grpA, inline="ms", tooltip="符號離 K 棒的距離，每加 1 往外移半個符號高度")
 tBuyTxt   = input.string("⏫", "趨勢訊號　買", group=grpA, inline="tb")
 tSellTxt  = input.string("⏬", "賣", group=grpA, inline="tb")
+sTBuyTxt  = input.string("🚀", "超強趨勢　買", group=grpA, inline="stb")
+sTSellTxt = input.string("🔻", "賣", group=grpA, inline="stb", tooltip="超強趨勢單（QQQ / NQ RTH 1m 超強買、NQ / TXF 2m 超強賣）的記號；一般趨勢訊號同時成立時用一般記號")
 mBuyTxt   = input.string("🔼", "MIX 突破　買", group=grpA, inline="mb")
 mSellTxt  = input.string("🔽", "賣", group=grpA, inline="mb")
 txtCol    = input.color(#FFB300, "文字顏色", group=grpA, tooltip="符號填一般文字時的顏色；Emoji 用它自己的顏色")
@@ -624,9 +626,9 @@ if goMixBuy
 if goMixSell
     drawSellMark(mSellTxt)
 if goTrBuy or goReBuy
-    drawBuyMark(tBuyTxt)
+    drawBuyMark(goTrBuy and not trBuy0 ? sTBuyTxt : tBuyTxt)
 if goTrSell or goReSell
-    drawSellMark(tSellTxt)
+    drawSellMark(goTrSell and not trSell0 ? sTSellTxt : tSellTxt)
 // GEX setup 的記號：沒有底色，緊貼在那根 K 的低點下方（買）/ 高點上方（賣），不會跟 v3 的記號混在一起
 if gsGoBuy
     label.new(bar_index, low, gsBuyTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_up, color=color.new(color.white, 100), textcolor=gexCol, size=gsSz)
