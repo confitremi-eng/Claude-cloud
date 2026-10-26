@@ -26,6 +26,7 @@
 // GEX setup（預設關，NQ RTH 1 分 K）：(35, 0, 8, 1) + Trend Judge 順勢 + 朝 flip 走，目標 3R，記號 🧲
 //   自己一次一筆、另外兩個快訊，不影響 v3 的訊號
 // 收盤前後避開：美東 15:15–18:30（台灣夏令 03:15–06:30、冬令 04:15–07:30，可調；2026-10-23 從 15:45 提早）不進場（NQ / ES，預設開）
+// 大低開買 setup（預設開，NQ RTH 1 分 K，2026-10-27）：低開 ≥ 1.1%、09:45 後第一根 5 分 K 收漲收盤買、停損當天低點、1R，記號 🌱
 // 開盤高開低走 setup（預設開，NQ RTH 1 / 2 分 K）：高開 ≥ 0.75%、第一根 2 分鐘收黑還在昨收上 → 09:32 收盤做空、1R，記號 🌅
 // 週一台灣 06:00–15:00（週日 Globex 開盤後的亞洲盤）NQ / ES 24 小時盤不進場（預設開，2026-10-26）
 // 垃圾時間：美東 12:00–13:05（台灣夏令 00:00–01:05、冬令 01:00–02:05）NQ / ES 24 小時盤不發訊號；QQQ、SPY、NQ RTH 照做，GEX setup 只做賣（可改、可關）
@@ -56,6 +57,10 @@ gsSellTxt = input.string("🧲", "賣", group=grpX, inline="gm")
 gsSize    = input.string("小", "大小", options=["小", "中", "大"], group=grpX, inline="gm", tooltip="沒有底色，緊貼在訊號 K 的低點下方（買）/ 高點上方（賣）。可以換成任何 Emoji 或文字（文字用 flip 線的顏色）")
 
 // ═════════════════ 3b. 開盤高開低走（NQ RTH）═════════════════
+grpD2     = "大低開買 setup（NQ RTH 1 分 K）"
+gdOn      = input.bool(true, "大低開買：做多（目標 1R）", group=grpD2, tooltip="只在 NQ RTH（圖表只開美股盤，代替 QQQ）1 分 K：09:30 開盤比前一天 16:00 收盤低開 ≥ 下面的 %，09:45–12:00 之間第一根收漲的 5 分 K（收盤 > 開盤）收盤買；一天只看第一根。停損在當天美股盤到進場為止的最低點 − 1 tick，目標 1R，16:00 收盤平倉。同獨立指標「Remi 大低開買」。回測（`gapdown_gap_sweep.py`，五年）：低開 ≥ 1.1% 73 筆，1R 勝率 66%、+20.1R，每年都賺；停損中位約 64 點（autotrade 停損上限 120 點，超過會被擋）")
+gdGap     = input.float(1.1, "最小低開（%）", minval=0, step=0.05, group=grpD2, inline="gd")
+gdR       = input.float(1.0, "目標（R）", minval=0.1, step=0.5, group=grpD2, inline="gd")
 grpU      = "開盤高開低走 setup（NQ RTH）"
 goOn      = input.bool(true, "開盤高開低走：做空（目標 1R）", group=grpU, tooltip="只在 NQ RTH（圖表只開美股盤，代替 QQQ），1 或 2 分 K：美股 09:30 開盤比前一天 16:00 收盤高開 ≥ 下面的 %，第一根 2 分鐘 K（09:30–09:32；1 分 K 圖就是前兩根合起來）收黑、但還在昨收之上，就在 09:32 收盤做空，停損第一根 2 分鐘的最高點上 1 跳，目標 1R，沒碰到就美東 16:00 出場；自己一次一筆，不影響 v3 的訊號。回測（NQ 美股盤代替 QQQ，五年，缺口 ≥ 0.75%）：94 筆、1R 勝率 65%、每筆 +0.27R，5 年裡 4 年賺。低開高走做多沒有優勢，所以不做")
 goGap     = input.float(0.75, "最小高開（%）", minval=0, step=0.05, group=grpU, inline="go")
@@ -445,6 +450,25 @@ else if barEtMin == 571
 bool  goActive = goOn and isNqR and (tfp == "1" or tfp == "2")
 float goGapP   = na(goPrevC) or na(goO) ? na : (goO - goPrevC) / goPrevC * 100
 bool  goSig    = goActive and etMin == 572 and barstate.isconfirmed and not na(goGapP) and goGapP >= goGap and close < goO and close > goPrevC
+// 大低開買（NQ RTH 1m）：低開 ≥ gdGap%，09:45 後第一根收漲的 5 分 K 收盤買，停損當天低點
+var float gdLow  = na
+var float gdBO   = na
+var bool  gdDone = true
+if barEtMin == 570
+    gdLow  := low
+    gdDone := false
+else if barEtMin > 570 and barEtMin < 960 and not na(gdLow)
+    gdLow := math.min(gdLow, low)
+bool gdIn = barEtMin >= 585 and barEtMin < 720
+if gdIn and (barEtMin - 585) % 5 == 0
+    gdBO := open
+bool gdEnd5 = gdIn and (barEtMin + 1 - 585) % 5 == 0
+bool gdUp   = gdOn and isNqR and tfp == "1" and gdEnd5 and not gdDone and not na(gdBO) and close > gdBO and barstate.isconfirmed
+bool gdSig  = gdUp and not na(goGapP) and goGapP <= -gdGap
+if gdUp
+    gdDone := true
+float gdStp = gdLow - syminfo.mintick
+float gdTg  = close + gdR * (close - gdStp)
 var int   goPos  = 0
 var float goStop = na
 var float goTgt  = na
@@ -634,11 +658,16 @@ if gsGoBuy
     label.new(bar_index, low, gsBuyTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_up, color=color.new(color.white, 100), textcolor=gexCol, size=gsSz)
 if gsGoSell
     label.new(bar_index, high, gsSellTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color.new(color.white, 100), textcolor=gexCol, size=gsSz)
+if gdSig
+    label.new(bar_index, low, "🌱", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_up, color=color.new(color.white, 100), textcolor=gexCol, size=gsSz)
 if goGo
     label.new(bar_index, high, goTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color.new(color.white, 100), textcolor=gexCol, size=gsSz)
 plot(showPos and goPos != 0 ? goStop : na, "高開低走 停損", color=color.new(stopCol, 40), style=plot.style_linebr)
 plot(showPos and goPos != 0 ? goTgt : na, "高開低走 目標", color=color.new(tgtCol, 40), style=plot.style_linebr)
 plot(goGo ? close : na, "高開低走 進場", display=display.data_window)
+plot(gdSig ? close : na, "大低開買 進場", display=display.data_window)
+plot(gdSig ? gdStp : na, "大低開買 停損價", display=display.data_window)
+plot(gdSig ? gdTg : na, "大低開買 目標價", display=display.data_window)
 plot(goGo ? goStop : na, "高開低走 停損價", display=display.data_window)
 plot(goGo ? goTgt : na, "高開低走 目標價", display=display.data_window)
 plot(showPos and gsPos != 0 ? gsStop : na, "GEX 持倉停損", color=color.new(stopCol, 40), style=plot.style_linebr)
@@ -804,4 +833,5 @@ alertcondition(tradeSell, "Remi Superb v3 Sell", '{{ticker}} Remi Superb v3 Sell
 alertcondition(gsGoBuy, "Remi Superb v3 GEX Buy", '{{ticker}} Remi Superb v3 GEX Buy｜進場 {{plot("GEX 進場")}}｜停損 {{plot("GEX 停損")}}｜目標 {{plot("GEX 目標")}}')
 alertcondition(gsGoSell, "Remi Superb v3 GEX Sell", '{{ticker}} Remi Superb v3 GEX Sell｜進場 {{plot("GEX 進場")}}｜停損 {{plot("GEX 停損")}}｜目標 {{plot("GEX 目標")}}')
 // 開盤高開低走（NQ RTH）：觸發選「每根 K 線一次」，09:32 那根收盤時通知
+alertcondition(gdSig, "Remi Superb v3 大低開買 Buy", '{{ticker}} Remi Superb v3 大低開買 Buy｜進場 {{plot("大低開買 進場")}}，停損 {{plot("大低開買 停損價")}}，目標 {{plot("大低開買 目標價")}}')
 alertcondition(goGo, "Remi Superb v3 開盤高開低走 Sell", '{{ticker}} Remi Superb v3 開盤高開低走 Sell｜進場 {{plot("高開低走 進場")}}｜停損 {{plot("高開低走 停損價")}}｜目標 {{plot("高開低走 目標價")}}')
