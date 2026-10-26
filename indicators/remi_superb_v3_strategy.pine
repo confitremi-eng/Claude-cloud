@@ -17,6 +17,7 @@
 //   不開新倉：事件時段、週一台灣 06:00–15:00（NQ / ES）、收盤前後美東 15:15–18:30（NQ / ES，可調）、垃圾時間（美東 12:00–13:05，NQ / ES；GEX setup 只做賣）、FOMC 日、週五台灣時間週六 02:00 以後
 // Trend Judge 用 1 分 K 收盤推算（同回測）；沒有 1 分資料的舊 K 棒自動改用圖表 K 棒推算
 // 出場管理（預設兩組）：每筆進「口數 × 2」，第一組 1R 先出，第二組照原停損和目標
+// QQQ / NQ RTH 1m 超強趨勢買單（預設開，2026-10-26）：TJ 超過 120（QQQ 3）時另用階段 10 算買訊，只做買、3R
 // NQ / TXF 2m 超強趨勢賣單（預設開）：TJ 低於 −55（TXF / MXF 2m −90、3R，2026-10-22 加入）時另用階段 10 算賣訊，不看 1h EMA / 慢線 / 停損 ATR，進場同趨勢空單
 // 開盤高開低走（預設開，NQ RTH 1 / 2 分 K）：高開 ≥ 0.75%、第一根 2 分鐘收黑還在昨收上 → 09:32 收盤做空、1R（O S）
 // GEX setup（預設關，NQ RTH 1 分 K）：(35, 0, 8, 1) + Trend Judge 順勢 + 朝手動輸入的 QQQ flip 走，目標 3R；垃圾時間只做賣
@@ -68,6 +69,9 @@ stOn      = input.bool(true, "超強趨勢賣單（2m）　NQ：TJ 低於 −", 
 stTj      = input.float(55, "", minval=0, step=5, group=grpR, inline="st")
 stTjTx    = input.float(90, "TXF / MXF：TJ 低於 −", minval=0, step=10, group=grpR, inline="st2")
 stStage   = input.int(10, "階段", minval=2, group=grpR, inline="st2", tooltip="只在 NQ / MNQ 和 TXF / MXF 的 2 分 K，只做賣：Trend Judge 差值低於 −這個值（超強下跌趨勢）時，另外用較短的階段算賣訊（記號同趨勢訊號），不看 1h EMA20、離慢線距離和停損 ATR 倍數；事件時段、垃圾時間、收盤前後（預設美東 15:15–18:30）、FOMC 日、週五截止後、趨勢超過 400 分照樣不做。停損在那根和前一根的高點，目標同趨勢訊號。用來抓一路跌、反彈不到 20 根新高的單邊行情（例 2026-10-22）。預設 TJ 55、階段 10（2026-10-22 從 75 改成 55，抓 10/22 那種 TJ −55～−75 的單邊跌）。回測 TJ 55（2025-10 .. 2026-10-22）：新增的賣單一年約 194 筆、1R 勝率 51%；加進 v3 2m 後 1R 56% / +79R（原本 58% / +83R）、3R +242R（原本 +222R）；前 4 年新增賣單 1R 勝率 41–54%。TJ 75：新增約 104 筆、1R 48%，加進去 1R 57% / +77R、3R 不變。最佳化的最好一格是 TJ 80、階段 12（新增 59%、v3 1R +94R）。TXF / MXF 2m（2026-10-22 加入，TJ 點數不同，預設 90）：趨勢時間用 0–400 分（不是 TXF 趨勢訊號的 60–120 分），目標 3R；回測 TXFR1 2024-01 .. 2026-09（成本 2 點）：新增賣單三年都賺（+10 / +2 / +43R，3R 勝率 36%），加進 v3 TXF 2m 後 +26R → +76R、每年都比較好；1R 沒有幫助，超強趨勢的買單每一種都虧")
+sbOn      = input.bool(true, "QQQ / NQ RTH 1m：超強趨勢買單　TJ 超過", group=grpR, inline="sb")
+sbTj      = input.float(120, "", minval=0, step=10, group=grpR, inline="sb")
+sbStage   = input.int(10, "階段", minval=2, group=grpR, inline="sb", tooltip="只在 QQQ 和 NQ RTH（代替 QQQ）的 1 分 K，只做買：Trend Judge 差值超過這個值（NQ RTH 點數；QQQ 圖自動除以 40，預設 120 ≈ QQQ 3.0）時，另外用這個階段的原版買訊（收盤站回參考高點、在 EMA8 上），不看 1h EMA20、離慢線距離、NQ 2m 方向和停損 ATR 倍數；事件時段、FOMC 日、週五截止後照樣不做。停損在那根和前一根的低點，目標同 QQQ 1m（3R），記號同趨勢訊號。用來抓一路漲、回檔不到 35 根新低的單邊行情（例 2026-09-21）。回測（`rth_super.py`，五年）：QQQ 1m 3R v3 那年 +68.7R → +94.3R、五年 +75.1R → +94.9R，勝率 36% 不變，一年多約 50 筆；1R / 2R 也變好。賣單版本沒有優勢，所以只做買（2026-10-26 Remi 決定）")
 
 // ═════════════════ 6. 不交易的時間（趨勢訊號和 MIX 共用）═════════════════
 grpN      = "不交易的時間（趨勢訊號和 MIX 共用）"
@@ -200,6 +204,17 @@ else if stNewHigh
     stRefLow := low
     stArm    := true
 bool stSellSig = stTrig and close < sigEma
+// QQQ / NQ RTH 1m 超強趨勢買單：用較短的階段另外算買訊（只做買）
+bool sbNewLow = low < ta.lowest(low, sbStage)[1]
+var float sbRefHigh = na
+var bool  sbArm     = false
+bool sbTrig = sbArm and close > sbRefHigh
+if sbTrig
+    sbArm := false
+else if sbNewLow
+    sbRefHigh := high
+    sbArm     := true
+bool sbBuySig = sbTrig and close > sigEma
 
 // ═════════════════ Trend Judge（1 分 K 推算）═════════════════
 float tfSec    = timeframe.in_seconds()
@@ -350,7 +365,12 @@ farD5(float px) =>
     not d5Use or d5Near <= 0 or math.abs(px - d5) / px * 100 >= d5Near
 float buyStop  = math.min(low, low[1])
 float sellStop = math.max(high, high[1])
-bool trBuy  = active and useTrend and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate and not fomcSkip and (not d5Use or close > d5)
+bool trBuy0 = active and useTrend and buySig and tjLinked and tjDirI >= 1 and not na(h1Ema) and h1Close > h1Ema and not na(atrPrev) and close - buyStop >= riskMult * atrPrev and not na(tjMaSlow) and close - tjMaSlow <= distU * atrNow and not evtNow and inWin and nqBuyOk and not friLate and not fomcSkip and (not d5Use or close > d5)
+// QQQ / NQ RTH 1m 超強趨勢買單：TJ 超過 sbTj（QQQ 圖除以 40），不看 1h EMA、慢線、NQ 2m、停損 ATR；時段、FOMC、週五照樣擋
+bool sbUse    = sbOn and (isQQ or isNqR) and tfp == "1"
+float sbLv    = isQQ ? sbTj / 40.0 : sbTj
+bool superBuy = sbUse and active and useTrend and sbBuySig and tjLinked and tjDiff > sbLv and not evtNow and not friLate and not fomcSkip
+bool trBuy    = trBuy0 or superBuy
 bool trSell0 = active and useTrend and sellSig and tjLinked and tjDirI <= -1 and not na(h1Ema) and h1Close < h1Ema and not na(atrPrev) and sellStop - close >= riskMult * atrPrev and not na(tjMaSlow) and tjMaSlow - close <= distU * atrNow and not evtNow and inWin and nqSellOk and not friLate and not fomcSkip and (not d5Use or close < d5)
 // 超強趨勢賣單：TJ 低於 −stTj，不看 1h EMA、慢線距離、停損 ATR；時段、FOMC、週五、400 分照樣擋
 bool stUse     = stOn and (isNQ or isTX) and tfp == "2"
