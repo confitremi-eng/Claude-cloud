@@ -9,6 +9,7 @@ events, FOMC, junk time ET 12:00-13:05, ET 15:15-18:30, Monday Taipei 06-15; the
 here) + MIX (not ET 16-20, same time filters); 3R / 2R. RTH 1m: oos_check.nq_rth (35, 0, 8, 1), Trend Judge 20 / 40,
 slow line <= 7 ATR, NQ 2m not opposite, 3R, flat at the 16:00 close. Each chart trades on its own; autotrade takes a
 trade only when flat (first come owns the position; same-minute ties: 2m, 5m, 1m). 2 MNQ, 1 point cost.
+Also: during the US cash session (ET 09:30-16:00) only RTH 1m, 2m / 5m only outside it.
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
@@ -73,9 +74,14 @@ def main():
     print(f'NQ，MNQ 固定 2 口，每筆扣 1 點，{years:.2f} 年')
     for lab, t in (('只做 2m', t2), ('只做 5m', t5), ('只做 RTH 1m', t1)):
         print(f'  {lab:<24}' + cb.line(t, years, split))
-    for lab, fr in (('2m + 5m（現在）', [t2, t5]), ('2m + 5m + RTH 1m', [t2, t5, t1]), ('2m + RTH 1m', [t2, t1])):
+    def outside_rth(t):
+        ny = pd.DatetimeIndex(t.et).tz_convert('America/New_York'); m = ny.hour * 60 + ny.minute
+        return t[~((ny.weekday < 5) & (m >= 570) & (m < 960))]
+    t2o, t5o = outside_rth(t2), outside_rth(t5)
+    for lab, fr in (('2m + 5m（現在）', [t2, t5]), ('2m + 5m + RTH 1m', [t2, t5, t1]), ('2m + RTH 1m', [t2, t1]),
+                    ('盤中只做 RTH 1m（2m/5m 只做盤外）', [t2o, t5o, t1]), ('盤中只做 RTH 1m（2m 只做盤外，沒有 5m）', [t2o, t1])):
         both, lost = combine3(fr)
-        print(f'  {lab:<24}' + cb.line(both, years, split))
+        print(f'  {lab:<34}' + cb.line(both, years, split))
         for tf in sorted(both.tf.unique()):
             x = both[both.tf == tf]; y = lost[lost.tf == tf]
             print(f'      {tf} 分：做了 {len(x) / years:.0f} 筆/年 {x.pts.sum() / years:+.0f} 點；被占住沒做 {len(y) / years:.0f} 筆/年（自己 {y.pts.sum() / years:+.0f} 點）')
