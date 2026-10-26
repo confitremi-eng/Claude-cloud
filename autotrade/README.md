@@ -15,7 +15,8 @@ TradingView 策略快訊（webhook）
   - 不用 parentId 綁在進場單上（同一張母單的子單 IBKR 會當成同一組 OCA）：進場成交後才掛出場單，中間沒有保護的時間約不到 1 秒。進場 5 秒內沒全部成交就取消剩下的，照已成交的口數掛。
 - **出場快訊**：取消自動下單的掛單，剩下的部位用市價平掉。如果 IBKR 上已經被停損或目標出掉，就什麼都不做。
 - **一次一筆**：IBKR 上已經有 MNQ 部位或自動下單的掛單時，不會再進場。
-- **2 分、5 分兩張圖共用一個倉位**：快訊帶 `tf`（圖表週期）。誰先進場倉位就歸誰，持倉期間另一張圖的進場和出場都不理（記錄成 reject / ignore）。倉位歸屬存在 `state.json`，程式重開也接得回來。舊格式沒有 `tf` 的快訊當成 2 分。只收 `allowed_tfs`（預設 2、5）。
+- **NQ 2 分、5 分（24 小時盤）和 NQ RTH 1 分（QQQ 做法）三張圖共用一個倉位**：快訊帶 `tf`（圖表週期）。誰先進場倉位就歸誰，持倉期間另一張圖的進場和出場都不理（記錄成 reject / ignore）。倉位歸屬存在 `state.json`，程式重開也接得回來。舊格式沒有 `tf` 的快訊當成 2 分。只收 `allowed_tfs`（預設 1、2、5）。
+- **RTH 1 分 = QQQ 1m 的策略用 MNQ 下單**（2026-10-26）：在 NQ1! / MNQ1! 1 分 K 把圖表時段切成 RTH（只開美股盤），加策略版（會自動用「NQ RTH（代替 QQQ）」做法），快訊價格是 NQ 價。不要在 RTH 圖用 2 分 K（tf 也是 "2"，會被當成 24 小時盤的 2 分）。回測（`indicators/backtest/rbs/combo_rth1m.py`，v3 那年、2 口）：2m + 5m +5873 點 / 年、回撤 553 點 → 2m + 5m + RTH 1m +7682 點、回撤 640 點；2m + RTH 1m +7670 點、回撤 533 點。
 - 合約月份跟 TradingView 圖上 NQ1! 當下對應的合約相同（快訊裡的 `contract`）。快訊沒給月份時，用離到期還有 8 天以上的近月合約。
 
 ## 安全網
@@ -32,7 +33,7 @@ TradingView 的快訊不保證每次都送到。所以下面這些由程式自�
 | `max_stop_points` | 120 | 停損距離超過 120 點不進場（擋掉錯誤的訊息） |
 | `max_trades_per_day` | 20 | 每個交易日最多幾筆 |
 | `max_daily_loss_usd` | 600 | 當日損益（IBKR 回報）到 −600 美元：平倉，停到下一個交易日（美東 18:00） |
-| `max_hold_minutes` | 2 分 125、5 分 305 | 依倉位是哪張圖的單：持有超過就平倉（v3 是 60 根 K） |
+| `max_hold_minutes` | 1 分 65、2 分 125、5 分 305 | 依倉位是哪張圖的單：持有超過就平倉（v3 是 60 根 K） |
 | `flat_time_et` / `reopen_time_et` | 16:58 / 18:00 | 美東 16:58–18:00 不進場，有部位就平倉（17:00 休市） |
 | `tradingview_ips_only` | false | 打開後只收 TradingView 官方 IP 送來的快訊 |
 
@@ -107,6 +108,13 @@ ssh -i ~/.ssh/remi_vultr root@64.176.198.47
 ```bash
 rsync -a -e "ssh -i ~/.ssh/remi_vultr" --exclude logs --exclude __pycache__ --exclude config.json ./ root@64.176.198.47:/home/trader/autotrade/ && ssh -i ~/.ssh/remi_vultr root@64.176.198.47 'chown -R trader:trader /home/trader/autotrade && systemctl restart autotrade'
 ```
+
+自動重新登入（2026-10-26 加）：
+
+- IBKR 每週讓 Gateway 的自動重啟憑證過期一次（週日 17:15 ET 的每日重啟會停在登入畫面：「security tokens … have expired (routinely)」），2026-10-25 因此斷線約 17 小時。
+- `ibgateway-weekly.timer`：每週日美東 17:45 重啟 ibgateway，IBC 用存好的帳密完整登入，趕在 18:00 Globex 開盤前。
+- `remi-gw-watchdog.timer`（每 2 分鐘，`/usr/local/bin/remi-gw-watchdog`）：autotrade 連不上 IBKR 超過 10 分鐘就重啟 ibgateway；美東 17:00–17:40 不動，重啟後 30 分鐘內不再重啟。記錄：`journalctl -t remi-gw-watchdog`。
+- 查看：`systemctl list-timers | grep -E "remi-gw|ibgateway-weekly"`
 
 注意：
 

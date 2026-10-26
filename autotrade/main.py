@@ -36,7 +36,7 @@ DEFAULTS = {
     "symbol": "MNQ", "exchange": "CME", "qty": 2, "tick": 0.25, "allowed_roots": ["NQ", "MNQ"],
     "max_entry_delay_sec": 15, "max_alert_age_sec": 30, "max_stop_points": 120,
     "max_trades_per_day": 20, "max_daily_loss_usd": 600, "split_first_r": 1.0,
-    "allowed_tfs": ["2", "5"], "default_tf": "2", "max_hold_minutes": {"2": 125, "5": 305},
+    "allowed_tfs": ["1", "2", "5"], "default_tf": "2", "max_hold_minutes": {"1": 65, "2": 125, "5": 305},
     "flat_time_et": "16:58", "reopen_time_et": "18:00", "roll_days": 8, "tradingview_ips_only": False, "client_ip_header": "",
     "discord_webhook_url": "", "point_value": 2.0, "disconnect_alert_min": 5, "summary_time_et": "17:00",
 }

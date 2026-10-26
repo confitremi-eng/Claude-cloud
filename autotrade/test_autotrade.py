@@ -221,8 +221,17 @@ class TestEngine(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.b.pos, 2)
 
     async def test_tf_not_allowed(self):
-        await self.e.handle(self.sig(tf="1"))
+        await self.e.handle(self.sig(tf="3"))
         self.assertEqual(self.b.log, [])
+
+    async def test_rth_1m(self):
+        await self.e.handle(self.sig(tf="1"))                     # NQ RTH 1 分（QQQ 做法）
+        self.assertEqual((self.e.owner_tf, self.b.pos), ("1", 2))
+        await self.e.handle(self.sig("exit", tf="2"))             # 2 分的出場不理
+        self.assertEqual(self.b.pos, 2)
+        self.clock.t += timedelta(minutes=66)                     # 1 分的上限 65 分鐘
+        await self.e.tick()
+        self.assertEqual(self.b.pos, 0)
 
     async def test_max_hold_per_tf(self):
         await self.e.handle(self.sig(tf="5"))

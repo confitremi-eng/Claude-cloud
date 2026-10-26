@@ -17,6 +17,7 @@
   "max_trades_per_day": 20,
   "max_daily_loss_usd": 600,
   "max_hold_minutes": {
+    "1": 65,
     "2": 125,
     "5": 305
   },
@@ -27,6 +28,7 @@
   "client_ip_header": "",
   "discord_webhook_url": "",
   "allowed_tfs": [
+    "1",
     "2",
     "5"
   ],
