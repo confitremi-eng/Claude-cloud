@@ -23,9 +23,10 @@
 // GEX（預設關）：手動輸入 QQQ gamma flip，表格顯示買 / 賣是不是朝 flip 走（只顯示，不擋 v3 的訊號）
 // GEX setup（預設關，NQ RTH 1 分 K）：(35, 0, 8, 1) + Trend Judge 順勢 + 朝 flip 走，目標 3R，記號 🧲
 //   自己一次一筆、另外兩個快訊，不影響 v3 的訊號
-// 收盤前後避開：美東 15:15–18:30（台灣 03:15–06:30，可調；2026-10-23 從 15:45 提早）不進場（NQ / ES，預設開）
+// 收盤前後避開：美東 15:15–18:30（台灣夏令 03:15–06:30、冬令 04:15–07:30，可調；2026-10-23 從 15:45 提早）不進場（NQ / ES，預設開）
 // 開盤高開低走 setup（預設開，NQ RTH 1 / 2 分 K）：高開 ≥ 0.75%、第一根 2 分鐘收黑還在昨收上 → 09:32 收盤做空、1R，記號 🌅
-// 垃圾時間：美東 12:00–13:05（台灣 00:00–01:05）NQ / ES 24 小時盤不發訊號；QQQ、SPY、NQ RTH 照做，GEX setup 只做賣（可改、可關）
+// 週一台灣 06:00–15:00（週日 Globex 開盤後的亞洲盤）NQ / ES 24 小時盤不進場（預設開，2026-10-26）
+// 垃圾時間：美東 12:00–13:05（台灣夏令 00:00–01:05、冬令 01:00–02:05）NQ / ES 24 小時盤不發訊號；QQQ、SPY、NQ RTH 照做，GEX setup 只做賣（可改、可關）
 indicator("Remi Superb v3", overlay=true, max_labels_count=500, max_boxes_count=500, max_lines_count=500)
 
 // ═════════════════ 1. 商品 ═════════════════
@@ -80,15 +81,17 @@ junkOn    = input.bool(true, "垃圾時間：美東", group=grpN, inline="junk")
 junkH1    = input.int(12, "", minval=0, maxval=23, group=grpN, inline="junk")
 junkM1    = input.int(0, ":", minval=0, maxval=59, group=grpN, inline="junk")
 junkH2    = input.int(13, "到", minval=0, maxval=23, group=grpN, inline="junk")
-junkM2    = input.int(5, ":", minval=0, maxval=59, group=grpN, inline="junk", tooltip="這段時間（美東，看 K 棒收盤，含頭尾；預設 12:00–13:05 = 台灣 00:00–01:05）所有訊號都不發：趨勢訊號、MIX 突破（碰到突破價區間作廢，同事件時段）、GEX setup 買單；GEX setup 賣單例外（在 GEX setup 設定可關）。持倉照常出場。只套用在 NQ / ES 24 小時盤；QQQ、SPY、NQ RTH 不套（回測 NQ RTH 1m 這段的訊號是賺的，套了 v3 那年 +71R → +25R），GEX setup 在這段只做賣（2026-10-21 Remi 定義）")
+junkM2    = input.int(5, ":", minval=0, maxval=59, group=grpN, inline="junk", tooltip="這段時間（美東，看 K 棒收盤，含頭尾；預設 12:00–13:05 = 台灣夏令 00:00–01:05、冬令 01:00–02:05）所有訊號都不發：趨勢訊號、MIX 突破（碰到突破價區間作廢，同事件時段）、GEX setup 買單；GEX setup 賣單例外（在 GEX setup 設定可關）。持倉照常出場。只套用在 NQ / ES 24 小時盤；QQQ、SPY、NQ RTH 不套（回測 NQ RTH 1m 這段的訊號是賺的，套了 v3 那年 +71R → +25R），GEX setup 在這段只做賣（2026-10-21 Remi 定義）")
 pmAvoid   = input.bool(true, "收盤前後避開：美東", group=grpN, inline="pm")
 pmH1      = input.int(15, "", minval=0, maxval=23, group=grpN, inline="pm")
-pmM1      = input.int(15, "點　分 到 18:30", minval=0, maxval=59, group=grpN, inline="pm", tooltip="NQ / ES：K 棒收盤在美東這個時間到 18:30（台灣 = 美東 + 12 小時，預設 03:15–06:30）不發新訊號（趨勢、MIX、再進場），持倉照常出場。2026-10-23 從 15:45 提早到 15:15（`pm_start.py`）：NQ 2m v3 那年 3R +222R → +231R、前 4 年少虧，15:30–15:45 的趨勢訊號兩段都是虧的；5m 幾乎沒差。原本 15:45 開始（2026-10-21）：多擋掉美東 16:15–16:45 的單，2m +204R → +209R")
+pmM1      = input.int(15, "點　分 到 18:30", minval=0, maxval=59, group=grpN, inline="pm", tooltip="NQ / ES：K 棒收盤在美東這個時間到 18:30（台灣 = 美東 + 12 小時，冬令 + 13 小時；預設夏令 03:15–06:30、冬令 04:15–07:30）不發新訊號（趨勢、MIX、再進場），持倉照常出場。2026-10-23 從 15:45 提早到 15:15（`pm_start.py`）：NQ 2m v3 那年 3R +222R → +231R、前 4 年少虧，15:30–15:45 的趨勢訊號兩段都是虧的；5m 幾乎沒差。原本 15:45 開始（2026-10-21）：多擋掉美東 16:15–16:45 的單，2m +204R → +209R")
 fomcDay   = input.bool(true, "FOMC 當天整天不做", group=grpN, tooltip="FOMC 利率決議當天（美東日期，用下面的清單）趨勢訊號和 MIX 都不做，持倉照常出場。回測 NQ 2m 五年每一年都改善（+1～+11R）；5m 大約持平")
 fomcDates = input.string("2025-10-29,2025-12-10,2026-01-28,2026-03-18,2026-04-29,2026-06-17,2026-07-29,2026-09-16,2026-10-28,2026-12-09", "FOMC 日期", group=grpN, tooltip="利率決議公布日（美東），逗號分開。每年照 Fed 公布的日程補上（2027 年還沒加）")
+monOn     = input.bool(true, "週一（台灣時間）06:00 到", group=grpN, inline="mon")
+monH2     = input.int(15, "點不進場", minval=7, maxval=23, group=grpN, inline="mon", tooltip="NQ / ES 24 小時盤：台灣時間週一 06:00 到這個整點（預設 15:00）不發新訊號（趨勢、MIX、再進場），持倉照常出場。這段是週日 Globex 開盤後的亞洲盤（夏令美東週日 18:00–週一 03:00；冬令台灣 07:00 才開盤）。回測（`monday_asia.py`，NQ 五年）：2m 3R v3 那年 +231R → +223R（少 8R），五年 −54R → −29R；5m 2R 五年 −121R → −81R。少賺一點、少虧很多（2026-10-26 Remi 決定）")
 friCut    = input.bool(true, "週五：台灣時間週六", group=grpN, inline="fri")
 friCutH   = input.int(2, "", minval=0, maxval=6, group=grpN, inline="fri")
-friCutM   = input.int(0, "點　分以後不發新訊號", minval=0, maxval=59, group=grpN, inline="fri", tooltip="週五美股盤到台灣時間週六這個時間以後不發新訊號（趨勢、MIX、GEX setup 都一樣），持倉照常出場。預設 02:00 = 美東週五 14:00。所有商品適用。GEX setup 回測：這段 5 筆、每筆 −0.30R")
+friCutM   = input.int(0, "點　分以後不發新訊號", minval=0, maxval=59, group=grpN, inline="fri", tooltip="週五美股盤到台灣時間週六這個時間以後不發新訊號（趨勢、MIX、GEX setup 都一樣），持倉照常出場。預設 02:00 = 美東週五 14:00（冬令 13:00）。所有商品適用。GEX setup 回測：這段 5 筆、每筆 −0.30R")
 
 // ═════════════════ 6. MIX 區間突破（NQ 2、5 分 K）═════════════════
 grpM      = "MIX 區間突破（NQ 2、5 分 K）"
@@ -295,8 +298,10 @@ int    junkE   = junkH2 * 60 + junkM2
 bool   junkT   = junkOn and etMin >= junkS and etMin <= junkE           // 垃圾時間（美東，含頭尾）
 bool   junkNow = junkT and isCME                                     // v3 的趨勢、MIX：只在 NQ / ES 24 小時盤（QQQ、SPY、NQ RTH 不套）
 string junkTxt = str.format("{0,number,00}:{1,number,00}–{2,number,00}:{3,number,00}", junkH1, junkM1, junkH2, junkM2)
-bool   pmAvNow = pmAvoid and isCME and etMin >= pmH1 * 60 + pmM1 and etMin < 1110     // 美東 15:15–18:30（台灣 03:15–06:30，可調）不進場
-bool evtNow  = (avoidEvt and inEvt) or junkNow or pmAvNow
+bool   pmAvNow = pmAvoid and isCME and etMin >= pmH1 * 60 + pmM1 and etMin < 1110     // 美東 15:15–18:30（台灣夏令 03:15–06:30、冬令 04:15–07:30，可調）不進場
+int  monTw   = hour(tClose, "Asia/Taipei") * 60 + minute(tClose, "Asia/Taipei")
+bool monNow  = monOn and isCME and dayofweek(tClose, "Asia/Taipei") == dayofweek.monday and monTw >= 360 and monTw < monH2 * 60   // 週一台灣 06:00–15:00 不進場
+bool evtNow  = (avoidEvt and inEvt) or junkNow or pmAvNow or monNow
 bool haltBar = flatHalt and isCME and etMin == 1020                 // 美東 17:00 收盤那根，接著休市
 bool mixPm   = mixPmOff and etMin >= 960 and etMin < 1200           // 美東 16:00–20:00（收盤後）不做 MIX 突破
 // 週五美股盤的最後幾小時（台灣時間週六 friCutH:friCutM 以後）不發新訊號
