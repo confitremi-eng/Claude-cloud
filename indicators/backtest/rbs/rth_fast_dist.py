@@ -47,7 +47,7 @@ def main():
     print('\n######## 2. 一次一筆，每格：勝率 / 淨 R')
     print(f'   {"":<26}' + ''.join(f'{nm[:2] + " " + nm[3:8]:>15}' for nm, a, b in yrs) + f'{"合計":>15}{"筆/年":>7}')
     for R in (1.0, 3.0):
-        rows = [('現在', B)] + [(f'買單離快線 ≤ {x:g} ATR', B[~((B.side == 1) & (B.fast > x))]) for x in (1.5, 2.0, 2.5, 3.0)] + \
+        rows = [('現在', B)] + [(f'買單離快線 ≤ {x:g} ATR', B[~((B.side == 1) & (B.fast > x))]) for x in (0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0)] + \
                [(f'買賣都離快線 ≤ {x:g} ATR', B[B.fast <= x]) for x in (2.0, 3.0)]
         for lab, T in rows:
             q = ss.seq(T.sort_values('i'), R).copy(); q['n'] = q[f'r{R:g}'] - oc.COST / q.risk
