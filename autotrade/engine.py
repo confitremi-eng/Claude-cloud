@@ -111,7 +111,8 @@ class Engine:
         if sig.root not in self.cfg["allowed_roots"]:
             return self._event("reject", reason=f"商品 {sig.root} 不在 allowed_roots", **base)
         tf = self.tf_of(sig)
-        if tf not in self.cfg["allowed_tfs"]:
+        if tf not in self.cfg["allowed_tfs"] and not (sig.action == "exit" and tf == self.owner_tf):
+            # 不收的週期只擋進場；倉位如果是那張圖的（例如停收前就進場的 5 分單），它的出場照收
             return self._event("reject", reason=f"{tf} 分不在 allowed_tfs", **base)
 
         if sig.action == "partial":

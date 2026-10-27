@@ -29,8 +29,7 @@
   "discord_webhook_url": "",
   "allowed_tfs": [
     "1",
-    "2",
-    "5"
+    "2"
   ],
   "split_first_r": 1.0
 }

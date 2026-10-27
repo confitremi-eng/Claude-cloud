@@ -123,7 +123,7 @@ class TestEngine(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.clock = Clock(et(2026, 10, 19, 10, 0))
         self.b = DryRunBroker(cfg(split_first_r=0))
-        self.e = Engine(self.b, cfg(split_first_r=0), clock=self.clock)
+        self.e = Engine(self.b, cfg(split_first_r=0, allowed_tfs=["1", "2", "5"]), clock=self.clock)   # 共用倉位的測試用到 5 分
 
     def sig(self, *a, **kw):
         return parse_payload(msg(*a, **kw), self.clock())
@@ -224,6 +224,20 @@ class TestEngine(unittest.IsolatedAsyncioTestCase):
         await self.e.handle(self.sig(tf="3"))
         self.assertEqual(self.b.log, [])
 
+    async def test_exit_of_owner_tf_after_tf_removed(self):
+        await self.e.handle(self.sig(tf="5"))                     # 5 分還收的時候進場
+        e = Engine(self.b, cfg(split_first_r=0), clock=self.clock)  # 改成不收 5 分
+        e.owner_tf, e.entry_time = "5", self.clock.t
+        await e.handle(self.sig(tf="5"))                          # 新的 5 分進場：擋
+        self.assertEqual(self.b.pos, 2)
+        await e.handle(self.sig("exit", tf="5"))                  # 但這筆 5 分單的出場照收
+        self.assertEqual(self.b.pos, 0)
+
+    async def test_5m_off_by_default(self):
+        e = Engine(self.b, cfg(split_first_r=0), clock=self.clock)    # 預設只收 1、2 分（2026-10-27 起不接 5 分）
+        await e.handle(self.sig(tf="5"))
+        self.assertEqual(self.b.log, [])
+
     async def test_rth_1m(self):
         await self.e.handle(self.sig(tf="1"))                     # NQ RTH 1 分（QQQ 做法）
         self.assertEqual((self.e.owner_tf, self.b.pos), ("1", 2))
@@ -250,9 +264,9 @@ class TestEngine(unittest.IsolatedAsyncioTestCase):
 
     async def test_state_survives_restart(self):
         path = Path(tempfile.mkdtemp()) / "state.json"
-        e1 = Engine(self.b, cfg(), clock=self.clock, state_path=path)
+        e1 = Engine(self.b, cfg(allowed_tfs=["1", "2", "5"]), clock=self.clock, state_path=path)
         await e1.handle(self.sig(tf="5"))
-        e2 = Engine(self.b, cfg(), clock=self.clock, state_path=path)
+        e2 = Engine(self.b, cfg(allowed_tfs=["1", "2", "5"]), clock=self.clock, state_path=path)
         self.assertEqual((e2.owner_tf, e2.entry_time), ("5", self.clock.t))
         await e2.handle(self.sig("exit", tf="2"))
         self.assertEqual(self.b.pos, 2)
