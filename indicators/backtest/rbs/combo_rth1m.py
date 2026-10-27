@@ -72,14 +72,15 @@ def main():
         t['et'] = pd.to_datetime(t.et, utc=True); t['xt'] = pd.to_datetime(t.xt, utc=True)
     years, split = C2.years, C2.split
     print(f'NQ，MNQ 固定 2 口，每筆扣 1 點，{years:.2f} 年')
-    for lab, t in (('只做 2m', t2), ('只做 5m', t5), ('只做 RTH 1m', t1)):
+    for lab, t in (('只做 2m', t2), ('只做 5m', t5), ('只做 5m 趨勢', t5[t5.kind == '趨勢']), ('只做 5m MIX', t5[t5.kind == 'MIX']), ('只做 RTH 1m', t1)):
         print(f'  {lab:<24}' + cb.line(t, years, split))
     def outside_rth(t):
         ny = pd.DatetimeIndex(t.et).tz_convert('America/New_York'); m = ny.hour * 60 + ny.minute
         return t[~((ny.weekday < 5) & (m >= 570) & (m < 960))]
     t2o, t5o = outside_rth(t2), outside_rth(t5)
     for lab, fr in (('2m + 5m（現在）', [t2, t5]), ('2m + 5m + RTH 1m', [t2, t5, t1]), ('2m + RTH 1m', [t2, t1]),
-                    ('盤中只做 RTH 1m（2m/5m 只做盤外）', [t2o, t5o, t1]), ('盤中只做 RTH 1m（2m 只做盤外，沒有 5m）', [t2o, t1])):
+                    ('盤中只做 RTH 1m（2m/5m 只做盤外）', [t2o, t5o, t1]), ('盤中只做 RTH 1m（2m 只做盤外，沒有 5m）', [t2o, t1]),
+                    ('2m + 5m 只有趨勢 + RTH 1m', [t2, t5[t5.kind == '趨勢'], t1]), ('2m + 5m 只有 MIX + RTH 1m', [t2, t5[t5.kind == 'MIX'], t1])):
         both, lost = combine3(fr)
         print(f'  {lab:<34}' + cb.line(both, years, split))
         for tf in sorted(both.tf.unique()):
