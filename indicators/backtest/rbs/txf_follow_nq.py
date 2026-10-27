@@ -7,7 +7,8 @@ minute, exit at the NQ trade's exit minute (stop / target / time, as the NQ stra
 Sources (combo_rth1m.py trade lists, today's filters): NQ 2m (24-hour, trend + super sells... here trend + MIX, 3R),
 NQ RTH 1m (QQQ setting, 3R). Only trades whose entry and exit both fall inside one TXF session (Taipei day 08:45-13:45,
 night 15:00-05:00) are mirrored. TXF cost 2 points per trade. Also TXF's own Remi TXF signals over the same months.
-Per source: trades, NQ win rate, TXF win rate, TXF points total / per trade, by session.
+Per source: trades, NQ win rate, TXF win rate, TXF points total / per trade, by session. Then Remi TXF + the night
+NQ 2m mirror on one shared position: win rate, points, drawdown, losing streak.
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
@@ -55,7 +56,7 @@ def main():
         return z
 
     print(f'台指 1 分 K {tx.index[0]} .. {tx.index[-1]}；NQ {one.index[0]} .. {one.index[-1]}')
-    mirror(t2, 'NQ 2m 的單照做在台指')
+    m2 = mirror(t2, 'NQ 2m 的單照做在台指')
     mirror(t1, 'NQ RTH 1m（QQQ 1m）的單照做在台指')
     # TXF's own Remi TXF (trend + super sells, TJ 100 / stage 6 / EMA30 / 2R) over the overlap, for scale
     import txf_tf_super as tt, setup_study as ss
@@ -73,6 +74,32 @@ def main():
     r = r[r.date >= str(one.index[0].date())]
     pts = (r.r3 * r.risk - 2.0)
     print(f'\n對照：Remi TXF 自己的訊號（同期間）{len(r)} 筆，勝率 {100 * (r.r3 > 0).mean():.0f}%，合計 {pts.sum():+.0f} 點，每筆 {pts.mean():+.1f} 點（小台 1 口 {50 * pts.sum():+,.0f} 元）')
+
+    # one shared position: Remi TXF own + NQ 2m mirrored in the night session (first come; ties to Remi TXF)
+    step = pd.Timedelta(minutes=2)
+    dtm = pd.DatetimeIndex(d2.datetime); dtm = dtm.tz_localize('UTC') if dtm.tz is None else dtm
+    own = pd.DataFrame({'src': 'Remi TXF', 'et': dtm[r.i.values] + step, 'xt': dtm[r.x3.values.astype(int)] + step, 'pts': pts.values, 'date': r.date.values})
+    nq = m2[m2.kind_s == '夜盤']
+    mir = pd.DataFrame({'src': 'NQ 2m 夜盤', 'et': pd.to_datetime(nq.et, utc=True).values, 'xt': pd.to_datetime(nq.xt, utc=True).values, 'pts': nq.tx.values, 'date': nq.date.values})
+    mir['et'] = pd.to_datetime(mir.et, utc=True); mir['xt'] = pd.to_datetime(mir.xt, utc=True)
+    def stats(lab, z):
+        z = z.sort_values('et'); eq = np.cumsum(z.pts.values); dd = float(np.max(np.maximum.accumulate(np.r_[0, eq])[1:] - eq)) if len(z) else 0
+        loss = (z.pts <= 0).values; best = cur = 0
+        for v in loss:
+            cur = cur + 1 if v else 0; best = max(best, cur)
+        mo = z.groupby(pd.DatetimeIndex(z.et).strftime('%Y-%m')).pts.sum()
+        print(f'   {lab:<28}{len(z):4d} 筆  勝率 {100 * (z.pts > 0).mean():3.0f}%  合計 {z.pts.sum():+7.0f} 點  每筆 {z.pts.mean():+5.1f}  回撤 {dd:5.0f} 點  最長連虧 {best:2d}  賺錢月份 {(mo > 0).sum()}/{len(mo)}  （小台 1 口 {50 * z.pts.sum():+,.0f} 元，回撤 {50 * dd:,.0f} 元）')
+    print('\n######## 共用一個倉位（先進場的佔用，同分鐘讓 Remi TXF）')
+    t = pd.concat([own.assign(pri=0), mir.assign(pri=1)]).sort_values(['et', 'pri'], kind='stable')
+    keep, busy = [], pd.Timestamp('1970-01-01', tz='UTC')
+    for row in t.itertuples():
+        ok = row.et >= busy; keep.append(ok)
+        if ok: busy = row.xt
+    t['taken'] = keep; both = t[t.taken]
+    stats('只做 Remi TXF', own); stats('只做 NQ 2m 夜盤', mir); stats('Remi TXF + NQ 2m 夜盤', both)
+    for src, z in both.groupby('src'):
+        lost = t[~t.taken & (t.src == src)]
+        print(f'      其中 {src}：做了 {len(z)} 筆 {z.pts.sum():+.0f} 點；被占住沒做 {len(lost)} 筆（自己 {lost.pts.sum():+.0f} 點）')
 
 
 if __name__ == '__main__':
